@@ -6,10 +6,12 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Release engineering
 
-- F-45: a release tag must point at a commit on `main`. `release.yml`
-  refuses to build otherwise, and `scripts/verify-release.sh` fails unless
-  the tag commit is on `main`. It also resolves the tag as `refs/tags/TAG`
-  (RV-3). Tested by `scripts/test-verify-release-tag.sh` in CI.
+- F-45: a release tag must point at a commit on `main`.
+  `scripts/verify-release.sh` fails unless the tag commit is on
+  `refs/heads/main`, and resolves the tag as `refs/tags/TAG` (RV-3). The
+  reviewed `release.yml` also refuses to build such a tag (defense in
+  depth: a tagged commit carries its own workflow). Tested by
+  `scripts/test-verify-release-tag.sh` in CI.
 - `docs/VERIFY_OFFLINE.md` records the tag commit unambiguously and checks
   that it is on `main`.
 

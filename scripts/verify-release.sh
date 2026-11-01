@@ -98,7 +98,7 @@ ok "run $RUN_ID: Release build, push of $TAG at $tag_sha, success"
 # 1a. The tag's commit is on main, i.e. reviewed and merged (RV-1): main is
 # that commit or descends from it. A tag on any other commit, even one whose
 # own release.yml and checks pass, fails here.
-on_main=$(gh api "repos/$REPO/compare/$tag_sha...main" --jq .status)
+on_main=$(gh api "repos/$REPO/compare/$tag_sha...refs/heads/main" --jq .status)
 case $on_main in
     identical | ahead) ok "$TAG commit is on main (main is $on_main)" ;;
     *) die "$TAG commit $tag_sha is not on main (compare: '${on_main:-none}')" ;;

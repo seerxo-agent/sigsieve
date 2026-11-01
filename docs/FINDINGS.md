@@ -102,13 +102,19 @@ pull-request requirement would not apply. Only the maintainer can push to
 the repository, and no tag ruleset existed.
 
 Fix:
-- `release.yml`'s `verify-tag` job fetches `main` and fails unless the
-  tagged commit is an ancestor of it (`git merge-base --is-ancestor`), so
-  nothing is built or attested for such a tag.
 - `verify-release.sh` fails unless GitHub's compare of the tag commit with
-  `main` is `identical` or `ahead`. It now resolves the tag as
-  `refs/tags/TAG`, so a branch with the tag's name cannot answer instead
-  (RV-3, INFO; the old form failed closed).
+  `refs/heads/main` is `identical` or `ahead`. This is the gate: a tag on a
+  commit whose own `release.yml` drops the workflow check below still fails
+  here. It resolves the tag as `refs/tags/TAG` and `main` as
+  `refs/heads/main`, so a branch named like the tag, or a tag named `main`,
+  cannot answer instead (RV-3, INFO; the old tag lookup failed closed).
+- `release.yml`'s `verify-tag` job fetches `main` and fails unless the
+  tagged commit is an ancestor of it (`git merge-base --is-ancestor`).
+  This is defense in depth: it stops the reviewed workflow from building
+  and attesting such a tag, but a tagged commit carries its own
+  `release.yml`, which could omit the step. `gh attestation verify` alone
+  does not check this; use `verify-release.sh` or the `VERIFY_OFFLINE.md`
+  compare step.
 - `docs/VERIFY_OFFLINE.md` shows both checks.
 - `scripts/test-verify-release-tag.sh` (6 cases, stubbed `gh`; runs in CI)
   covers identical, ahead, diverged, behind, a failed and an empty compare,
@@ -117,9 +123,11 @@ Fix:
 - The workflow step was run locally against a throwaway repository: a
   commit on `main` and an ancestor pass; an unmerged commit fails.
 
-`v0.1.0-alpha.1` and `v0.1.0-alpha.2` are on `main`, so re-verifying them
-still passes. `v0.1.0-alpha.3` predates this fix; its release record states
-how its tag was checked.
+The commits of `v0.1.0-alpha.1` and `v0.1.0-alpha.2` are on `main`, so the
+new check accepts them (the rest of `verify-release.sh` is unchanged; the
+`v0.1.0-alpha.1` tag-push run 40248231106 was cancelled, so that tag never
+had a run the script could pass). `v0.1.0-alpha.3` predates this fix; its
+release record states how its tag was checked.
 
 Residual: the check proves the commit was merged, not that the merge was
 reviewed well. Rulesets are repository settings that an administrator can

@@ -21,9 +21,12 @@ case "\$*" in
   *"repos/semihbugrasezer/sigsieve/commits/refs/tags/$TAG "*) echo "$SHA" ;;
   # A branch named like the tag: the ambiguous form would return this.
   *"repos/semihbugrasezer/sigsieve/commits/$TAG "*) echo "$BRANCH_SHA" ;;
-  *"repos/semihbugrasezer/sigsieve/compare/$SHA...main "*)
+  *"repos/semihbugrasezer/sigsieve/compare/$SHA...refs/heads/main "*)
     [ "\${STUB_COMPARE:-}" = error ] && { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
     echo "\$STUB_COMPARE" ;;
+  # A tag named "main" on the tagged commit: an unqualified "...main" would
+  # be answered by it (MR-2), so it always looks identical.
+  *"repos/semihbugrasezer/sigsieve/compare/$SHA...main "*) echo identical ;;
   *"/jobs"*) echo "stub: stop after the checks under test" >&2; exit 1 ;;
   *) echo "stub: unexpected gh \$*" >&2; exit 1 ;;
 esac

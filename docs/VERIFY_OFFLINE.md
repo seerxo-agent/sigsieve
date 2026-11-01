@@ -64,7 +64,7 @@ gh attestation trusted-root > trusted_root.jsonl
 # branch with the same name cannot answer instead.
 commit=$(gh api "repos/$repo/commits/refs/tags/$tag" --jq .sha); echo "$commit"
 # The tag must be on main (reviewed and merged): expect "identical" or "ahead".
-gh api "repos/$repo/compare/$commit...main" --jq .status
+gh api "repos/$repo/compare/$commit...refs/heads/main" --jq .status
 ```
 
 Copy the files to the offline machine. Also take the commit SHA. For
