@@ -134,9 +134,32 @@ error, that requests served by the proxy never reach the agent, and that
 (socket owned by A, peer uid neither A nor root) and fails if they do not
 hold. The workflow then removes step 3 and requires each of the three tests
 to fail on its own assertion. In ordinary runs the three tests are reported
-as *ignored*, never as passed; a same-uid control runs everywhere. Until the
-workflow has run, F-46 stays open. macOS (`getpeereid`) has no cross-user
-test.
+as *ignored*, never as passed; a same-uid control runs everywhere. macOS
+(`getpeereid`) has no cross-user test.
+
+How it runs: `cross-user.yml` triggers on pull requests that change the code
+under test or the test itself. GitHub runs a `pull_request` workflow from the
+pull request's own files, so it can verify F-46 before any merge. Its manual
+`workflow_dispatch` trigger only becomes available once the file is on the
+default branch; that is a separate dependency, not needed for the first
+run. The job runs on `ubuntu-24.04`, a full GitHub-hosted VM, never a
+container-based runner such as `ubuntu-slim`. The script refuses to run in a
+container and outside GitHub Actions. Those checks guard against mistakes;
+they do not prove the machine is disposable, and only the hosted VM label
+does. The script never reuses an account. It creates two new, randomly
+named users and, on exit, kills their processes, deletes both users and
+removes its directory. The test output, the foreign agent's request log and
+the uids of both runs are uploaded as the `f46-cross-user-evidence`
+artifact.
+
+F-46 is closed only on a single run of that workflow for the commit under
+review that shows all of the following:
+1. the cross-user run: 4 tests executed and passed, none ignored, and the
+   foreign agent received no request;
+2. the mutant run (peer-uid check removed): each of the 3 cross-user tests
+   failed on its own assertion and the foreign agent received requests;
+3. the same-uid control passed in both runs.
+Until then F-46 stays open.
 
 ### F-45 — LOW–MEDIUM — release tag not bound to `main` (fixed after v0.1.0-alpha.3)
 

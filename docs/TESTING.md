@@ -18,7 +18,7 @@ ports, configured from a temporary directory.
 | Fuzzing (stable) | `tests/fuzz_corpus.rs` + `fuzz/seeds` (read via the `tests/data/fuzz-seeds` symlink) | seed replay + bounded deterministic mutation through `src/fuzzing.rs` entry points |
 | Fuzzing (cargo-fuzz) | `fuzz/` | coverage-guided targets: `requests`, `session_bind`, `key_blob`, `upstream_reply` |
 | Benchmark | `tests/bench.rs` (ignored) | overhead vs. direct agent access |
-| Cross-user (F-46) | `tests/cross_user.rs` (3 ignored + 1 control), `scripts/cross-user-test.sh`, manual workflow `cross-user.yml` | upstream agent run by another user behind a socket file owned by the test user: refused by the peer credential, nothing reaches it, `run` exits 2; the workflow also requires each test to fail with the peer-uid check removed. Linux, root on a disposable runner only; **not yet executed** |
+| Cross-user (F-46) | `tests/cross_user.rs` (3 ignored + 1 control), `scripts/cross-user-test.sh`, manual workflow `cross-user.yml` | upstream agent run by another user behind a socket file owned by the test user: refused by the peer credential, nothing reaches it, `run` exits 2; the workflow also requires each test to fail with the peer-uid check removed. Linux, root on a disposable GitHub-hosted VM only (runs on pull requests touching the code or the test; manual runs once on the default branch); evidence uploaded as an artifact; **not yet executed** |
 | MSRV | CI job `msrv (Rust 1.88)` | the full suite (real sshd and gpg-agent, skips fail) and the packaged `.crate` on the declared `rust-version`, Ubuntu 24.04 x86_64 only |
 
 The session-bind harness processes intact signed bodies as well as a framed

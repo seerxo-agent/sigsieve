@@ -1,14 +1,36 @@
 name: Cross-user peer credential (F-46)
 
-# Manual only. Creates two system users on a disposable GitHub-hosted runner
-# to prove that an upstream agent run by another user is refused by the
-# peer credential, even when its socket file is owned by the user running
-# SigSieve. Then proves the test fails when that check is removed.
+# Proves that an upstream agent run by another user is refused by the peer
+# credential even when its socket file is owned by the user running
+# SigSieve, then proves the test fails when that check is removed.
+#
+# Triggers:
+# - pull_request, only when the code under test or the test changes. A
+#   pull_request run uses the workflow file from the pull request itself,
+#   so F-46 can be verified before anything is merged. No secrets are used
+#   and the token is read-only; runs from forks follow the repository's
+#   approval setting for outside contributors.
+# - workflow_dispatch, for a manual re-run. GitHub only offers it once this
+#   file is on the default branch.
 on:
+  pull_request:
+    paths:
+      - src/upstream.rs
+      - src/socket.rs
+      - src/cli.rs
+      - tests/cross_user.rs
+      - tests/common/**
+      - tests/support/xu-mock-agent.py
+      - scripts/cross-user-test.sh
+      - .github/workflows/cross-user.yml
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: cross-user-${{ github.ref }}
+  cancel-in-progress: true
 
 defaults:
   run:
@@ -19,6 +41,9 @@ env:
 
 jobs:
   cross-user:
+    # A full, disposable GitHub-hosted VM with passwordless sudo. Never a
+    # container-based or self-hosted runner (e.g. ubuntu-slim): the script
+    # creates users and refuses to run in a container.
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -30,9 +55,10 @@ jobs:
         run: rustup show active-toolchain || rustup toolchain install
       - name: Require tools
         run: |
-          for t in python3 useradd runuser pkill stat sudo; do
+          for t in python3 useradd userdel runuser pkill stat sudo systemd-detect-virt; do
             command -v "$t" || { echo "::error::missing $t"; exit 1; }
           done
+          echo "virt: $(systemd-detect-virt || true)"
       - name: Build
         run: |
           cargo build --locked
@@ -43,7 +69,7 @@ jobs:
           print(exe[0])' build.json > test-bin.txt
           cat test-bin.txt
       - name: Cross-user tests pass (executed, not skipped)
-        run: sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT bash scripts/cross-user-test.sh pass "$(cat test-bin.txt)" target/debug/sigsieve
+        run: XU_EVIDENCE="$PWD/xu-evidence" sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,XU_EVIDENCE bash scripts/cross-user-test.sh pass "$(cat test-bin.txt)" target/debug/sigsieve
       - name: Remove the upstream peer-uid check (mutant)
         run: |
           perl -0pi -e 's/Ok\(uid\) if uid == me => \{\}/Ok(_) => {}/' src/upstream.rs
@@ -56,4 +82,27 @@ jobs:
           assert len(exe)==1, exe
           print(exe[0])' build.json > test-bin.txt
       - name: Cross-user tests fail on the mutant
-        run: sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT bash scripts/cross-user-test.sh fail "$(cat test-bin.txt)" target/debug/sigsieve
+        run: XU_EVIDENCE="$PWD/xu-evidence" sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,XU_EVIDENCE bash scripts/cross-user-test.sh fail "$(cat test-bin.txt)" target/debug/sigsieve
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## F-46 cross-user evidence"
+            echo "commit: $GITHUB_SHA"
+            for m in pass fail; do
+              f="xu-evidence/$m-test-output.txt"
+              if [ -f "$f" ]; then
+                echo "### $m run"; echo '```'; grep -E '^test |^test result' "$f"; echo '```'
+                cat "xu-evidence/$m-environment.txt"
+              else
+                echo "### $m run: NOT EXECUTED"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+      # actions/upload-artifact v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: f46-cross-user-evidence
+          path: xu-evidence
+          if-no-files-found: warn
