@@ -153,7 +153,50 @@ coverage needs new targets or richer seeds rather than longer runs. One hour
 per target is a modest campaign for one revision, not proof of the absence
 of vulnerabilities.
 
+## Release evidence: v0.1.0-alpha.3 (2026-11-01)
+
+The experimental [v0.1.0-alpha.3 pre-release](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.3)
+is pinned to commit `60c9b3777ce41cedc035c373836a8c0ea5c7e4cd`. It was
+published on 2026-11-01 as an immutable release. Its runtime code is
+unchanged from `v0.1.0-alpha.2` (only test code changed under `src/`).
+
+- [CI](https://github.com/semihbugrasezer/sigsieve/actions/runs/41313813814): all six jobs passed (supply-chain,
+  secret scan, macOS, Linux x86_64 and arm64, MSRV Rust 1.88).
+- [Release rehearsal](https://github.com/semihbugrasezer/sigsieve/actions/runs/41319371149): both builds, the SBOM
+  job and the OIDC-free `verify` job (F-42 checks on real artifacts) passed.
+- [Four-target fuzz run](https://github.com/semihbugrasezer/sigsieve/actions/runs/41319373654): 3600 s per target;
+  all jobs passed with no reported crash or sanitizer failure.
+- [Real tag release build](https://github.com/semihbugrasezer/sigsieve/actions/runs/41327036746): all 11 jobs
+  passed. In the `attest` job, the F-42 binding step passed with three
+  downloads by artifact ID. Build provenance was recorded for both archives
+  and both SBOMs, and an SBOM attestation for each archive.
+- Release verifier: macOS arm64 native `RESULT: PASS` was recorded locally
+  (`doctor` reported `Filtering: verified`);
+  [Linux x86_64 native `RESULT: PASS`](https://github.com/semihbugrasezer/sigsieve/actions/runs/41332325926) is
+  recorded in the public workflow log. Both reported the same four SHA-256
+  values.
+- The [offline procedure](VERIFY_OFFLINE.md) passed for the macOS arm64
+  archive, SBOM included, with network access denied.
+- The release notes' install recipe was run once against the draft release
+  with an isolated `HOME` and passed.
+- Not repeated for this release: the owner-assisted Secretive device test
+  (see the `v0.1.0-alpha.2` record below). Reviews were internal and
+  AI-assisted; there has been no independent external audit.
+
+| Target | Executions | Final `cov / ft` | Final corpus | New units | Result |
+|---|---:|---|---:|---:|---|
+| `requests` | 8,491,481 | 1,709 / 7,351 | 638 | not recorded | no crash reported |
+| `session_bind` | 10,449,092 | 2,204 / 3,614 | 327 | not recorded | no crash reported |
+| `key_blob` | 87,777,836 | 674 / 747 | 187 | not recorded | no crash reported |
+| `upstream_reply` | 157,962,668 | 103 / 274 | 49 | not recorded | no crash reported |
+| **Total** | **264,681,077** | — | — | — | **4 jobs successful** |
+
+The libFuzzer counters are not a percentage of code coverage. A successful
+campaign is not proof of the absence of vulnerabilities.
+
 ## Release-candidate evidence (2026-10-28)
+
+Historical: this is the evidence for the earlier `v0.1.0-alpha.2` release.
 
 The experimental [v0.1.0-alpha.2 pre-release](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.2)
 is pinned to commit `fc7484be0371242f517b6628b0f7dcc3a9a12a29`

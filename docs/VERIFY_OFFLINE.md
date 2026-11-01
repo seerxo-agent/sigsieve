@@ -65,8 +65,8 @@ gh api "repos/$repo/commits/$tag" --jq .sha
 ```
 
 Copy the files to the offline machine. Also take the commit SHA. For
-`v0.1.0-alpha.2` it is `fc7484be0371242f517b6628b0f7dcc3a9a12a29`, as
-published in [INSTALL.md](INSTALL.md).
+`v0.1.0-alpha.3` it is `60c9b3777ce41cedc035c373836a8c0ea5c7e4cd`, as published in [INSTALL.md](INSTALL.md);
+for `v0.1.0-alpha.2` it is `fc7484be0371242f517b6628b0f7dcc3a9a12a29`.
 
 ## 2. Offline: checksums
 
@@ -76,8 +76,8 @@ shasum -a 256 -c "$name.cdx.json.sha256"
 ```
 
 A checksum file comes from the same place as the archive, so a matching
-checksum proves only that the download is intact. For alpha.2, also compare
-the archive with the pinned digests in [INSTALL.md](INSTALL.md).
+checksum proves only that the download is intact. For the current release,
+also compare the archive with the pinned digest in [INSTALL.md](INSTALL.md).
 
 ## 3. Offline: provenance and SBOM attestation
 
@@ -118,8 +118,14 @@ before you verify, from a network you trust.
   `--custom-trusted-root`, no GitHub credentials and outbound HTTP blocked)
   were run successfully against the published `v0.1.0-alpha.2` macOS
   archive.
-- The SBOM steps have not been run against a real release, because no
-  release with SBOM attestations exists yet. They will first be exercised by
-  the next tagged release; until then, treat them as untested.
+- On 2026-11-01 every step above, including the SBOM steps, was run against
+  the published `v0.1.0-alpha.3` macOS arm64 archive. Phase 1 ran online;
+  phase 2 ran with network access denied (macOS `sandbox-exec`), an empty
+  GitHub CLI configuration and no credentials. Both checksums, the archive's
+  build provenance, the SBOM's build provenance and the archive's CycloneDX
+  SBOM attestation verified. As negative controls, the wrong source commit
+  (`v0.1.0-alpha.2`'s) and an archive with one appended byte were rejected.
+  The Linux x86_64 files were checked online by the release verifier, not with
+  this offline procedure.
 - `cosign verify-blob-attestation` may also work with these bundles. It has
   not been tested here, so it is not documented.

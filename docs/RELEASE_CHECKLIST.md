@@ -49,6 +49,10 @@ SSH host-key verification and recovery access.
 
 ## Candidate record: v0.1.0-alpha.3
 
+Published on 2026-11-01 from `60c9b3777ce41cedc035c373836a8c0ea5c7e4cd`
+([release](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.3),
+[evidence](TESTING.md#release-evidence-v010-alpha3-2026-11-01)).
+
 Runtime code is unchanged from `v0.1.0-alpha.2` (test-only changes under
 `src/`). Supported prebuilt targets stay macOS arm64 and Linux x86_64;
 Linux arm64 is CI-tested but source-only; Intel macOS and Windows are not
@@ -59,14 +63,14 @@ the candidate SHA the evidence must refer to.
 
 | Gate | Status |
 |---|---|
-| Version 0.1.0-alpha.3 in `Cargo.toml` and both lockfiles | Done on the release-preparation branch |
-| Hosted CI on the exact candidate SHA, including `msrv (Rust 1.88)` | Pending |
-| Release rehearsal (`workflow_dispatch`) on the exact candidate SHA, including the OIDC-free `verify` job | Pending |
-| Coverage-guided fuzzing, 3,600 s per target, on the exact candidate SHA | Pending |
-| Independent (internal, AI-assisted) security review of the release path | Pending; not an external audit |
-| F-42: the tag's `attest` job log shows the binding step passed and all three downloads were by ID | Only possible after tagging; blocks publication |
-| `scripts/verify-release.sh RUN_ID v0.1.0-alpha.3` on macOS arm64 and the **Verify release** workflow on Linux report `RESULT: PASS`, including SBOM sidecars and attestations | Only possible after tagging; blocks publication |
-| README / INSTALL point at the new release only after it is published | Post-publication step |
+| Version 0.1.0-alpha.3 in `Cargo.toml` and both lockfiles | Done |
+| Hosted CI on the exact candidate SHA, including `msrv (Rust 1.88)` | Done: run 41313813814 at `60c9b37` |
+| Release rehearsal (`workflow_dispatch`) on the exact candidate SHA, including the OIDC-free `verify` job | Done: run 41319371149 |
+| Coverage-guided fuzzing, 3,600 s per target, on the exact candidate SHA | Done: run 41319373654 |
+| Separate-context internal (AI-assisted) security review of the release path | Done; not an external audit. It found F-43 and F-44, fixed before tagging |
+| F-42: the tag's `attest` job log shows the binding step passed and all three downloads were by ID | Done: release run 41327036746 |
+| `scripts/verify-release.sh RUN_ID v0.1.0-alpha.3` on macOS arm64 and the **Verify release** workflow on Linux report `RESULT: PASS`, including SBOM sidecars and attestations | Done: macOS locally; Linux run 41332325926 |
+| README / INSTALL point at the new release only after it is published | Done after publication (2026-11-01) |
 
 ## Remaining assurance work
 
