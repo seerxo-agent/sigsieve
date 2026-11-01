@@ -37,14 +37,16 @@ passed = 0
 
 
 def run(bom=BOM, deps=DEPS, **override):
-    return fs.finalize(json.dumps(bom), deps=deps, **{**ARGS, **override})
+    return fs.finalize(json.dumps(bom), deps=deps, **{**ARGS, **override}).decode("utf-8")
 
 
-def rejects(label, fn):
+def rejects(label, fn, why=""):
+    """fn must raise Rejected; with `why`, by the check whose message contains it."""
     global passed
     try:
         fn()
-    except fs.Rejected:
+    except fs.Rejected as e:
+        assert why in str(e), f"{label}: rejected by another check: {e}"
         passed += 1
         return
     raise AssertionError(f"accepted: {label}")
@@ -87,25 +89,52 @@ for key, value in [("repo", "other/sigsieve"), ("sha", "f" * 40),
     passed += 1
 
 # Invalid input SBOMs and metadata.
-rejects("dependency missing", lambda: run(deps=DEPS + ["ring"]))
-rejects("empty dependency list", lambda: run(deps=[]))
+rejects("dependency missing", lambda: run(deps=DEPS + ["ring"]), "misses dependencies: ['ring']")
+rejects("empty dependency list", lambda: run(deps=[]), "names no dependencies")
+rejects("root-only dependency list", lambda: run(deps=["sigsieve"]), "names no dependencies")
 rejects("wrong package", lambda: run(bom=mutated(lambda b: b["metadata"]["component"].update(name="other"))))
 rejects("wrong version", lambda: run(bom=mutated(lambda b: b["metadata"]["component"].update(version="0.1.0"))))
 rejects("no root component", lambda: run(bom=mutated(lambda b: b.pop("metadata"))))
 rejects("bomFormat", lambda: run(bom=mutated(lambda b: b.update(bomFormat="SPDX"))))
 rejects("specVersion", lambda: run(bom=mutated(lambda b: b.update(specVersion="1.4"))))
-# deps=["sigsieve"] so only the components guard, not completeness, can reject.
-rejects("no components", lambda: run(deps=["sigsieve"], bom=mutated(lambda b: b.update(components=[]))))
-rejects("components not a list", lambda: run(deps=["sigsieve"], bom=mutated(lambda b: b.update(components={}))))
-rejects("metadata not an object", lambda: run(bom=mutated(lambda b: b.update(metadata=[]))))
-rejects("root component not an object", lambda: run(bom=mutated(lambda b: b["metadata"].update(component="sigsieve"))))
-raw = json.dumps(BOM)
-rejects("NaN", lambda: fs.finalize(raw.replace('"version": 1,', '"version": NaN,'), deps=DEPS, **ARGS))
-rejects("Infinity", lambda: fs.finalize(raw.replace('"version": 1,', '"version": Infinity,'), deps=DEPS, **ARGS))
-rejects("duplicate key", lambda: fs.finalize(raw.replace('"version": 1,', '"version": 1, "version": 2,'), deps=DEPS, **ARGS))
-rejects("duplicate nested key", lambda: fs.finalize(
-    raw.replace('"name": "base64",', '"name": "base64", "name": "ring",'), deps=DEPS, **ARGS))
-rejects("invalid JSON", lambda: fs.finalize(raw[:-1], deps=DEPS, **ARGS))
+# Each guard is identified by its message, so removing it is noticed even
+# when a later check would also reject.
+rejects("no components", lambda: run(bom=mutated(lambda b: b.update(components=[]))), "lists no dependencies")
+rejects("components not a list", lambda: run(bom=mutated(lambda b: b.update(components={}))), "lists no dependencies")
+rejects("component not an object", lambda: run(bom=mutated(lambda b: b["components"].append("libc"))),
+        "without a string name")
+rejects("component name not a string", lambda: run(bom=mutated(lambda b: b["components"].append({"name": ["libc"]}))),
+        "without a string name")
+rejects("metadata not an object", lambda: run(bom=mutated(lambda b: b.update(metadata=[]))), "no metadata object")
+rejects("root component not an object", lambda: run(bom=mutated(lambda b: b["metadata"].update(component="sigsieve"))),
+        "no root component")
+raw = json.dumps(BOM, ensure_ascii=False)
+
+
+def raw_run(text):
+    return fs.finalize(text, deps=DEPS, **ARGS)
+
+
+rejects("NaN", lambda: raw_run(raw.replace('"version": 1,', '"version": NaN,')), "non-JSON number NaN")
+rejects("Infinity", lambda: raw_run(raw.replace('"version": 1,', '"version": Infinity,')), "non-JSON number Infinity")
+rejects("overflowing number", lambda: raw_run(raw.replace('"version": 1,', '"version": 1e999,')), "not finite")
+rejects("overflowing negative", lambda: raw_run(raw.replace('"version": 1,', '"version": -1e999,')), "not finite")
+rejects("duplicate key", lambda: raw_run(raw.replace('"version": 1,', '"version": 1, "version": 2,')), "duplicate keys")
+rejects("duplicate nested key", lambda: raw_run(raw.replace('"name": "base64",', '"name": "base64", "name": "ring",')),
+        "duplicate keys")
+rejects("invalid JSON", lambda: raw_run(raw[:-1]), "not valid JSON")
+rejects("lone surrogate", lambda: raw_run(raw.replace('"Ünïcødé-Ñame"', '"\\ud800"')), "cannot be written")
+# finalize checks its own output bytes: a bad serial or an oversize file never leaves it.
+real_serial, real_max = fs.serial_number, fs.MAX_SBOM_BYTES
+try:
+    fs.serial_number = lambda *a: "urn:uuid:not-a-uuid"
+    rejects("finalize checks its output serial", lambda: run(), "is not urn:uuid")
+    fs.serial_number = real_serial
+    fs.MAX_SBOM_BYTES = len(out.encode("utf-8")) - 1
+    rejects("finalize checks the attest size limit", lambda: run(), "exceeds")
+finally:
+    fs.serial_number, fs.MAX_SBOM_BYTES = real_serial, real_max
+assert real_max == 16 * 1024 * 1024
 rejects("generator serial", lambda: run(bom=mutated(lambda b: b.update(serialNumber=serial))))
 rejects("not an object", lambda: run(bom=[BOM]))
 for key, bad in [("sha", "269cf91"), ("sha", "G" * 40), ("repo", "a/b/c"), ("repo", "a b/c"),
@@ -152,6 +181,11 @@ with tempfile.TemporaryDirectory(prefix="sigsieve-sbom-") as tmp:
     assert not (t / "missing.json").exists()
     r = call(DEPS, "ok.json")
     assert r.returncode != 0 and (t / "ok.json").read_text(encoding="utf-8") == out, "must not overwrite"
-    passed += 3
+    # An SBOM that cannot be encoded leaves no (empty) output file behind.
+    (t / "in.json").write_text(raw.replace('"Ünïcødé-Ñame"', '"\\ud800"').replace(WS, ARGS["workspace"]),
+                               encoding="utf-8")
+    r = call(DEPS, "surrogate.json")
+    assert r.returncode == 1 and "cannot be written" in r.stderr and not (t / "surrogate.json").exists(), r
+    passed += 4
 
 print(f"finalize-sbom: {passed} checks passed")

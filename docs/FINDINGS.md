@@ -59,7 +59,7 @@ fix (where one exists).
 | F-41 | LOW (diagnostic) | RSA binding self-test refused by algorithm policy instead of exercising destination enforcement | Fixed: valid RSA/SHA-2 probe; regression catches missing enforcement for RSA, ECDSA and Ed25519 |
 | F-42 | LOW (supply chain) | Release attest job selects artifacts by name; a compromised job holding the Actions runtime token could replace an artifact before attestation | **Fixed in the workflow; tag path not yet run**: attest binds each artifact to its producing job's ID, zip digest and archive SHA-256 and checks zip entries before extraction (`scripts/test-attest-inputs.sh`); hosted evidence will come from the rehearsal `verify` job once it has passed (not yet run); blocks the next tag's release until that tag's attest log confirms the binding ([RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)); manual `verify-release.sh` and native smoke test remain mandatory |
 | F-43 | MEDIUM (release, fails closed) | Release SBOMs had no CycloneDX `serialNumber`, which the pinned `actions/attest` requires; the first tag's SBOM attestation step would have failed | **Fixed in the workflow; tag path not yet run**: deterministic `urn:uuid` serial added by `scripts/finalize-sbom.py`, checked against the action's acceptance rule; regression `scripts/test-finalize-sbom.py` |
-| F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | Fixed: both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
+| F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed in the workflow; tag path not yet run**: both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
 
 
 ### Review scope
@@ -117,21 +117,27 @@ Fix: `scripts/finalize-sbom.py`, called identically by both workflows,
 rewrites the checkout path, checks format, package, version and every
 dependency `cargo tree --locked -e normal,build --target T` resolves,
 refuses a generator-supplied serial (it would be random per run, so a run
-without `SOURCE_DATE_EPOCH` fails), refuses NaN/Infinity and duplicate JSON
-keys, adds `urn:uuid:` + UUIDv5(URL namespace,
-repository/commit/version/target), checks the result with a mirror of the
-action's acceptance rule and an RFC 4122 pattern, and writes a new UTF-8
-file only. `scripts/test-finalize-sbom.py` (48 checks; runs in CI, the
+without `SOURCE_DATE_EPOCH` fails), refuses NaN/Infinity (literal or
+overflowing, such as `1e999`), duplicate JSON keys, components without a
+string name and a dependency list naming only the root, adds `urn:uuid:` +
+UUIDv5(URL namespace, repository/commit/version/target), then reads its own
+encoded output back as the action does (UTF-8, 16 MiB limit,
+JSON.parse-compatible) and checks the action's format rule and an RFC 4122
+pattern on it before creating the output file, so a rejected SBOM leaves no
+file behind. `scripts/test-finalize-sbom.py` (57 checks; runs in CI, the
 rehearsal and the release SBOM job) covers determinism, the fixed output
 layout including the exact `"bomFormat": "CycloneDX"` text
 `verify-release.sh` greps for, every input changing the serial, SemVer
-pre-release/build versions, and rejection of missing dependencies, missing
-or mistyped components/metadata, wrong package/version/format, NaN and
-duplicate keys, generator serials, bad arguments, and absent, malformed,
-foreign or SPDX-confusable serials. A 24-mutation sweep of the script
-(including one from the separate-context review of this fix) caught 23; the
-survivor reads the crate-name list as ASCII instead of UTF-8, equivalent
-because crate names are ASCII. It passes and gives byte-identical output on
+pre-release/build versions, and rejection of each of those inputs by the
+check that names it, plus wrong package/version/format, generator serials,
+bad arguments, and absent, malformed, foreign or SPDX-confusable serials.
+Two separate-context internal reviews of the fix (AI-assisted, not
+independent) found no fail-open issue; their LOW/INFO items are fixed. A
+32-mutation sweep of the final script, including every surviving mutation
+those reviews reported, caught 29; the three survivors are equivalent
+(`allow_nan=False` behind the finite-number parse check,
+`UnicodeEncodeError` already a `ValueError`, and reading the ASCII
+crate-name list as ASCII). It passes and gives byte-identical output on
 Python 3.9 to 3.15 and under `LC_ALL=C`. Locally, the exact SBOM step text
 of both workflows produced byte-identical SBOMs for both targets, which the
 action's shipped detection code accepts; a cargo-cyclonedx shim that drops

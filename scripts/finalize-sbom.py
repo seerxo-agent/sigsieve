@@ -20,6 +20,7 @@ is refused, so a non-reproducible run fails here instead of being attested.
 
 import argparse
 import json
+import math
 import re
 import sys
 import uuid
@@ -30,6 +31,7 @@ SERIAL = re.compile(
 REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 TARGET = re.compile(r"^[a-z0-9_]+(-[a-z0-9_]+){2,3}$")
+MAX_SBOM_BYTES = 16 * 1024 * 1024  # actions/attest MAX_SBOM_SIZE_BYTES
 VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$")
 
 
@@ -44,17 +46,24 @@ def require(cond, message):
 
 def strict_json(text):
     """json.loads that refuses what JSON.parse in actions/attest would not
-    read the same way: NaN/Infinity, and duplicate keys (Python keeps the last)."""
+    read the same way: NaN/Infinity (literal or overflowing, e.g. 1e999) and
+    duplicate keys (Python keeps the last)."""
     def no_constant(name):
         raise Rejected(f"SBOM contains non-JSON number {name}")
 
+    def finite(text):
+        value = float(text)
+        require(math.isfinite(value), f"SBOM number {text} is not finite")
+        return value
+
     def no_duplicates(pairs):
         keys = [k for k, _ in pairs]
-        require(len(keys) == len(set(keys)), f"SBOM has duplicate keys: {sorted({k for k in keys if keys.count(k) > 1})}")
+        if len(keys) != len(set(keys)):
+            raise Rejected(f"SBOM has duplicate keys: {sorted({k for k in keys if keys.count(k) > 1})}")
         return dict(pairs)
 
     try:
-        return json.loads(text, parse_constant=no_constant, object_pairs_hook=no_duplicates)
+        return json.loads(text, parse_constant=no_constant, parse_float=finite, object_pairs_hook=no_duplicates)
     except ValueError as e:
         raise Rejected(f"SBOM is not valid JSON: {e}")
 
@@ -72,7 +81,7 @@ def attest_accepts(bom):
 
 
 def check_output(bom, serial):
-    """Checks on the SBOM about to be written; also run by the tests."""
+    """Checks on the parsed SBOM about to be written."""
     require(isinstance(bom, dict), "SBOM is not a JSON object")
     require(bom.get("bomFormat") == "CycloneDX", "bomFormat is not CycloneDX")
     require(bom.get("specVersion") == "1.5", "specVersion is not 1.5")
@@ -80,6 +89,13 @@ def check_output(bom, serial):
     require(isinstance(sn, str) and SERIAL.match(sn), f"serialNumber {sn!r} is not urn:uuid:<RFC 4122 UUID>")
     require(sn == serial, "serialNumber is not the one derived from the release inputs")
     require(attest_accepts(bom), "actions/attest would reject this SBOM")
+
+
+def check_bytes(data, serial):
+    """The exact bytes to be written, read back as actions/attest reads them
+    (UTF-8, size cap, JSON.parse-compatible), then check_output."""
+    require(len(data) <= MAX_SBOM_BYTES, f"SBOM exceeds {MAX_SBOM_BYTES} bytes (actions/attest limit)")
+    check_output(strict_json(data.decode("utf-8")), serial)
 
 
 def finalize(text, workspace, repo, sha, version, target, deps):
@@ -101,8 +117,10 @@ def finalize(text, workspace, repo, sha, version, target, deps):
     require((root.get("name"), root.get("version")) == ("sigsieve", version), "SBOM describes the wrong package")
     components = bom.get("components")
     require(isinstance(components, list) and components, "SBOM lists no dependencies")
-    listed = {c.get("name") for c in components if isinstance(c, dict)} | {"sigsieve"}
-    require(deps, "dependency list is empty")
+    require(all(isinstance(c, dict) and isinstance(c.get("name"), str) for c in components),
+            "SBOM has a component without a string name")
+    listed = {c["name"] for c in components} | {"sigsieve"}
+    require(set(deps) - {"sigsieve"}, "dependency list names no dependencies")
     missing = set(deps) - listed
     require(not missing, f"SBOM misses dependencies: {sorted(missing)}")
 
@@ -112,8 +130,12 @@ def finalize(text, workspace, repo, sha, version, target, deps):
         out[key] = value
         if key == "specVersion":
             out["serialNumber"] = serial
-    check_output(out, serial)
-    return json.dumps(out, indent=2, ensure_ascii=False) + "\n"
+    try:
+        data = (json.dumps(out, indent=2, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+    except (ValueError, UnicodeEncodeError) as e:
+        raise Rejected(f"SBOM cannot be written as UTF-8 JSON: {e}")
+    check_bytes(data, serial)
+    return data
 
 
 def main(argv):
@@ -136,7 +158,7 @@ def main(argv):
     except Rejected as e:
         print(f"::error::{a.target}: {e}", file=sys.stderr)
         return 1
-    with open(a.dst, "x", encoding="utf-8") as f:
+    with open(a.dst, "xb") as f:  # fully encoded above: no partial file on error
         f.write(result)
     return 0
 
