@@ -256,6 +256,17 @@ pub fn start_proxy_with(
     upstream_timeout: Duration,
 ) -> Harness {
     let (policy, _) = Policy::from_fingerprints(allow).unwrap();
+    start_proxy_with_policy(upstream, policy, limits, upstream_timeout)
+}
+
+/// Serve any policy (for example one with destination binding) on a real
+/// socket, so tests can drive it over a connection like an ssh client does.
+pub fn start_proxy_with_policy(
+    upstream: &Path,
+    policy: Policy,
+    limits: Limits,
+    upstream_timeout: Duration,
+) -> Harness {
     let dir = private_tempdir();
     let (listener, rt) = RuntimeSocket::bind(Some(&dir.path().join("f.sock"))).unwrap();
     let path = rt.path().to_path_buf();
