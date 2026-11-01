@@ -61,6 +61,7 @@ fix (where one exists).
 | F-43 | MEDIUM (release, fails closed) | Release SBOMs had no CycloneDX `serialNumber`, which the pinned `actions/attest` requires; the first tag's SBOM attestation step would have failed | **Fixed; verified on the v0.1.0-alpha.3 tag run** (41327036746: both SBOM attestations created): deterministic `urn:uuid` serial added by `scripts/finalize-sbom.py`, checked against the action's acceptance rule; regression `scripts/test-finalize-sbom.py` |
 | F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit could get a release that verified | Fixed after v0.1.0-alpha.3: `verify-release.sh` gates on the tag commit being on `refs/heads/main`; `release.yml` checks it too (defense in depth); tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
 | F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
+| F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, has no test that makes it refuse | Open: needs an agent running as another uid (root on a disposable runner); pathname checks before `connect` are documented as advisory |
 
 
 ### Review scope
@@ -89,6 +90,36 @@ so they receive no F-number:
 | A-5 | `chmod` after `bind` follows symlinks | Out of scope (same-uid attacker, threat model scenario F) | Accepted |
 
 ## Details
+
+### F-46 — INFO — upstream connect: pathname checks are racy, peer-uid rejection is untested
+
+Found by the internal (AI-assisted, not independent) alpha.4 lifecycle
+review. Each upstream request runs `Upstream::connect` (`src/upstream.rs`):
+
+1. `metadata(path)`, following symlinks: must be a Unix socket owned by the
+   current uid;
+2. `connect(path)`: resolves the path again;
+3. `peer_uid` (`getpeereid` on macOS, `SO_PEERCRED` on Linux) on the
+   connected descriptor: the agent process must run as the current uid.
+
+Between steps 1 and 2 the path can be replaced (time-of-check to
+time-of-use). Step 1 is therefore advisory: it gives a clear error for the
+common mistakes (a regular file, someone else's socket). Step 3 is checked on
+the descriptor actually used, so a swap to a socket served by **another**
+user is still refused. A swap to another socket served by the **same** user
+is not detected and is not meant to be: a same-uid attacker can already
+replace the agent, which is out of scope (threat model scenario F).
+
+What is tested: the path is re-evaluated for every request, and a file, a
+dangling link or a misbehaving agent placed under an open connection fails
+closed and recovers (`upstream_replaced_under_an_open_connection_fails_closed_then_recovers`);
+a real `ssh-agent` killed and restarted on the same path
+(`lifecycle::real_agent_killed_and_restarted_under_a_running_proxy`).
+
+What is not: no test makes step 3 refuse, because that needs an agent running
+as a different uid, i.e. root. A mutation that removed step 3 would pass the
+suite. No platform-specific change was made. Upgrade path: a CI-only test on
+a disposable runner that starts an agent under a second user with `sudo`.
 
 ### F-45 — LOW–MEDIUM — release tag not bound to `main` (fixed after v0.1.0-alpha.3)
 
