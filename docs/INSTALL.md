@@ -141,6 +141,8 @@ release commit:
 )
 ```
 
+If you set `CARGO_INSTALL_ROOT` (or cargo's `install.root`), the binary is
+installed under that directory instead; run its `bin/sigsieve --version`.
 A source build is local compilation, not verification of the published
 binary's provenance.
 

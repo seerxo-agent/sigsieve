@@ -97,7 +97,8 @@ checked-out commit is not the release commit:
 ```
 
 This needs Rust 1.99.1 (pinned by the checkout) and OpenSSH 8.4+; proxy-jump
-sessions need 8.7+. Keep ordinary SSH access available while evaluating it.
+sessions need 8.7+. If you set `CARGO_INSTALL_ROOT`, the binary is installed
+there instead. Keep ordinary SSH access available while evaluating it.
 
 ## First safe check with OpenSSH (Linux or macOS)
 
