@@ -31,7 +31,7 @@ BOM = {
     "metadata": {"component": {"name": "sigsieve", "version": "0.1.0-alpha.3",
                                "bom-ref": f"path+file://{WS}#sigsieve@0.1.0-alpha.3"}},
     "components": [{"name": "base64", "version": "0.23.0"}, {"name": "libc", "version": "0.2.0",
-                                                               "author": "Sørensen"}],
+                                                               "author": "Ünïcødé-Ñame"}],
 }
 passed = 0
 
@@ -69,7 +69,7 @@ assert WS not in out and "path+file:///sigsieve#" in out
 assert '"bomFormat": "CycloneDX"' in out
 # Fixed layout: two-space indent, non-ASCII kept as UTF-8.
 assert out.startswith('{\n  "bomFormat": "CycloneDX",\n  "specVersion": "1.5",\n  "serialNumber": "'), out[:80]
-assert '"author": "Sørensen"' in out and out.endswith("}\n")
+assert '"author": "Ünïcødé-Ñame"' in out and out.endswith("}\n")
 assert run() == out, "same inputs must give identical bytes"
 passed += 1
 
