@@ -30,7 +30,8 @@ BOM = {
     "version": 1,
     "metadata": {"component": {"name": "sigsieve", "version": "0.1.0-alpha.3",
                                "bom-ref": f"path+file://{WS}#sigsieve@0.1.0-alpha.3"}},
-    "components": [{"name": "base64", "version": "0.23.0"}, {"name": "libc", "version": "0.2.0"}],
+    "components": [{"name": "base64", "version": "0.23.0"}, {"name": "libc", "version": "0.2.0",
+                                                               "author": "Sørensen"}],
 }
 passed = 0
 
@@ -66,8 +67,16 @@ assert fs.attest_accepts(bom)
 assert WS not in out and "path+file:///sigsieve#" in out
 # scripts/verify-release.sh greps for this exact text.
 assert '"bomFormat": "CycloneDX"' in out
+# Fixed layout: two-space indent, non-ASCII kept as UTF-8.
+assert out.startswith('{\n  "bomFormat": "CycloneDX",\n  "specVersion": "1.5",\n  "serialNumber": "'), out[:80]
+assert '"author": "Sørensen"' in out and out.endswith("}\n")
 assert run() == out, "same inputs must give identical bytes"
 passed += 1
+
+# SemVer pre-release and build metadata are accepted versions.
+for v in ("0.1.0-rc-1", "1.2.3+build.5", "1.0.0-alpha.1+x-y"):
+    run(bom=mutated(lambda b: b["metadata"]["component"].update(version=v)), version=v)
+    passed += 1
 
 # Each release input changes the serial; nothing else does.
 for key, value in [("repo", "other/sigsieve"), ("sha", "f" * 40),
@@ -85,11 +94,23 @@ rejects("wrong version", lambda: run(bom=mutated(lambda b: b["metadata"]["compon
 rejects("no root component", lambda: run(bom=mutated(lambda b: b.pop("metadata"))))
 rejects("bomFormat", lambda: run(bom=mutated(lambda b: b.update(bomFormat="SPDX"))))
 rejects("specVersion", lambda: run(bom=mutated(lambda b: b.update(specVersion="1.4"))))
-rejects("no components", lambda: run(bom=mutated(lambda b: b.update(components=[]))))
+# deps=["sigsieve"] so only the components guard, not completeness, can reject.
+rejects("no components", lambda: run(deps=["sigsieve"], bom=mutated(lambda b: b.update(components=[]))))
+rejects("components not a list", lambda: run(deps=["sigsieve"], bom=mutated(lambda b: b.update(components={}))))
+rejects("metadata not an object", lambda: run(bom=mutated(lambda b: b.update(metadata=[]))))
+rejects("root component not an object", lambda: run(bom=mutated(lambda b: b["metadata"].update(component="sigsieve"))))
+raw = json.dumps(BOM)
+rejects("NaN", lambda: fs.finalize(raw.replace('"version": 1,', '"version": NaN,'), deps=DEPS, **ARGS))
+rejects("Infinity", lambda: fs.finalize(raw.replace('"version": 1,', '"version": Infinity,'), deps=DEPS, **ARGS))
+rejects("duplicate key", lambda: fs.finalize(raw.replace('"version": 1,', '"version": 1, "version": 2,'), deps=DEPS, **ARGS))
+rejects("duplicate nested key", lambda: fs.finalize(
+    raw.replace('"name": "base64",', '"name": "base64", "name": "ring",'), deps=DEPS, **ARGS))
+rejects("invalid JSON", lambda: fs.finalize(raw[:-1], deps=DEPS, **ARGS))
 rejects("generator serial", lambda: run(bom=mutated(lambda b: b.update(serialNumber=serial))))
 rejects("not an object", lambda: run(bom=[BOM]))
 for key, bad in [("sha", "269cf91"), ("sha", "G" * 40), ("repo", "a/b/c"), ("repo", "a b/c"),
                  ("target", "x86_64"), ("target", "../etc-x-y"), ("version", "v0.1.0"),
+                 ("version", "0.1"), ("version", "0.1.0-a b"),
                  ("workspace", "/"), ("workspace", "relative")]:
     rejects(f"bad {key} {bad!r}", lambda: run(**{key: bad}))
 
@@ -115,7 +136,7 @@ assert not fs.attest_accepts({k: v for k, v in good.items() if k != "serialNumbe
 # Command line: exit status, nothing written on rejection, no overwrite.
 with tempfile.TemporaryDirectory(prefix="sigsieve-sbom-") as tmp:
     t = Path(tmp)
-    (t / "in.json").write_text(json.dumps(BOM).replace(WS, ARGS["workspace"]))
+    (t / "in.json").write_text(json.dumps(BOM, ensure_ascii=False).replace(WS, ARGS["workspace"]), encoding="utf-8")
     (t / "deps.txt").write_text("\n".join(DEPS) + "\n")
     cli = [sys.executable, "-I", str(script)] + [f"--{k}={v}" for k, v in ARGS.items()]
 
@@ -125,12 +146,12 @@ with tempfile.TemporaryDirectory(prefix="sigsieve-sbom-") as tmp:
                               capture_output=True, text=True)
 
     r = call(DEPS, "ok.json")
-    assert r.returncode == 0 and (t / "ok.json").read_text() == out, r.stderr
+    assert r.returncode == 0 and (t / "ok.json").read_text(encoding="utf-8") == out, r.stderr
     r = call(DEPS + ["ring"], "missing.json")
     assert r.returncode == 1 and "misses dependencies: ['ring']" in r.stderr, r
     assert not (t / "missing.json").exists()
     r = call(DEPS, "ok.json")
-    assert r.returncode != 0 and (t / "ok.json").read_text() == out, "must not overwrite"
+    assert r.returncode != 0 and (t / "ok.json").read_text(encoding="utf-8") == out, "must not overwrite"
     passed += 3
 
 print(f"finalize-sbom: {passed} checks passed")

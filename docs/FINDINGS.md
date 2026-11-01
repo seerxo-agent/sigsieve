@@ -98,8 +98,10 @@ F-43: `actions/attest` at the pinned `1e69f48` (v4.2.2) treats an
 `sbom-path` file as CycloneDX only when `bomFormat`, `serialNumber` and
 `specVersion` are all present (`src/sbom.ts`, `checkIsCycloneDX`; same in
 its `dist/index.js`); otherwise the step fails with "Unsupported SBOM
-format". cargo-cyclonedx 0.5.9 writes no `serialNumber`, and neither SBOM
-of rehearsal run 41055121744 had one; running the action's shipped
+format". cargo-cyclonedx 0.5.9 writes no `serialNumber` when
+`SOURCE_DATE_EPOCH` is set, as both workflows do for reproducibility (it
+writes a random one otherwise), and neither SBOM of rehearsal run
+41055121744 had one; running the action's shipped
 detection code on them gave that error. The rehearsal creates no
 attestations, so it could not catch this. A tag of that candidate would
 have failed in its attest job (fail closed, but it would have used up the
@@ -107,21 +109,30 @@ version).
 
 F-44: the release SBOM job checked only format, package and a non-empty
 component list; only the rehearsal compared the SBOM with `cargo tree`.
-An SBOM tool that dropped a dependency would have been attested.
+A faulty SBOM tool that dropped a dependency would have been attested.
+(The check runs in the same untrusted job as the tool, so it catches
+faults, not a malicious tool; see R-3.)
 
 Fix: `scripts/finalize-sbom.py`, called identically by both workflows,
 rewrites the checkout path, checks format, package, version and every
 dependency `cargo tree --locked -e normal,build --target T` resolves,
-refuses a generator-supplied serial (it would be random per run), adds
-`urn:uuid:` + UUIDv5(URL namespace, repository/commit/version/target),
-checks the result with a mirror of the action's acceptance rule and an RFC
-4122 pattern, and writes a new file only. `scripts/test-finalize-sbom.py`
-(35 checks; runs in CI, the rehearsal and the release SBOM job) covers
-determinism, every input changing the serial, the exact `"bomFormat":
-"CycloneDX"` text `verify-release.sh` greps for, and rejection of missing
-dependencies, wrong package/version/format, generator serials, bad
-arguments, and absent, malformed, foreign or SPDX-confusable serials. Six
-mutations of the script were each caught. Locally, the exact SBOM step text
+refuses a generator-supplied serial (it would be random per run, so a run
+without `SOURCE_DATE_EPOCH` fails), refuses NaN/Infinity and duplicate JSON
+keys, adds `urn:uuid:` + UUIDv5(URL namespace,
+repository/commit/version/target), checks the result with a mirror of the
+action's acceptance rule and an RFC 4122 pattern, and writes a new UTF-8
+file only. `scripts/test-finalize-sbom.py` (48 checks; runs in CI, the
+rehearsal and the release SBOM job) covers determinism, the fixed output
+layout including the exact `"bomFormat": "CycloneDX"` text
+`verify-release.sh` greps for, every input changing the serial, SemVer
+pre-release/build versions, and rejection of missing dependencies, missing
+or mistyped components/metadata, wrong package/version/format, NaN and
+duplicate keys, generator serials, bad arguments, and absent, malformed,
+foreign or SPDX-confusable serials. A 24-mutation sweep of the script
+(including one from the separate-context review of this fix) caught 23; the
+survivor reads the crate-name list as ASCII instead of UTF-8, equivalent
+because crate names are ASCII. It passes and gives byte-identical output on
+Python 3.9 to 3.15 and under `LC_ALL=C`. Locally, the exact SBOM step text
 of both workflows produced byte-identical SBOMs for both targets, which the
 action's shipped detection code accepts; a cargo-cyclonedx shim that drops
 `libc` makes the release step fail with nothing written.

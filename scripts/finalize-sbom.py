@@ -13,7 +13,9 @@ Used unchanged by release.yml and release-rehearsal.yml. It:
 actions/attest 1e69f48 (v4.2.2) treats a JSON file as CycloneDX only if
 bomFormat, serialNumber and specVersion are all truthy (src/sbom.ts,
 checkIsCycloneDX); otherwise sbom-path fails with "Unsupported SBOM format".
-cargo-cyclonedx 0.5.9 writes no serialNumber.
+cargo-cyclonedx 0.5.9 writes no serialNumber when SOURCE_DATE_EPOCH is set
+(as both workflows do) and a random one when it is not; a generator serial
+is refused, so a non-reproducible run fails here instead of being attested.
 """
 
 import argparse
@@ -28,7 +30,7 @@ SERIAL = re.compile(
 REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SHA = re.compile(r"^[0-9a-f]{40}$")
 TARGET = re.compile(r"^[a-z0-9_]+(-[a-z0-9_]+){2,3}$")
-VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$")
+VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$")
 
 
 class Rejected(Exception):
@@ -38,6 +40,23 @@ class Rejected(Exception):
 def require(cond, message):
     if not cond:
         raise Rejected(message)
+
+
+def strict_json(text):
+    """json.loads that refuses what JSON.parse in actions/attest would not
+    read the same way: NaN/Infinity, and duplicate keys (Python keeps the last)."""
+    def no_constant(name):
+        raise Rejected(f"SBOM contains non-JSON number {name}")
+
+    def no_duplicates(pairs):
+        keys = [k for k, _ in pairs]
+        require(len(keys) == len(set(keys)), f"SBOM has duplicate keys: {sorted({k for k in keys if keys.count(k) > 1})}")
+        return dict(pairs)
+
+    try:
+        return json.loads(text, parse_constant=no_constant, object_pairs_hook=no_duplicates)
+    except ValueError as e:
+        raise Rejected(f"SBOM is not valid JSON: {e}")
 
 
 def serial_number(repo, sha, version, target):
@@ -70,12 +89,15 @@ def finalize(text, workspace, repo, sha, version, target, deps):
     require(TARGET.match(target), f"bad target {target!r}")
     require(workspace.startswith("/") and len(workspace) > 1, f"bad workspace {workspace!r}")
 
-    bom = json.loads(text.replace(workspace, "/sigsieve"))
+    bom = strict_json(text.replace(workspace, "/sigsieve"))
     require(isinstance(bom, dict), "SBOM is not a JSON object")
     require(bom.get("bomFormat") == "CycloneDX" and bom.get("specVersion") == "1.5", "unexpected SBOM format")
     # A generator-supplied serial would be random per run (not reproducible).
     require("serialNumber" not in bom, "generator already set a serialNumber")
-    root = bom.get("metadata", {}).get("component", {})
+    metadata = bom.get("metadata")
+    require(isinstance(metadata, dict), "SBOM has no metadata object")
+    root = metadata.get("component")
+    require(isinstance(root, dict), "SBOM has no root component")
     require((root.get("name"), root.get("version")) == ("sigsieve", version), "SBOM describes the wrong package")
     components = bom.get("components")
     require(isinstance(components, list) and components, "SBOM lists no dependencies")
@@ -105,16 +127,16 @@ def main(argv):
     p.add_argument("src")
     p.add_argument("dst")
     a = p.parse_args(argv)
-    with open(a.deps) as f:
+    with open(a.deps, encoding="utf-8") as f:
         deps = f.read().split()
-    with open(a.src) as f:
+    with open(a.src, encoding="utf-8") as f:
         text = f.read()
     try:
         result = finalize(text, a.workspace, a.repo, a.sha, a.version, a.target, deps)
     except Rejected as e:
         print(f"::error::{a.target}: {e}", file=sys.stderr)
         return 1
-    with open(a.dst, "x") as f:
+    with open(a.dst, "x", encoding="utf-8") as f:
         f.write(result)
     return 0
 
