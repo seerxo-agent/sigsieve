@@ -132,6 +132,11 @@ try:
     fs.serial_number = real_serial
     fs.MAX_SBOM_BYTES = len(out.encode("utf-8")) - 1
     rejects("finalize checks the attest size limit", lambda: run(), "exceeds")
+    # Exactly at the limit is accepted, as actions/attest rejects only
+    # size > MAX_SBOM_SIZE_BYTES (FB-1).
+    fs.MAX_SBOM_BYTES = len(out.encode("utf-8"))
+    assert run() == out, "an SBOM of exactly the size limit must be accepted"
+    passed += 1
 finally:
     fs.serial_number, fs.MAX_SBOM_BYTES = real_serial, real_max
 assert real_max == 16 * 1024 * 1024

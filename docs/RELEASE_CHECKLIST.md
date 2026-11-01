@@ -37,8 +37,16 @@ SSH host-key verification and recovery access.
   platforms and untested integrations are accurate in the published snapshot.
 - GitHub private vulnerability reporting is enabled and `SECURITY.md` links
   to the working reporting channel.
-- The release tag exactly matches `Cargo.toml`; the release workflow requires
-  full CI before building and keeps OIDC attestation separate from compilation.
+- The release tag exactly matches `Cargo.toml` and points at a commit on
+  `main` (checked by `release.yml` and `verify-release.sh`); the release
+  workflow requires full CI before building and keeps OIDC attestation
+  separate from compilation.
+- Tag rulesets for `refs/tags/v*` are active: creation restricted to
+  repository admins, and updates, deletions and force pushes forbidden with
+  no bypass.
+- Files that ship in the archives (README, CHANGELOG) contain no wording that
+  goes stale at tagging. Date the CHANGELOG heading before freezing the
+  candidate commit, instead of writing "not yet tagged".
 - Download the actual release archives, check their SHA256 sums and GitHub
   provenance, inspect license notices and execute at least the native binary.
 - Open the packaged README and CHANGELOG: repository links must point to

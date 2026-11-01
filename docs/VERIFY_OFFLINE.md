@@ -60,8 +60,11 @@ gh attestation download "$name.cdx.json" --repo "$repo"
 # Sigstore trusted root (public-good and GitHub instances).
 gh attestation trusted-root > trusted_root.jsonl
 
-# Record the tag's commit now; you need it offline.
-gh api "repos/$repo/commits/$tag" --jq .sha
+# Record the tag's commit now; you need it offline. refs/tags/ makes sure a
+# branch with the same name cannot answer instead.
+commit=$(gh api "repos/$repo/commits/refs/tags/$tag" --jq .sha); echo "$commit"
+# The tag must be on main (reviewed and merged): expect "identical" or "ahead".
+gh api "repos/$repo/compare/$commit...main" --jq .status
 ```
 
 Copy the files to the offline machine. Also take the commit SHA. For
