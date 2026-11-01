@@ -53,8 +53,11 @@ def main():
         # The test, possibly running as another user, reads the log.
         os.chmod(log_path, 0o644)
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        listener.bind(path)
+        # Appear at PATH only once listening, so a waiter that sees the
+        # socket file never gets "connection refused".
+        listener.bind(path + ".tmp")
         listener.listen(8)
+        os.rename(path + ".tmp", path)
         while True:
             conn, _ = listener.accept()
             with conn:

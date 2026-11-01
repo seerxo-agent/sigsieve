@@ -95,7 +95,14 @@ else
   done
   grep -q "^test result: FAILED. 1 passed; 3 failed; 0 ignored" "$out" \
     || die "unexpected mutant result"
-  # Each test must fail on its own check, not on a precondition.
+  # Each test must fail on its own check, not on a precondition or an
+  # unrelated error.
   if grep -q "precondition" "$out"; then die "a precondition failed on the mutant"; fi
+  for msg in "a foreign agent was used" \
+             "a request reached the foreign agent" \
+             "sigsieve run kept running with a foreign agent"; do
+    grep -qF "$msg" "$out" || die "mutant failure without its own assertion: $msg"
+  done
+  [ -s "$root/foreign/requests.log" ] || die "the mutant never reached the foreign agent"
   echo "PASS (executed): every cross-user test fails without the peer-uid check"
 fi
