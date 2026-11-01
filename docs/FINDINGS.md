@@ -152,34 +152,54 @@ removes its directory. The test output, the foreign agent's request log and
 the uids of both runs are uploaded as the `f46-cross-user-evidence`
 artifact.
 
-Pull requests from forks never start the job automatically. That `if`
-lives in the workflow file, which a pull request can edit, so it is not the
-security boundary. GitHub enforces the boundaries outside that file:
-- a fork's token is read-only and gets no secrets, whatever the file says;
-- fork runs need maintainer approval under the repository's "Fork pull
-  request workflows" setting. That setting should require approval for all
-  outside contributors; changing it is a settings change, not made here;
+The workflow's job condition skips pull requests from forks, and a
+separate job then fails visibly ("NOT RUN") so that a skipped job is not
+read as a pass. That condition lives in the workflow file, which a pull
+request can edit, so it is not a security boundary. GitHub enforces the
+limits outside that file:
+- for a public repository, a fork's token is read-only and gets no
+  secrets, whatever the file says;
+- whether a fork's edited workflow runs without a maintainer's approval
+  depends on the repository setting "Approval for running fork pull request
+  workflows from contributors". Only "Require approval for all external
+  contributors" stops it. Under the default (approval for first-time
+  contributors only) a returning contributor's fork can run its own root
+  code on the runner automatically, as it already can through `ci.yml`,
+  which uses `sudo`. **This control is open until that setting is chosen;**
+  changing it is a settings decision for the maintainer and is not made
+  here;
 - a branch in the repository itself already needs write access.
 
 The job uses no secret and only a `contents: read` token, which
-`persist-credentials: false` keeps off disk; `ci.yml` already runs `sudo` on
-pull requests. Root on the runner therefore reaches only a discarded VM.
+`persist-credentials: false` keeps out of `.git/config`. Root can still
+read the job's tokens (`GITHUB_TOKEN`, the Actions runtime token) from the
+runner process; they allow reading this public repository and writing
+caches and artifacts scoped to this run. Root on the runner reaches nothing
+else that persists.
 
 A pull request run tests GitHub's temporary merge of the head into the base.
-The workflow first records that commit, its parents and its tree
-(`tested-commits.txt` in the artifact), and stops unless the second parent
-is the pull request head. After merging,
+The workflow first records that commit, its tree, its parents (the first
+is the base actually tested, which can differ from the event's `base.sha`)
+and the pull request head (`tested-commits.txt` in the artifact). It stops
+unless the second parent is the pull request head. After merging,
 `scripts/verify-f46-evidence.sh <merged commit> tested-commits.txt` accepts
 only a merge commit whose tree equals the tested tree and whose second
-parent is the tested head. A base that moved after the run, a squash or
-rebase, or any other change makes it fail, and the workflow must run again.
-GitHub does not re-run `pull_request` workflows when only the base moves. A
-pull request with merge conflicts gets no run at all. Regression:
-`scripts/test-verify-f46-evidence.sh`.
+parent is the tested head. Because the trees are equal, the workflow and
+scripts that produced the evidence are also exactly the merged ones. A base
+that moved after the run, a squash or rebase, or any other change makes it
+fail. GitHub does not re-run `pull_request` workflows when only the base
+moves, and nothing before the merge forces a re-run unless branch protection
+requires this check and an up-to-date branch, which is also a settings
+decision. Recovery after such a merge: run the workflow by `workflow_dispatch`
+on the merged commit; the verifier accepts dispatch evidence only for the
+exact commit it tested. A pull request with merge conflicts gets no run at
+all. The verifier checks the source binding only. That the run passed,
+and that the artifact comes from this repository's run, are checked from
+the run itself. Regression: `scripts/test-verify-f46-evidence.sh`.
 
-F-46 is closed only on a single run of that workflow that shows all of the
-following, and only once `verify-f46-evidence.sh` accepts the merged
-commit:
+F-46 is closed only on a single successful run of that workflow in this
+repository that shows all of the following, and only once
+`verify-f46-evidence.sh` accepts the merged commit:
 1. the cross-user run: 4 tests executed and passed, none ignored, and the
    foreign agent received no request;
 2. the mutant run (peer-uid check removed): each of the 3 cross-user tests

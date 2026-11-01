@@ -8,10 +8,10 @@ name: Cross-user peer credential (F-46)
 # - pull_request, only when the code under test or the test changes. A
 #   pull_request run uses the workflow file from the pull request itself,
 #   so F-46 can be verified before anything is merged. No secrets are used
-#   and the token is read-only; runs from forks follow the repository's
-#   approval setting for outside contributors.
-# - workflow_dispatch, for a manual re-run. GitHub only offers it once this
-#   file is on the default branch.
+#   and the token is read-only.
+# - workflow_dispatch, for a re-run on the default branch (e.g. after a
+#   merge whose base had moved). GitHub only offers it once this file is on
+#   the default branch.
 on:
   pull_request:
     # Everything the tests build from: all source (the proxy and binary are
@@ -45,15 +45,15 @@ env:
 
 jobs:
   cross-user:
-    # Pull requests from forks never start this root job automatically.
-    # This condition is NOT the security boundary: a pull request can edit
-    # this file. The boundaries are enforced by GitHub outside it: a fork's
-    # token is read-only and gets no secrets whatever this file says, and
-    # fork runs need maintainer approval under the repository's
-    # "Fork pull request workflows" setting (which should require approval
-    # for all outside contributors). A same-repository branch already needs
-    # write access. The job holds no secret and no write token, and the VM
-    # is discarded afterwards; ci.yml already runs sudo on pull requests.
+    # This condition skips fork pull requests, but it is NOT a security
+    # boundary: a fork can delete it. GitHub enforces the real limits
+    # outside this file: a fork's token is read-only and gets no secrets.
+    # Whether a fork's edited workflow runs without a maintainer's approval
+    # depends on the repository setting "Approval for running fork pull
+    # request workflows from contributors"; only "Require approval for all
+    # external contributors" stops it. Until that setting is chosen, a
+    # returning contributor's fork can run its own root code on this
+    # disposable VM (as it already can through ci.yml, which uses sudo).
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
@@ -74,7 +74,6 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           mkdir -p xu-evidence
           parents=$(git cat-file -p HEAD | sed -n 's/^parent //p' | tr '\n' ' ')
@@ -84,12 +83,14 @@ jobs:
             echo "tree=$(git rev-parse 'HEAD^{tree}')"
             echo "parents=${parents% }"
             echo "pr_head=${HEAD_SHA:-}"
-            echo "pr_base_at_event=${BASE_SHA:-}"
           } | tee xu-evidence/tested-commits.txt
           if [ "$EVENT" = pull_request ]; then
             set -- $parents
             [ "$#" = 2 ] && [ "$2" = "$HEAD_SHA" ] \
               || { echo "::error::tested commit is not a merge of the pull request head"; exit 1; }
+            # The base actually tested is the first parent, not the
+            # event payload's base.sha, which can differ.
+            echo "base_tested=$1" | tee -a xu-evidence/tested-commits.txt
           fi
       - name: Install pinned Rust toolchain (rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
@@ -146,3 +147,19 @@ jobs:
           name: f46-cross-user-evidence
           path: xu-evidence
           if-no-files-found: warn
+
+  fork-not-verified:
+    # A skipped job looks like a pass in the checks list. For a fork pull
+    # request, fail visibly instead: F-46 has NOT been verified for it. A
+    # maintainer can run the test from a branch of this repository after
+    # reviewing the change. No checkout, no sudo.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: |
+          echo "::error::F-46 cross-user test not run for a fork pull request; this is not a verification"
+          echo "## F-46 cross-user test: NOT RUN (fork pull request)" >> "$GITHUB_STEP_SUMMARY"
+          exit 1

@@ -15,11 +15,13 @@ The project follows [Semantic Versioning](https://semver.org/).
   pull requests that touch source, dependencies, toolchain or the test,
   so F-46 can be verified before merging. It uses fresh, randomly named
   users and removes them afterwards, and refuses to run where it detects a
-  container (a guard, not proof of a disposable machine). Pull requests
-  from forks do not start it automatically. The run records the commit it
-  tested and that commit's tree. After merging,
-  `scripts/verify-f46-evidence.sh` checks that the merged commit has
-  exactly that tree.
+  container (a guard, not proof of a disposable machine). The job is
+  skipped for fork pull requests, and a visible "not run" failure is shown
+  instead. This is not a security boundary: that depends on the
+  repository's fork-approval setting, which has not been changed. The run
+  records the commit it tested and that commit's tree. After merging,
+  `scripts/verify-f46-evidence.sh` checks that the merged commit, or a
+  manual re-run on it, has exactly that tree.
 - Real OpenSSH tests of the agent lifecycle under `sigsieve run`, counting
   the sign requests that reach the agent: a real `ssh-agent` killed and
   restarted on the same path (logins fail with a stale or missing socket,

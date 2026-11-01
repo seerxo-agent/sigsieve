@@ -31,10 +31,18 @@ g reset -q --hard HEAD~1; echo later >h; g add h; g commit -qm later
 g merge -q --no-ff -m "merge pr" pr; fail "differs from tested tree" HEAD "$ev"
 # Squash of the same content onto the tested base: no second parent.
 g reset -q --hard HEAD~2; g merge -q --squash pr; g commit -qm squash; fail "is not a merge commit" HEAD "$ev"
-# Evidence from a non-PR run, or a missing file: rejected.
-sed 's/^event=.*/event=workflow_dispatch/' "$ev" >"$work/manual.txt"; fail "not from a pull_request run" HEAD "$work/manual.txt"
+# A dispatch re-run counts only for the exact commit it tested.
+sed 's/^event=.*/event=workflow_dispatch/' "$ev" >"$work/manual.txt"
+fail "dispatch run tested" HEAD "$work/manual.txt"
+printf 'event=workflow_dispatch\ntested=%s\ntree=%s\n' "$(git rev-parse HEAD)" \
+  "$(git rev-parse 'HEAD^{tree}')" >"$work/rerun.txt"
+pass HEAD "$work/rerun.txt"
+printf 'event=workflow_dispatch\ntested=%s\ntree=%s\n' "$(git rev-parse HEAD)" \
+  "$(git rev-parse 'HEAD~1^{tree}')" >"$work/badtree.txt"
+fail "tree mismatch" HEAD "$work/badtree.txt"
+sed 's/^event=.*/event=push/' "$ev" >"$work/push.txt"; fail "unsupported event" HEAD "$work/push.txt"
 fail "no evidence file" HEAD "$work/missing.txt"
 # Right tree but another head as second parent: rejected.
 g reset -q --hard HEAD~1; g checkout -q -b other pr; g commit -q --allow-empty -m extra
 g checkout -q main; g merge -q --no-ff -m "merge other" other; fail "is not the tested head" HEAD "$ev"
-echo "test-verify-f46-evidence: ok (6 cases)"
+echo "test-verify-f46-evidence: ok (9 cases)"
