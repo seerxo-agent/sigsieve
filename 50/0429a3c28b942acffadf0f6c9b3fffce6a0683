@@ -1,0 +1,35 @@
+scripts/test-finalize-sbom.py
+  s_35bbcce842599b::t_3ec96eef9db976 113
+  s_35bbcce842599b::t_8f2c255743a14f 139,149,154
+  s_35bbcce842599b::t_ccdc54cdbec6d9 97-108
+  s_35bbcce842599b::t_0008bf17964221 33-34
+  s_35bbcce842599b::t_4f12e038224ee0 70-72,76-79
+  s_35bbcce842599b::t_50dfa3776c2429 80
+docs/FINDINGS.md
+  s_35bbcce842599b::t_4324743c83a79a 112-114
+  s_35bbcce842599b::t_5042f716b5e83b 101-104
+  s_35bbcce842599b::t_0f7fe8952689de 119-135
+scripts/finalize-sbom.py
+  s_35bbcce842599b::t_fd7f7c75ce6226 130,132
+  s_35bbcce842599b::t_ce1b36b5cbe8a6 139
+  s_35bbcce842599b::t_d8ff7f6359fd28 92,97-100
+  s_35bbcce842599b::t_17291a6001683a 33,45-59
+  s_35bbcce842599b::t_a64151e643fb8a 16-18
+  s_35bbcce842599b::t_d9971aebfa425c 60-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "500429a3c28b942acffadf0f6c9b3fffce6a0683",
+  "prompts": {},
+  "sessions": {
+    "s_35bbcce842599b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8fd155db-07a7-4b35-bf5d-af1e4378b17c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
