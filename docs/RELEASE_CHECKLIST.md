@@ -116,7 +116,10 @@ These remain explicit limitations of the alpha, not passing tests:
    checks (read from `release.yml`) on the rehearsal's artifacts and checks
    the build job names `verify-release.sh` expects. It creates no tag,
    release or attestation.
-3. Tag the accepted candidate. `release.yml` gates, builds deterministic
+3. Merge the accepted candidate to `main` with a merge commit (not squash or
+   rebase, so the tested commit stays an ancestor of `main`), then tag that
+   commit; `release.yml` refuses a tag whose commit is not on `main`.
+   `release.yml` gates, builds deterministic
    macOS arm64 and Linux x86_64 archives, writes a CycloneDX SBOM sidecar
    per archive (not inside it; checked for completeness and given the
    deterministic `serialNumber` `actions/attest` requires by

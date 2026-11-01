@@ -59,7 +59,7 @@ fix (where one exists).
 | F-41 | LOW (diagnostic) | RSA binding self-test refused by algorithm policy instead of exercising destination enforcement | Fixed: valid RSA/SHA-2 probe; regression catches missing enforcement for RSA, ECDSA and Ed25519 |
 | F-42 | LOW (supply chain) | Release attest job selects artifacts by name; a compromised job holding the Actions runtime token could replace an artifact before attestation | **Fixed; verified on the v0.1.0-alpha.3 tag run** (41327036746: binding step passed, three downloads by artifact ID): attest binds each artifact to its producing job's ID, zip digest and archive SHA-256 and checks zip entries before extraction (`scripts/test-attest-inputs.sh`); the rehearsal `verify` job passed (41319371149); manual `verify-release.sh` and native smoke test remain mandatory |
 | F-43 | MEDIUM (release, fails closed) | Release SBOMs had no CycloneDX `serialNumber`, which the pinned `actions/attest` requires; the first tag's SBOM attestation step would have failed | **Fixed; verified on the v0.1.0-alpha.3 tag run** (41327036746: both SBOM attestations created): deterministic `urn:uuid` serial added by `scripts/finalize-sbom.py`, checked against the action's acceptance rule; regression `scripts/test-finalize-sbom.py` |
-| F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit got a release that verified | Fixed after v0.1.0-alpha.3: `release.yml` and `verify-release.sh` require the tag commit to be on `main`; tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
+| F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit could get a release that verified | Fixed after v0.1.0-alpha.3: `verify-release.sh` gates on the tag commit being on `refs/heads/main`; `release.yml` checks it too (defense in depth); tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
 | F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
 
 
@@ -118,16 +118,19 @@ Fix:
 - `docs/VERIFY_OFFLINE.md` shows both checks.
 - `scripts/test-verify-release-tag.sh` (6 cases, stubbed `gh`; runs in CI)
   covers identical, ahead, diverged, behind, a failed and an empty compare,
-  and the `refs/tags/` lookup. Three mutations (the old lookup, no
-  ancestry check, accepting `behind`) are each caught.
+  the `refs/tags/` lookup and a tag named `main`. Four mutations (the old
+  lookup, no ancestry check, accepting `behind`, an unqualified `...main`
+  (MR-2)) are each caught.
 - The workflow step was run locally against a throwaway repository: a
   commit on `main` and an ancestor pass; an unmerged commit fails.
 
 The commits of `v0.1.0-alpha.1` and `v0.1.0-alpha.2` are on `main`, so the
 new check accepts them (the rest of `verify-release.sh` is unchanged; the
 `v0.1.0-alpha.1` tag-push run 40248231106 was cancelled, so that tag never
-had a run the script could pass). `v0.1.0-alpha.3` predates this fix; its
-release record states how its tag was checked.
+had a run the script could pass). `v0.1.0-alpha.3` (`60c9b37`) is on `main`
+(compare: `ahead`); its release run 41327036746 predates the `verify-tag` step,
+so the workflow did not check this, and the tag was checked by hand before it
+was pushed.
 
 Residual: the check proves the commit was merged, not that the merge was
 reviewed well. Rulesets are repository settings that an administrator can
