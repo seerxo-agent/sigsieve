@@ -8,8 +8,8 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 - Real OpenSSH tests of the agent lifecycle under `sigsieve run`, counting
   the sign requests that reach the agent: a real `ssh-agent` killed and
-  restarted on the same path (logins fail while it is down, the proxy keeps
-  running, recovery needs a new login and binding), concurrent allowed and
+  restarted on the same path (logins fail with a stale or missing socket,
+  the proxy keeps running, each later login makes its own binding), concurrent allowed and
   forbidden sessions, an upstream lost while a request is pending, and replay
   of a real session's frames on new connections. No behavior change.
 - Findings register: F-46 records that the upstream path checks before

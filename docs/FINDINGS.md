@@ -113,8 +113,10 @@ replace the agent, which is out of scope (threat model scenario F).
 What is tested: the path is re-evaluated for every request, and a file, a
 dangling link or a misbehaving agent placed under an open connection fails
 closed and recovers (`upstream_replaced_under_an_open_connection_fails_closed_then_recovers`);
-a real `ssh-agent` killed and restarted on the same path
-(`lifecycle::real_agent_killed_and_restarted_under_a_running_proxy`).
+a real `ssh-agent` killed (stale socket), its socket removed (no such path)
+and restarted on the same path, with SigSieve configured with that path
+(`lifecycle::real_agent_killed_and_restarted_under_a_running_proxy`). These
+exercise steps 1 and 2; none of them exercises step 3 refusing.
 
 What is not: no test makes step 3 refuse, because that needs an agent running
 as a different uid, i.e. root. A mutation that removed step 3 would pass the

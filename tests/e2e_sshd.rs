@@ -42,6 +42,28 @@ fn ok(cmd: &mut Command) -> String {
     String::from_utf8_lossy(&o.stdout).into_owned()
 }
 
+/// Whether `sshd -t` accepts a configuration keyword (with a throwaway
+/// host key, since `-t` requires one).
+fn sshd_accepts(sshd: &str, d: &Path, line: &str) -> bool {
+    let probe = d.join("probe");
+    fs::create_dir_all(&probe).unwrap();
+    let key = probe.join("hk");
+    if !key.exists() {
+        ok(Command::new("ssh-keygen")
+            .args(["-q", "-N", "", "-t", "ed25519", "-f"])
+            .arg(&key));
+    }
+    let cfg = probe.join("cfg");
+    fs::write(&cfg, format!("HostKey {}\n{line}\n", key.display())).unwrap();
+    Command::new(sshd)
+        .arg("-t")
+        .arg("-f")
+        .arg(&cfg)
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
 fn fingerprint(pubkey: &Path) -> String {
     ok(Command::new("ssh-keygen").arg("-lf").arg(pubkey))
         .split_whitespace()
@@ -305,6 +327,13 @@ fn try_setup(dest_key: &[&str]) -> Option<Result<Env, String>> {
     fs::copy(d.join("p/ci.pub"), d.join("ak_hop")).unwrap();
     let [login_port, hop_port, dest_port] = free_ports();
     let cfg = d.join("sshd_config");
+    // OpenSSH 9.8+ penalizes a source address after failed logins; the tests
+    // fail logins from 127.0.0.1 on purpose. Older sshd rejects the keyword.
+    let penalties = if sshd_accepts(sshd, &d, "PerSourcePenalties no") {
+        "PerSourcePenalties no\n"
+    } else {
+        ""
+    };
     fs::write(
         &cfg,
         format!(
@@ -312,7 +341,7 @@ fn try_setup(dest_key: &[&str]) -> Option<Result<Env, String>> {
              PidFile {d}/sshd.pid\nAuthorizedKeysFile {d}/ak_login\nStrictModes no\n\
              UsePAM no\nPasswordAuthentication no\nKbdInteractiveAuthentication no\n\
              AllowAgentForwarding yes\nAllowTcpForwarding no\nX11Forwarding no\n\
-             PermitUserEnvironment no\nLogLevel ERROR\n\
+             PermitUserEnvironment no\nLogLevel ERROR\n{penalties}\
              Match LocalPort {hop_port}\n    AuthorizedKeysFile {d}/ak_hop\n",
             hk = hostkey.display(),
             d = d.display()
@@ -365,7 +394,7 @@ fn try_setup(dest_key: &[&str]) -> Option<Result<Env, String>> {
             "ListenAddress 127.0.0.1\nPort {dest_port}\nHostKey {hk}\nPidFile {d}/sshd2.pid\n\
              AuthorizedKeysFile {d}/ak_hop\nStrictModes no\nUsePAM no\n\
              PasswordAuthentication no\nKbdInteractiveAuthentication no\n\
-             AllowAgentForwarding yes\nAllowTcpForwarding local\nX11Forwarding no\nLogLevel ERROR\n",
+             AllowAgentForwarding yes\nAllowTcpForwarding local\nX11Forwarding no\nLogLevel ERROR\n{penalties}",
             hk = hostkey2.display(),
             d = d.display()
         ),
@@ -1374,7 +1403,7 @@ mod lifecycle {
             .arg(socket)
             .env_remove("SSH_AUTH_SOCK")
             .stdout(Stdio::null())
-            .stderr(fs::File::create(env.d().join("run.err")).unwrap())
+            .stderr(fs::File::create(socket.with_extension("err")).unwrap())
             .spawn()
             .unwrap());
         let start = Instant::now();
@@ -1410,9 +1439,10 @@ mod lifecycle {
             .code()
     }
 
-    /// The three kinds of request a client can make: allowed (ci to the
-    /// allowed destination) and two forbidden ones (ci to a host key that is
-    /// not allowed; the hidden admin key).
+    /// The forbidden requests: `ci` to a server that authorizes it but whose
+    /// host key is not an allowed destination (refused by destination
+    /// binding alone), and the hidden `admin` key (refused by identity
+    /// filtering, the sign allowlist and the destination check together).
     fn assert_forbidden_fail(env: &Env, sock: &Path) {
         assert_ne!(
             login(env, sock, env.hop_port, "ci"),
@@ -1454,32 +1484,51 @@ mod lifecycle {
     fn real_agent_killed_and_restarted_under_a_running_proxy() {
         let Some(mut env) = setup() else { return };
         let d = env.d().to_path_buf();
+        // Two proxies: one behind the counting relay (sign requests counted at
+        // the agent), one configured with the agent's own path, so SigSieve
+        // itself meets the stale socket, the missing path and the new agent.
         let relay = CountingRelay::start(&d, &env.agent_sock);
         let sock = d.join("f.sock");
         let mut run = start_run(&env, &relay.path, &sock);
+        let direct = d.join("direct.sock");
+        let mut run_direct = start_run(&env, &env.agent_sock, &direct);
 
         // Before: the allowed login is signed once; forbidden ones never are.
         assert_eq!(login(&env, &sock, env.dest_port, "ci"), Some(0));
         assert_eq!(relay.delivered(), 1);
         assert_forbidden_fail(&env, &sock);
         assert_eq!(relay.delivered(), 1);
+        assert_eq!(login(&env, &direct, env.dest_port, "ci"), Some(0));
+        assert_forbidden_fail(&env, &direct);
+        assert_eq!(relay.delivered(), 1);
 
-        // The agent dies; the proxy keeps running and every login fails.
+        // The agent dies and leaves its socket (connection refused), then the
+        // socket is removed (no such path). Both proxies keep running and the
+        // allowed login fails. (Forbidden logins would fail here anyway.)
         let _ = env._agent.0.kill();
         let _ = env._agent.0.wait();
+        assert!(env.agent_sock.exists(), "expected a stale agent socket");
         assert_ne!(login(&env, &sock, env.dest_port, "ci"), Some(0));
-        assert_forbidden_fail(&env, &sock);
+        assert_ne!(login(&env, &direct, env.dest_port, "ci"), Some(0));
+        fs::remove_file(&env.agent_sock).unwrap();
+        assert_ne!(login(&env, &direct, env.dest_port, "ci"), Some(0));
         assert!(run.alive(), "sigsieve run exited when the agent died");
-        assert_eq!(relay.delivered(), 1, "a request reached a dead agent");
+        assert!(
+            run_direct.alive(),
+            "sigsieve run exited when the agent died"
+        );
 
-        // A new agent on the same path holds only the allowed key. Nothing is
-        // carried over: the next login makes its own binding and signature.
+        // A new agent on the same path holds only the allowed key. Each login
+        // is a new connection with its own binding and signature; nothing
+        // from before the restart is reused.
         restart_agent(&mut env);
         assert_eq!(login(&env, &sock, env.dest_port, "ci"), Some(0));
         assert_eq!(relay.delivered(), 2);
         assert_forbidden_fail(&env, &sock);
         assert_eq!(relay.delivered(), 2);
-        assert!(run.alive());
+        assert_eq!(login(&env, &direct, env.dest_port, "ci"), Some(0));
+        assert_forbidden_fail(&env, &direct);
+        assert!(run.alive() && run_direct.alive());
     }
 
     #[test]
@@ -1518,8 +1567,18 @@ mod lifecycle {
                 "a forbidden session logged in"
             );
         }
-        // One allowed session is cut while the others stay up.
-        thread::sleep(Duration::from_millis(2000));
+        // Wait until all three have been signed, then kill one client while
+        // the other sessions are still running. (OpenSSH closes its agent
+        // connection after authentication, so this ends an ssh session, not
+        // an in-flight agent request; see the pending-request case below.)
+        let start = Instant::now();
+        while relay.delivered() < 3 {
+            assert!(
+                start.elapsed() < Duration::from_secs(20),
+                "allowed logins were not signed"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
         let _ = allowed[0].kill();
         let _ = allowed[0].wait();
         for c in allowed.iter_mut().skip(1) {
@@ -1570,7 +1629,8 @@ mod lifecycle {
             SIGN_RESPONSE,
             "replayed signature"
         );
-        // Another connection reusing only the signature request (no binding).
+        // Another connection reusing only the signature request, without
+        // binds: refused by destination binding before the cache is reached.
         let mut c2 = UnixStream::connect(&sock).unwrap();
         assert!(write_frame(&mut c2, sign));
         assert_ne!(
