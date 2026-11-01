@@ -1,0 +1,23 @@
+CHANGELOG.md
+  s_35bbcce842599b::t_9944c60f551af0 11-12
+docs/FINDINGS.md
+  s_35bbcce842599b::t_2f762f3d838795 116-119
+tests/e2e_sshd.rs
+  s_35bbcce842599b::t_daa56540e0739d 45-66,330-336,344,397,1406,1442-1445,1487-1489,1493-1494,1501-1503,1505-1507,1510,1512-1514,1516-1519,1521-1523,1529-1531,1570-1581,1632-1633
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d94e05f621e9b19b286a8bcbcdeae3a0df4e9648",
+  "prompts": {},
+  "sessions": {
+    "s_35bbcce842599b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8fd155db-07a7-4b35-bf5d-af1e4378b17c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
