@@ -17,6 +17,23 @@ The project follows [Semantic Versioning](https://semver.org/).
   `WARNING: no identities are configured for forwarding` instead of
   "all checks passed" (exit code 0 is unchanged).
 
+### Configuration
+
+- `run` exits with `2` when the upstream path exists but is not a Unix
+  socket owned by you; before, it warned and served requests that could
+  only fail. A missing or not-yet-listening socket still only warns.
+- `--secretive` requires an absolute `HOME`; an empty or relative `HOME`
+  used to resolve the socket against the working directory.
+- Warnings for a fingerprint given as both an allowed key and an allowed
+  destination, and for duplicate `--allow-destination` entries.
+
+### Tests
+
+- Destination binding through a served socket: denials (unbound, forwarding
+  hop only, forged session id, disallowed destination) never reach the
+  upstream agent; concurrent connections do not share bindings; an upstream
+  replaced under an open connection fails closed and recovers.
+
 ### Release engineering
 
 - F-45: a release tag must point at a commit on `main`.

@@ -896,3 +896,109 @@ fn doctor_warns_that_an_empty_allowlist_forwards_nothing() {
     assert!(text.contains("Result: some checks failed"), "{text}");
     assert!(!text.contains("WARNING"), "{text}");
 }
+
+/// Wait up to `limit` for a child to exit; kill it and return None if not.
+fn exit_within(child: &mut std::process::Child, limit: Duration) -> Option<i32> {
+    let start = Instant::now();
+    while start.elapsed() < limit {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status.code();
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    None
+}
+
+#[test]
+fn run_refuses_an_untrusted_upstream_but_waits_for_a_missing_one() {
+    let dir = private_tempdir();
+    let start = |upstream: &Path, name: &str| {
+        bin()
+            .arg("run")
+            .arg("--upstream")
+            .arg(upstream)
+            .args(["--allow-fingerprint", ECDSA_CI_FP, "--socket"])
+            .arg(dir.path().join(name))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap()
+    };
+    // A path that exists but is not a socket (here a directory) is a
+    // configuration error: exit 2, and no filtered socket is created.
+    let not_socket = dir.path().join("not-a-socket");
+    fs::create_dir(&not_socket).unwrap();
+    let mut child = start(&not_socket, "a.sock");
+    let code = exit_within(&mut child, Duration::from_secs(5));
+    let mut err = String::new();
+    std::io::Read::read_to_string(&mut child.stderr.take().unwrap(), &mut err).unwrap();
+    assert_eq!(
+        code,
+        Some(2),
+        "run kept serving an untrusted upstream: {err}"
+    );
+    assert!(err.contains("upstream socket rejected"), "{err}");
+    assert!(!dir.path().join("a.sock").exists());
+
+    // A missing socket (agent not started yet) still only warns and serves.
+    let guard = spawn_run(
+        &dir.path().join("later.sock"),
+        &dir.path().join("b.sock"),
+        &[ECDSA_CI_FP],
+    );
+    assert!(dir.path().join("b.sock").exists());
+    drop(guard);
+}
+
+#[test]
+fn secretive_requires_an_absolute_home() {
+    for home in ["", "relative/home"] {
+        let o = out(bin().env("HOME", home).args([
+            "doctor",
+            "--secretive",
+            "--allow-fingerprint",
+            ECDSA_CI_FP,
+        ]));
+        assert_eq!(o.status.code(), Some(2), "HOME={home:?}: {}", stdout(&o));
+        assert!(
+            stdout(&o).contains("HOME must be an absolute path to use --secretive"),
+            "{}",
+            stdout(&o)
+        );
+    }
+}
+
+#[test]
+fn suspicious_destination_entries_are_warned_about() {
+    let up = MockAgent::start(three_identities(), Mode::Normal);
+    // The allowed user key also listed as a destination host key.
+    let o = out(bin().args(["doctor", "--upstream"]).arg(&up.path).args([
+        "--allow-fingerprint",
+        ECDSA_CI_FP,
+        "--allow-destination",
+        ECDSA_CI_FP,
+    ]));
+    assert!(o.status.success(), "{}", stdout(&o));
+    assert!(
+        stderr(&o).contains("is both an allowed key and an allowed destination"),
+        "{}",
+        stderr(&o)
+    );
+    // The same destination twice.
+    let o = out(bin().args(["doctor", "--upstream"]).arg(&up.path).args([
+        "--allow-fingerprint",
+        ECDSA_CI_FP,
+        "--allow-destination",
+        ED_ADMIN_FP,
+        "--allow-destination",
+        ED_ADMIN_FP,
+    ]));
+    assert!(o.status.success(), "{}", stdout(&o));
+    assert!(
+        stderr(&o).contains("duplicate --allow-destination entry"),
+        "{}",
+        stderr(&o)
+    );
+}

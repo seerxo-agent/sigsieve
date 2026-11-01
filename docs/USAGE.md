@@ -144,8 +144,17 @@ sigsieve connect  HOST [--upstream PATH | --secretive] --allow-fingerprint FP...
 ```
 
 - Lists are repeatable or comma-separated. `SIGSIEVE_UPSTREAM`,
-  `SIGSIEVE_ALLOW` and `SIGSIEVE_DESTINATIONS` supply defaults.
+  `SIGSIEVE_ALLOW` and `SIGSIEVE_DESTINATIONS` supply defaults. A flag
+  replaces its variable; the two are not merged. `SIGSIEVE_UPSTREAM` cannot
+  be combined with `--secretive`, which needs an absolute `HOME`.
   `SSH_AUTH_SOCK` is never an implicit upstream.
+- `run` waits for an upstream socket that does not exist yet or is not
+  listening (for example Secretive not started), but exits with `2` if the
+  path exists and is not a Unix socket owned by you.
+- SigSieve warns when a fingerprint is both an allowed key and an allowed
+  destination, and about duplicate entries. It cannot tell a host key's type
+  from its fingerprint: an RSA destination host key is accepted at startup,
+  and authentication to it is then refused.
 - `--upstream-timeout SECS` (default 120) covers Touch ID waits.
 - Agent I/O and queue wait share that deadline; cancellation stops initial
   queries and in-flight proxy I/O. Per-session budgets bound connections,

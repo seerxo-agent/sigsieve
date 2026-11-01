@@ -26,7 +26,7 @@ use sigsieve::policy::Policy;
 use sigsieve::protocol::{self, SSH_AGENTC_SIGN_REQUEST};
 use sigsieve::proxy::{self, Limits, Proxy};
 use sigsieve::socket::{self, RuntimeSocket};
-use sigsieve::upstream::{Identity, Upstream};
+use sigsieve::upstream::{Identity, Upstream, UpstreamError};
 
 const EXIT_OK: i32 = 0;
 const EXIT_FAIL: i32 = 1;
@@ -174,8 +174,13 @@ fn warn(msg: impl std::fmt::Display) {
 /// Resolve the upstream and allowlist. Errors are configuration errors.
 fn load(args: &PolicyArgs) -> Result<(Policy, Upstream), String> {
     let path = if args.secretive {
-        let home = std::env::var_os("HOME").ok_or("HOME is not set")?;
-        PathBuf::from(home).join(SECRETIVE_SOCKET)
+        let home = PathBuf::from(std::env::var_os("HOME").ok_or("HOME is not set")?);
+        // A relative HOME would resolve the socket against the working
+        // directory instead of the user's Secretive container.
+        if !home.is_absolute() {
+            return Err("HOME must be an absolute path to use --secretive".into());
+        }
+        home.join(SECRETIVE_SOCKET)
     } else {
         args.upstream.clone().ok_or(
             "no upstream agent: pass --upstream PATH, --secretive, or set SIGSIEVE_UPSTREAM",
@@ -191,6 +196,27 @@ fn load(args: &PolicyArgs) -> Result<(Policy, Upstream), String> {
     let policy = policy
         .with_destinations(&args.destinations)
         .map_err(|e| format!("--allow-destination: {e}"))?;
+    // All entries parsed above; these only add warnings.
+    let mut seen = HashSet::new();
+    for fp in args
+        .destinations
+        .iter()
+        .filter_map(|d| d.parse::<Fingerprint>().ok())
+    {
+        if !seen.insert(fp) {
+            warn(format_args!(
+                "duplicate --allow-destination entry {fp} ignored"
+            ));
+        }
+    }
+    for fp in policy.fingerprints() {
+        if policy.destinations().is_some_and(|d| d.contains(fp)) {
+            warn(format_args!(
+                "{fp} is both an allowed key and an allowed destination host key; \
+                 a user key is rarely a host key"
+            ));
+        }
+    }
     Ok((
         policy,
         Upstream::new(path, Duration::from_secs(args.upstream_timeout)),
@@ -321,6 +347,12 @@ fn run(args: RunArgs) -> i32 {
         if signals.load(Ordering::SeqCst) {
             error("cancelled before starting the proxy");
             return EXIT_FAIL;
+        }
+        // A path that exists but is not a socket we trust is a configuration
+        // mistake, not an agent that has not started yet.
+        if matches!(e, UpstreamError::UntrustedSocket(_)) {
+            error(e);
+            return EXIT_CONFIG;
         }
         warn(format_args!(
             "{e} (requests will fail until it is available)"
