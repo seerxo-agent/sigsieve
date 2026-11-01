@@ -1,0 +1,22 @@
+tests/proxy_binding.rs
+  s_35bbcce842599b::t_f75f852210efd7 1-190
+  s_35bbcce842599b::t_e204546e77040d 191-226
+tests/common/mod.rs
+  s_35bbcce842599b::t_9845a0c6635e57 259-269
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0c50781e22942781b389c2b92225bc6dc4bdcedb",
+  "prompts": {},
+  "sessions": {
+    "s_35bbcce842599b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8fd155db-07a7-4b35-bf5d-af1e4378b17c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
