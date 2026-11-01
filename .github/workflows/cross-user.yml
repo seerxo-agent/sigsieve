@@ -45,6 +45,18 @@ env:
 
 jobs:
   cross-user:
+    # Pull requests from forks never start this root job automatically.
+    # This condition is NOT the security boundary: a pull request can edit
+    # this file. The boundaries are enforced by GitHub outside it: a fork's
+    # token is read-only and gets no secrets whatever this file says, and
+    # fork runs need maintainer approval under the repository's
+    # "Fork pull request workflows" setting (which should require approval
+    # for all outside contributors). A same-repository branch already needs
+    # write access. The job holds no secret and no write token, and the VM
+    # is discarded afterwards; ci.yml already runs sudo on pull requests.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     # A full, disposable GitHub-hosted VM with passwordless sudo. Never a
     # container-based or self-hosted runner (e.g. ubuntu-slim): the script
     # creates users and refuses to run in a container.
@@ -55,6 +67,30 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Record the tested commits
+        # A pull_request run tests GitHub's temporary merge commit. Record
+        # it, its parents and its tree; scripts/verify-f46-evidence.sh later
+        # checks that the merged commit has exactly this tree.
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          mkdir -p xu-evidence
+          parents=$(git cat-file -p HEAD | sed -n 's/^parent //p' | tr '\n' ' ')
+          {
+            echo "event=$EVENT"
+            echo "tested=$(git rev-parse HEAD)"
+            echo "tree=$(git rev-parse 'HEAD^{tree}')"
+            echo "parents=${parents% }"
+            echo "pr_head=${HEAD_SHA:-}"
+            echo "pr_base_at_event=${BASE_SHA:-}"
+          } | tee xu-evidence/tested-commits.txt
+          if [ "$EVENT" = pull_request ]; then
+            set -- $parents
+            [ "$#" = 2 ] && [ "$2" = "$HEAD_SHA" ] \
+              || { echo "::error::tested commit is not a merge of the pull request head"; exit 1; }
+          fi
       - name: Install pinned Rust toolchain (rust-toolchain.toml)
         run: rustup show active-toolchain || rustup toolchain install
       - name: Require tools
@@ -92,11 +128,7 @@ jobs:
         run: |
           {
             echo "## F-46 cross-user evidence"
-            # A pull_request run tests GitHub's temporary merge of the head
-            # into the base; the head commit is what the evidence is for.
-            echo "pull request head: ${{ github.event.pull_request.head.sha || 'n/a (not a pull request)' }}"
-            echo "base: ${{ github.event.pull_request.base.sha || 'n/a' }}"
-            echo "commit tested (\$GITHUB_SHA): $GITHUB_SHA"
+            echo '```'; cat xu-evidence/tested-commits.txt 2>/dev/null || echo "tested commits: NOT RECORDED"; echo '```'
             for m in pass fail; do
               f="xu-evidence/$m-test-output.txt"
               if [ -f "$f" ]; then

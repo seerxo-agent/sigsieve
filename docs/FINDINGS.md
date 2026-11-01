@@ -152,12 +152,34 @@ removes its directory. The test output, the foreign agent's request log and
 the uids of both runs are uploaded as the `f46-cross-user-evidence`
 artifact.
 
-F-46 is closed only on a single run of that workflow that shows all of
-the following. On a pull request the run tests GitHub's temporary merge of
-the head into the base; the evidence counts for the head commit shown in the
-run summary, and only if that head is merged unchanged (merge commit, not a
-squash or rebase). If the head changes, the workflow must run again. A pull
-request with merge conflicts gets no run at all.
+Pull requests from forks never start the job automatically. That `if`
+lives in the workflow file, which a pull request can edit, so it is not the
+security boundary. GitHub enforces the boundaries outside that file:
+- a fork's token is read-only and gets no secrets, whatever the file says;
+- fork runs need maintainer approval under the repository's "Fork pull
+  request workflows" setting. That setting should require approval for all
+  outside contributors; changing it is a settings change, not made here;
+- a branch in the repository itself already needs write access.
+
+The job uses no secret and only a `contents: read` token, which
+`persist-credentials: false` keeps off disk; `ci.yml` already runs `sudo` on
+pull requests. Root on the runner therefore reaches only a discarded VM.
+
+A pull request run tests GitHub's temporary merge of the head into the base.
+The workflow first records that commit, its parents and its tree
+(`tested-commits.txt` in the artifact), and stops unless the second parent
+is the pull request head. After merging,
+`scripts/verify-f46-evidence.sh <merged commit> tested-commits.txt` accepts
+only a merge commit whose tree equals the tested tree and whose second
+parent is the tested head. A base that moved after the run, a squash or
+rebase, or any other change makes it fail, and the workflow must run again.
+GitHub does not re-run `pull_request` workflows when only the base moves. A
+pull request with merge conflicts gets no run at all. Regression:
+`scripts/test-verify-f46-evidence.sh`.
+
+F-46 is closed only on a single run of that workflow that shows all of the
+following, and only once `verify-f46-evidence.sh` accepts the merged
+commit:
 1. the cross-user run: 4 tests executed and passed, none ignored, and the
    foreign agent received no request;
 2. the mutant run (peer-uid check removed): each of the 3 cross-user tests
