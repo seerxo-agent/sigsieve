@@ -1,0 +1,25 @@
+.github/workflows/cross-user.yml
+  s_35bbcce842599b::t_cc72527c3ed93b 17-19,21-24,27,95-99,103
+CHANGELOG.md
+  s_35bbcce842599b::t_9ca81cde14da17 10,15-18
+docs/FINDINGS.md
+  s_35bbcce842599b::t_ddf74eddd2606a 64,126,155-160
+docs/TESTING.md
+  s_35bbcce842599b::t_e8b640851e5292 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "05cea0254478cf44f6f8244236c869de1762b35b",
+  "prompts": {},
+  "sessions": {
+    "s_35bbcce842599b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8fd155db-07a7-4b35-bf5d-af1e4378b17c",
+        "model": "unknown"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
