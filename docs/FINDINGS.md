@@ -165,9 +165,12 @@ limits outside that file:
   contributors" stops it. Under the default (approval for first-time
   contributors only) a returning contributor's fork can run its own root
   code on the runner automatically, as it already can through `ci.yml`,
-  which uses `sudo`. **This control is open until that setting is chosen;**
-  changing it is a settings decision for the maintainer and is not made
-  here;
+  which uses `sudo`. Maintainer decision (2026-11-02): the target policy
+  is **"Require approval for all external contributors"**. It has **not
+  been applied yet** (repository changes are on hold), so this control
+  stays open until the setting is in place and confirmed. The setting does
+  not restrict accounts with write access; credential access for those is
+  a separate, open issue;
 - a branch in the repository itself already needs write access.
 
 The job uses no secret and only a `contents: read` token, which
@@ -189,8 +192,12 @@ scripts that produced the evidence are also exactly the merged ones. A base
 that moved after the run, a squash or rebase, or any other change makes it
 fail. GitHub does not re-run `pull_request` workflows when only the base
 moves, and nothing before the merge forces a re-run unless branch protection
-requires this check and an up-to-date branch, which is also a settings
-decision. Recovery after such a merge: run the workflow by `workflow_dispatch`
+requires this check and an up-to-date branch. Maintainer decision
+(2026-11-02): do not make this check required yet. Because of the `paths`
+filter, a pull request that does not trigger the workflow would leave a
+required check pending and block its merge. A CI layout that reports a
+result on every pull request comes first; strict, up-to-date status checks
+are considered after that. Recovery after such a merge: run the workflow by `workflow_dispatch`
 on the merged commit; the verifier accepts dispatch evidence only for the
 exact commit it tested. A pull request with merge conflicts gets no run at
 all. The verifier checks the source binding only. That the run passed,
