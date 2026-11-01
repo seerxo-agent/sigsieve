@@ -800,6 +800,15 @@ fn doctor_verifies_destination_binding_without_reaching_the_agent() {
     assert!(text.contains("Destination binding: enforced"), "{text}");
     // Refused inside SigSieve: the upstream agent saw no sign request at all.
     assert!(up.sign_requests().is_empty());
+    // The expected binding denial is announced before it is logged.
+    let err = stderr(&o);
+    let note = err
+        .find("self-test: sending an unbound sign request for an allowed key")
+        .unwrap_or_else(|| panic!("no binding-probe note in: {err}"));
+    let denial = err
+        .find("(destination binding)")
+        .unwrap_or_else(|| panic!("no binding denial in: {err}"));
+    assert!(note < denial, "note must precede the denial: {err}");
 }
 
 #[test]
@@ -876,4 +885,14 @@ fn doctor_warns_that_an_empty_allowlist_forwards_nothing() {
         "{text}"
     );
     assert!(!text.contains("all checks passed"), "{text}");
+
+    // An empty allowlist never hides a real failure behind the WARNING.
+    let dir = private_tempdir();
+    let o = out(bin()
+        .args(["doctor", "--upstream"])
+        .arg(dir.path().join("missing.sock")));
+    let text = stdout(&o);
+    assert_eq!(o.status.code(), Some(1), "{text}");
+    assert!(text.contains("Result: some checks failed"), "{text}");
+    assert!(!text.contains("WARNING"), "{text}");
 }

@@ -6,7 +6,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Diagnostics
 
-- `doctor` (and the startup self-test of `run` and `connect`) announces its
+- `doctor` (and the startup self-test of `connect`) announces its
   synthetic sign probe on stderr before the expected denial, so the probe
   key's fingerprint is not mistaken for one of your identities. Real hidden
   identities are still never shown.

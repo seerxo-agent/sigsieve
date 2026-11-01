@@ -36,7 +36,8 @@ impl UpstreamError {
         match self {
             UpstreamError::Unreachable(e) => match e.kind() {
                 io::ErrorKind::NotFound => Some(
-                    "no socket at this path: start the agent, or check --upstream / SIGSIEVE_UPSTREAM",
+                    "no socket at this path: check the upstream path (--upstream, \
+                     SIGSIEVE_UPSTREAM or --secretive) and that the agent is running",
                 ),
                 io::ErrorKind::PermissionDenied => Some(
                     "permission denied: the socket or one of its parent directories is not \
