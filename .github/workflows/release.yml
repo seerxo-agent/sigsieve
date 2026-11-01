@@ -133,27 +133,25 @@ jobs:
           persist-credentials: false
       - run: rustup show active-toolchain || rustup toolchain install
       - run: cargo install --locked cargo-cyclonedx@0.5.9
+      - name: SBOM finalization regression (synthetic inputs)
+        run: python3 scripts/test-finalize-sbom.py
       - name: CycloneDX 1.5 JSON SBOM per release target
-        # bom-refs embed the checkout path; it is rewritten to /sigsieve like
-        # the binary's path remapping.
+        # scripts/finalize-sbom.py (shared with the rehearsal) rewrites the
+        # checkout path in bom-refs to /sigsieve, checks the package, checks
+        # every dependency cargo resolves for the target is listed, and adds
+        # the deterministic serialNumber actions/attest requires.
         run: |
           export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           mkdir dist
           for target in aarch64-apple-darwin x86_64-unknown-linux-gnu; do
             name="sigsieve-${GITHUB_REF_NAME}-${target}"
+            cargo tree --locked -e normal,build --target "$target" --prefix none -f '{p}' \
+              | awk '{print $1}' | sort -u > sbom-deps.txt
             cargo cyclonedx --format json --spec-version 1.5 --target "$target" --override-filename sbom-out
-            python3 - "$GITHUB_WORKSPACE" sbom-out.json "dist/${name}.cdx.json" "${GITHUB_REF_NAME#v}" <<'EOF'
-          import json, sys
-          workspace, src, dst, version = sys.argv[1:]
-          text = open(src).read().replace(workspace, "/sigsieve")
-          bom = json.loads(text)
-          root = bom["metadata"]["component"]
-          assert bom["bomFormat"] == "CycloneDX" and bom["specVersion"] == "1.5", "unexpected SBOM format"
-          assert (root["name"], root["version"]) == ("sigsieve", version), "SBOM describes the wrong package"
-          assert len(bom["components"]) > 0, "SBOM lists no dependencies"
-          open(dst, "w").write(text)
-          EOF
-            rm sbom-out.json
+            python3 scripts/finalize-sbom.py --workspace "$GITHUB_WORKSPACE" \
+              --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --version "${GITHUB_REF_NAME#v}" \
+              --target "$target" --deps sbom-deps.txt sbom-out.json "dist/${name}.cdx.json"
+            rm sbom-out.json sbom-deps.txt
             (cd dist && shasum -a 256 "${name}.cdx.json" > "${name}.cdx.json.sha256" && cat "${name}.cdx.json.sha256")
           done
       # actions/upload-artifact v7.0.2

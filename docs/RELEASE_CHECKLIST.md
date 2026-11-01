@@ -106,7 +106,9 @@ These remain explicit limitations of the alpha, not passing tests:
    release or attestation.
 3. Tag the accepted candidate. `release.yml` gates, builds deterministic
    macOS arm64 and Linux x86_64 archives, writes a CycloneDX SBOM sidecar
-   per archive (not inside it), creates checksums, records provenance for
+   per archive (not inside it; checked for completeness and given the
+   deterministic `serialNumber` `actions/attest` requires by
+   `scripts/finalize-sbom.py`), creates checksums, records provenance for
    archives and SBOMs, and adds an SBOM attestation for each archive.
 4. Verify the tag's release run with `scripts/verify-release.sh RUN_ID TAG`
    on macOS arm64, and with the **Verify release** workflow (same script,

@@ -24,6 +24,8 @@ on:
       - scripts/test-package-release.py
       - scripts/third-party-notices.py
       - scripts/test-attest-inputs.sh
+      - scripts/finalize-sbom.py
+      - scripts/test-finalize-sbom.py
 
 permissions:
   contents: read
@@ -159,7 +161,11 @@ jobs:
           persist-credentials: false
       - run: rustup show active-toolchain || rustup toolchain install
       - run: cargo install --locked cargo-cyclonedx@0.5.9
+      - name: SBOM finalization regression (synthetic inputs)
+        run: python3 scripts/test-finalize-sbom.py
       - name: CycloneDX 1.5 JSON SBOM per release target, generated twice
+        # Same cargo tree / cargo cyclonedx / scripts/finalize-sbom.py steps
+        # as release.yml; only the file names and the version source differ.
         run: |
           export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           version=$(cargo metadata --no-deps --locked --format-version 1 \
@@ -171,24 +177,13 @@ jobs:
               | awk '{print $1}' | sort -u > sbom-deps.txt
             for out in "dist/${name}.cdx.json" sbom-second.json; do
               cargo cyclonedx --format json --spec-version 1.5 --target "$target" --override-filename sbom-out
-              python3 - "$GITHUB_WORKSPACE" sbom-out.json "$out" "$version" sbom-deps.txt <<'EOF'
-          import json, sys
-          workspace, src, dst, version, deps = sys.argv[1:]
-          text = open(src).read().replace(workspace, "/sigsieve")
-          bom = json.loads(text)
-          root = bom["metadata"]["component"]
-          assert bom["bomFormat"] == "CycloneDX" and bom["specVersion"] == "1.5", "unexpected SBOM format"
-          assert (root["name"], root["version"]) == ("sigsieve", version), "SBOM describes the wrong package"
-          assert len(bom["components"]) > 0, "SBOM lists no dependencies"
-          listed = {c["name"] for c in bom["components"]} | {root["name"]}
-          missing = set(open(deps).read().split()) - listed
-          assert not missing, f"SBOM misses dependencies: {sorted(missing)}"
-          open(dst, "w").write(text)
-          EOF
+              python3 scripts/finalize-sbom.py --workspace "$GITHUB_WORKSPACE" \
+                --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --version "$version" \
+                --target "$target" --deps sbom-deps.txt sbom-out.json "$out"
               rm sbom-out.json
             done
             cmp "dist/${name}.cdx.json" sbom-second.json || { echo "::error::SBOM for $target is not deterministic"; exit 1; }
-            rm sbom-second.json
+            rm sbom-second.json sbom-deps.txt
             (cd dist && shasum -a 256 "${name}.cdx.json" > "${name}.cdx.json.sha256" && shasum -a 256 -c "${name}.cdx.json.sha256")
           done
       # actions/upload-artifact v7.0.2
