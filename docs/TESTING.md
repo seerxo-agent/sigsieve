@@ -185,10 +185,10 @@ unchanged from `v0.1.0-alpha.2` (only test code changed under `src/`).
 
 | Target | Executions | Final `cov / ft` | Final corpus | New units | Result |
 |---|---:|---|---:|---:|---|
-| `requests` | 8,491,481 | 1,709 / 7,351 | 638 | not recorded | no crash reported |
-| `session_bind` | 10,449,092 | 2,204 / 3,614 | 327 | not recorded | no crash reported |
-| `key_blob` | 87,777,836 | 674 / 747 | 187 | not recorded | no crash reported |
-| `upstream_reply` | 157,962,668 | 103 / 274 | 49 | not recorded | no crash reported |
+| `requests` | 8,491,481 | 1,709 / 7,351 | 638 | 3,440 | no crash reported |
+| `session_bind` | 10,449,092 | 2,204 / 3,614 | 327 | 518 | no crash reported |
+| `key_blob` | 87,777,836 | 674 / 747 | 187 | 852 | no crash reported |
+| `upstream_reply` | 157,962,668 | 103 / 274 | 49 | 495 | no crash reported |
 | **Total** | **264,681,077** | — | — | — | **4 jobs successful** |
 
 The libFuzzer counters are not a percentage of code coverage. A successful
