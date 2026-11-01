@@ -61,7 +61,7 @@ fix (where one exists).
 | F-43 | MEDIUM (release, fails closed) | Release SBOMs had no CycloneDX `serialNumber`, which the pinned `actions/attest` requires; the first tag's SBOM attestation step would have failed | **Fixed; verified on the v0.1.0-alpha.3 tag run** (41327036746: both SBOM attestations created): deterministic `urn:uuid` serial added by `scripts/finalize-sbom.py`, checked against the action's acceptance rule; regression `scripts/test-finalize-sbom.py` |
 | F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit could get a release that verified | Fixed after v0.1.0-alpha.3: `verify-release.sh` gates on the tag commit being on `refs/heads/main`; `release.yml` checks it too (defense in depth); tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
 | F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
-| F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, has no test that makes it refuse | Open. Test prepared, **not yet executed**: `tests/cross_user.rs` with `scripts/cross-user-test.sh` and the manual workflow `cross-user.yml` (two users on a disposable Linux runner, plus the mutant without the check). Pathname checks before `connect` are documented as advisory |
+| F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, has no test that makes it refuse | Open. Test prepared, **not yet executed**: `tests/cross_user.rs` with `scripts/cross-user-test.sh` and the workflow `cross-user.yml` (two users on a disposable Linux runner, plus the mutant without the check). Pathname checks before `connect` are documented as advisory |
 
 
 ### Review scope
@@ -123,7 +123,7 @@ agent running as a different uid, i.e. root. A mutation that removed step 3
 passes the suite that has run so far. No production code was changed.
 
 Prepared, not yet run: `tests/cross_user.rs`, run by
-`scripts/cross-user-test.sh` from the manual workflow `cross-user.yml` on a
+`scripts/cross-user-test.sh` from the workflow `cross-user.yml` on a
 disposable GitHub-hosted Ubuntu runner. User B starts a mock agent
 (`tests/support/xu-mock-agent.py`, which logs every request and, unlike
 `ssh-agent`, does not check its client's uid); root then gives the socket
@@ -152,8 +152,12 @@ removes its directory. The test output, the foreign agent's request log and
 the uids of both runs are uploaded as the `f46-cross-user-evidence`
 artifact.
 
-F-46 is closed only on a single run of that workflow for the commit under
-review that shows all of the following:
+F-46 is closed only on a single run of that workflow that shows all of
+the following. On a pull request the run tests GitHub's temporary merge of
+the head into the base; the evidence counts for the head commit shown in the
+run summary, and only if that head is merged unchanged (merge commit, not a
+squash or rebase). If the head changes, the workflow must run again. A pull
+request with merge conflicts gets no run at all.
 1. the cross-user run: 4 tests executed and passed, none ignored, and the
    foreign agent received no request;
 2. the mutant run (peer-uid check removed): each of the 3 cross-user tests

@@ -14,13 +14,17 @@ name: Cross-user peer credential (F-46)
 #   file is on the default branch.
 on:
   pull_request:
+    # Everything the tests build from: all source (the proxy and binary are
+    # exercised, not only upstream.rs), dependencies (peer credentials come
+    # from libc) and the toolchain.
     paths:
-      - src/upstream.rs
-      - src/socket.rs
-      - src/cli.rs
+      - src/**
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
       - tests/cross_user.rs
       - tests/common/**
-      - tests/support/xu-mock-agent.py
+      - tests/support/**
       - scripts/cross-user-test.sh
       - .github/workflows/cross-user.yml
   workflow_dispatch:
@@ -88,11 +92,15 @@ jobs:
         run: |
           {
             echo "## F-46 cross-user evidence"
-            echo "commit: $GITHUB_SHA"
+            # A pull_request run tests GitHub's temporary merge of the head
+            # into the base; the head commit is what the evidence is for.
+            echo "pull request head: ${{ github.event.pull_request.head.sha || 'n/a (not a pull request)' }}"
+            echo "base: ${{ github.event.pull_request.base.sha || 'n/a' }}"
+            echo "commit tested (\$GITHUB_SHA): $GITHUB_SHA"
             for m in pass fail; do
               f="xu-evidence/$m-test-output.txt"
               if [ -f "$f" ]; then
-                echo "### $m run"; echo '```'; grep -E '^test |^test result' "$f"; echo '```'
+                echo "### $m run"; echo '```'; grep -E '^test |^test result' "$f" || echo "(no test lines)"; echo '```'
                 cat "xu-evidence/$m-environment.txt"
               else
                 echo "### $m run: NOT EXECUTED"
