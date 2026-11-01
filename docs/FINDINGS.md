@@ -58,6 +58,8 @@ fix (where one exists).
 | F-40 | LOW (availability) | A slow downstream reader could keep a reply write going indefinitely: SO_SNDTIMEO restarts on every partial transfer | Fixed: nonblocking reply writes under one whole-reply deadline; red/green regression |
 | F-41 | LOW (diagnostic) | RSA binding self-test refused by algorithm policy instead of exercising destination enforcement | Fixed: valid RSA/SHA-2 probe; regression catches missing enforcement for RSA, ECDSA and Ed25519 |
 | F-42 | LOW (supply chain) | Release attest job selects artifacts by name; a compromised job holding the Actions runtime token could replace an artifact before attestation | **Fixed in the workflow; tag path not yet run**: attest binds each artifact to its producing job's ID, zip digest and archive SHA-256 and checks zip entries before extraction (`scripts/test-attest-inputs.sh`); hosted evidence will come from the rehearsal `verify` job once it has passed (not yet run); blocks the next tag's release until that tag's attest log confirms the binding ([RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)); manual `verify-release.sh` and native smoke test remain mandatory |
+| F-43 | MEDIUM (release, fails closed) | Release SBOMs had no CycloneDX `serialNumber`, which the pinned `actions/attest` requires; the first tag's SBOM attestation step would have failed | **Fixed in the workflow; tag path not yet run**: deterministic `urn:uuid` serial added by `scripts/finalize-sbom.py`, checked against the action's acceptance rule; regression `scripts/test-finalize-sbom.py` |
+| F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed in the workflow; tag path not yet run**: both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
 
 
 ### Review scope
@@ -86,6 +88,65 @@ so they receive no F-number:
 | A-5 | `chmod` after `bind` follows symlinks | Out of scope (same-uid attacker, threat model scenario F) | Accepted |
 
 ## Details
+
+### F-43 / F-44 — release SBOM attestation input (fixed, tag path not yet run)
+
+Found by the internal (AI-assisted, not independent) pre-tag review of
+`269cf91`, the first alpha.3 candidate.
+
+F-43: `actions/attest` at the pinned `1e69f48` (v4.2.2) treats an
+`sbom-path` file as CycloneDX only when `bomFormat`, `serialNumber` and
+`specVersion` are all present (`src/sbom.ts`, `checkIsCycloneDX`; same in
+its `dist/index.js`); otherwise the step fails with "Unsupported SBOM
+format". cargo-cyclonedx 0.5.9 writes no `serialNumber` when
+`SOURCE_DATE_EPOCH` is set, as both workflows do for reproducibility (it
+writes a random one otherwise), and neither SBOM of rehearsal run
+41055121744 had one; running the action's shipped
+detection code on them gave that error. The rehearsal creates no
+attestations, so it could not catch this. A tag of that candidate would
+have failed in its attest job (fail closed, but it would have used up the
+version).
+
+F-44: the release SBOM job checked only format, package and a non-empty
+component list; only the rehearsal compared the SBOM with `cargo tree`.
+A faulty SBOM tool that dropped a dependency would have been attested.
+(The check runs in the same untrusted job as the tool, so it catches
+faults, not a malicious tool; see R-3.)
+
+Fix: `scripts/finalize-sbom.py`, called identically by both workflows,
+rewrites the checkout path, checks format, package, version and every
+dependency `cargo tree --locked -e normal,build --target T` resolves,
+refuses a generator-supplied serial (it would be random per run, so a run
+without `SOURCE_DATE_EPOCH` fails), refuses NaN/Infinity (literal or
+overflowing, such as `1e999`), duplicate JSON keys, components without a
+string name and a dependency list naming only the root, adds `urn:uuid:` +
+UUIDv5(URL namespace, repository/commit/version/target), then reads its own
+encoded output back as the action does (UTF-8, 16 MiB limit,
+JSON.parse-compatible) and checks the action's format rule and an RFC 4122
+pattern on it before creating the output file, so a rejected SBOM leaves no
+file behind. `scripts/test-finalize-sbom.py` (57 checks; runs in CI, the
+rehearsal and the release SBOM job) covers determinism, the fixed output
+layout including the exact `"bomFormat": "CycloneDX"` text
+`verify-release.sh` greps for, every input changing the serial, SemVer
+pre-release/build versions, and rejection of each of those inputs by the
+check that names it, plus wrong package/version/format, generator serials,
+bad arguments, and absent, malformed, foreign or SPDX-confusable serials.
+Two separate-context internal reviews of the fix (AI-assisted, not
+independent) found no fail-open issue; their LOW/INFO items are fixed. A
+32-mutation sweep of the final script, including every surviving mutation
+those reviews reported, caught 29; the three survivors are equivalent
+(`allow_nan=False` behind the finite-number parse check,
+`UnicodeEncodeError` already a `ValueError`, and reading the ASCII
+crate-name list as ASCII). It passes and gives byte-identical output on
+Python 3.9 to 3.15 and under `LC_ALL=C`. Locally, the exact SBOM step text
+of both workflows produced byte-identical SBOMs for both targets, which the
+action's shipped detection code accepts; a cargo-cyclonedx shim that drops
+`libc` makes the release step fail with nothing written.
+
+Residual: the completeness check compares crate names, not versions (as the
+rehearsal did); the SBOM job remains untrusted (R-3). The tag-only attest
+step has still not run; the first tag's attest log and `verify-release.sh`
+remain the proof.
 
 ### F-42 — LOW — attest job trusts artifacts by name (fixed, tag path not yet run)
 

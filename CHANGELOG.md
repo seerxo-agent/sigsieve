@@ -79,6 +79,14 @@ proven end to end only once this tag's attest job has run (see
   checked their entries, writing only the checked regular files with
   O_EXCL/O_NOFOLLOW, instead of `unzip` (C-1), with a 256 MiB cap on the
   total extracted size.
+- F-43: release SBOMs get a deterministic CycloneDX `serialNumber`
+  (`urn:uuid:`, a name-based UUID of repository, commit, version and
+  target). The pinned `actions/attest` rejects CycloneDX without one, so the
+  tag's SBOM attestation step would have failed. F-44: the release SBOM job
+  now checks, like the rehearsal, that every dependency `cargo tree`
+  resolves for the target is listed. Both workflows call one script,
+  `scripts/finalize-sbom.py`, tested by `scripts/test-finalize-sbom.py` in
+  CI, the rehearsal and the release SBOM job.
 
 ### Tests
 
