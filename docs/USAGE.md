@@ -148,9 +148,13 @@ sigsieve connect  HOST [--upstream PATH | --secretive] --allow-fingerprint FP...
   replaces its variable; the two are not merged. `SIGSIEVE_UPSTREAM` cannot
   be combined with `--secretive`, which needs an absolute `HOME`.
   `SSH_AUTH_SOCK` is never an implicit upstream.
-- `run` waits for an upstream socket that does not exist yet or is not
-  listening (for example Secretive not started), but exits with `2` if the
-  path exists and is not a Unix socket owned by you.
+- `run` exits with `2` when the upstream path is not a Unix socket, or the
+  socket or the agent serving it belongs to another user. Other connection
+  errors (no socket yet, nothing listening, a parent directory you cannot
+  read) only warn, and `run` keeps waiting, for example for Secretive to
+  start; requests fail until the agent is reachable. Under a supervisor that
+  restarts on failure (launchd `KeepAlive`, systemd `Restart=`), a
+  misconfigured upstream now makes `run` exit and be restarted.
 - SigSieve warns when a fingerprint is both an allowed key and an allowed
   destination, and about duplicate entries. It cannot tell a host key's type
   from its fingerprint: an RSA destination host key is accepted at startup,

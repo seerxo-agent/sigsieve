@@ -204,9 +204,7 @@ fn load(args: &PolicyArgs) -> Result<(Policy, Upstream), String> {
         .filter_map(|d| d.parse::<Fingerprint>().ok())
     {
         if !seen.insert(fp) {
-            warn(format_args!(
-                "duplicate --allow-destination entry {fp} ignored"
-            ));
+            warn(format_args!("duplicate destination entry {fp} ignored"));
         }
     }
     for fp in policy.fingerprints() {

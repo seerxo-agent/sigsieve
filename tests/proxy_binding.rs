@@ -166,12 +166,50 @@ fn concurrent_connections_do_not_share_bindings() {
     assert_eq!(signed, 1, "{results:?}");
     assert_eq!(up.sign_requests().len(), 1);
 
-    // A connection opened after the bound one closed inherits nothing.
+    // A later connection gets nothing either. (After the one signature, the
+    // global duplicate-attempt cache would refuse this request anyway, so
+    // this does not prove isolation on its own; see
+    // a_binding_on_one_connection_never_authorizes_another.)
     let mut late = connect(&p.path);
     assert_eq!(
         roundtrip(&mut late, &sign_request(&s.key, &s.auth, 0)),
         FAILURE
     );
+    assert_eq!(up.sign_requests().len(), 1);
+}
+
+#[test]
+fn a_binding_on_one_connection_never_authorizes_another() {
+    let s = session();
+    let up = MockAgent::start(three_identities(), Mode::Normal);
+    let p = serve_bound(&up.path, &s.key, &[host_of(&s.last)]);
+    // A binds both hops and stays open without signing. No signature has
+    // happened, so the duplicate-attempt cache cannot be what refuses B.
+    let mut a = connect(&p.path);
+    assert_eq!(roundtrip(&mut a, &bind_request(&s.first)), SUCCESS);
+    assert_eq!(roundtrip(&mut a, &bind_request(&s.last)), SUCCESS);
+    let mut b = connect(&p.path);
+    assert_eq!(
+        roundtrip(&mut b, &sign_request(&s.key, &s.auth, 0)),
+        FAILURE
+    );
+    assert!(up.sign_requests().is_empty(), "B used A's binding");
+    // A closes without signing: a new connection still gets nothing.
+    drop(a);
+    let mut c = connect(&p.path);
+    assert_eq!(
+        roundtrip(&mut c, &sign_request(&s.key, &s.auth, 0)),
+        FAILURE
+    );
+    assert!(up.sign_requests().is_empty(), "C inherited A's binding");
+    // Positive control: a connection with its own binding is signed once.
+    let mut d = connect(&p.path);
+    assert_eq!(roundtrip(&mut d, &bind_request(&s.first)), SUCCESS);
+    assert_eq!(roundtrip(&mut d, &bind_request(&s.last)), SUCCESS);
+    assert!(is_sign_response(&roundtrip(
+        &mut d,
+        &sign_request(&s.key, &s.auth, 0)
+    )));
     assert_eq!(up.sign_requests().len(), 1);
 }
 

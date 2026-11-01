@@ -997,7 +997,7 @@ fn suspicious_destination_entries_are_warned_about() {
     ]));
     assert!(o.status.success(), "{}", stdout(&o));
     assert!(
-        stderr(&o).contains("duplicate --allow-destination entry"),
+        stderr(&o).contains("duplicate destination entry"),
         "{}",
         stderr(&o)
     );
