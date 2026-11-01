@@ -61,7 +61,7 @@ fix (where one exists).
 | F-43 | MEDIUM (release, fails closed) | Release SBOMs had no CycloneDX `serialNumber`, which the pinned `actions/attest` requires; the first tag's SBOM attestation step would have failed | **Fixed; verified on the v0.1.0-alpha.3 tag run** (41327036746: both SBOM attestations created): deterministic `urn:uuid` serial added by `scripts/finalize-sbom.py`, checked against the action's acceptance rule; regression `scripts/test-finalize-sbom.py` |
 | F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit could get a release that verified | Fixed after v0.1.0-alpha.3: `verify-release.sh` gates on the tag commit being on `refs/heads/main`; `release.yml` checks it too (defense in depth); tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
 | F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
-| F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, has no test that makes it refuse | Open: needs an agent running as another uid (root on a disposable runner); pathname checks before `connect` are documented as advisory |
+| F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, has no test that makes it refuse | Open. Test prepared, **not yet executed**: `tests/cross_user.rs` with `scripts/cross-user-test.sh` and the manual workflow `cross-user.yml` (two users on a disposable Linux runner, plus the mutant without the check). Pathname checks before `connect` are documented as advisory |
 
 
 ### Review scope
@@ -118,10 +118,25 @@ and restarted on the same path, with SigSieve configured with that path
 (`lifecycle::real_agent_killed_and_restarted_under_a_running_proxy`). These
 exercise steps 1 and 2; none of them exercises step 3 refusing.
 
-What is not: no test makes step 3 refuse, because that needs an agent running
-as a different uid, i.e. root. A mutation that removed step 3 would pass the
-suite. No platform-specific change was made. Upgrade path: a CI-only test on
-a disposable runner that starts an agent under a second user with `sudo`.
+What is not: no executed test makes step 3 refuse, because that needs an
+agent running as a different uid, i.e. root. A mutation that removed step 3
+passes the suite that has run so far. No production code was changed.
+
+Prepared, not yet run: `tests/cross_user.rs`, run by
+`scripts/cross-user-test.sh` from the manual workflow `cross-user.yml` on a
+disposable GitHub-hosted Ubuntu runner. User B starts a mock agent
+(`tests/support/xu-mock-agent.py`, which logs every request and, unlike
+`ssh-agent`, does not check its client's uid); root then gives the socket
+file to user A. Step 1 therefore passes, and only step 3 can refuse. As A,
+the tests require that the library connection is refused with the peer-uid
+error, that requests served by the proxy never reach the agent, and that
+`sigsieve run` exits with 2. Each test first checks those preconditions
+(socket owned by A, peer uid neither A nor root) and fails if they do not
+hold. The workflow then removes step 3 and requires each of the three tests
+to fail on its own assertion. In ordinary runs the three tests are reported
+as *ignored*, never as passed; a same-uid control runs everywhere. Until the
+workflow has run, F-46 stays open. macOS (`getpeereid`) has no cross-user
+test.
 
 ### F-45 — LOW–MEDIUM — release tag not bound to `main` (fixed after v0.1.0-alpha.3)
 

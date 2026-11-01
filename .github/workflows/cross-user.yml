@@ -1,0 +1,59 @@
+name: Cross-user peer credential (F-46)
+
+# Manual only. Creates two system users on a disposable GitHub-hosted runner
+# to prove that an upstream agent run by another user is refused by the
+# peer credential, even when its socket file is owned by the user running
+# SigSieve. Then proves the test fails when that check is removed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  cross-user:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain (rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Require tools
+        run: |
+          for t in python3 useradd runuser pkill stat sudo; do
+            command -v "$t" || { echo "::error::missing $t"; exit 1; }
+          done
+      - name: Build
+        run: |
+          cargo build --locked
+          cargo test --locked --test cross_user --no-run --message-format=json > build.json
+          python3 -I -c 'import json,sys
+          exe=[m["executable"] for m in map(json.loads, open(sys.argv[1])) if m.get("reason")=="compiler-artifact" and m.get("target",{}).get("name")=="cross_user" and m.get("executable")]
+          assert len(exe)==1, exe
+          print(exe[0])' build.json > test-bin.txt
+          cat test-bin.txt
+      - name: Cross-user tests pass (executed, not skipped)
+        run: sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT bash scripts/cross-user-test.sh pass "$(cat test-bin.txt)" target/debug/sigsieve
+      - name: Remove the upstream peer-uid check (mutant)
+        run: |
+          perl -0pi -e 's/Ok\(uid\) if uid == me => \{\}/Ok(_) => {}/' src/upstream.rs
+          grep -c 'Ok(_) => {}' src/upstream.rs | grep -qx 1 || { echo "::error::mutant not applied"; exit 1; }
+          git diff --stat
+          cargo build --locked
+          cargo test --locked --test cross_user --no-run --message-format=json > build.json
+          python3 -I -c 'import json,sys
+          exe=[m["executable"] for m in map(json.loads, open(sys.argv[1])) if m.get("reason")=="compiler-artifact" and m.get("target",{}).get("name")=="cross_user" and m.get("executable")]
+          assert len(exe)==1, exe
+          print(exe[0])' build.json > test-bin.txt
+      - name: Cross-user tests fail on the mutant
+        run: sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT bash scripts/cross-user-test.sh fail "$(cat test-bin.txt)" target/debug/sigsieve

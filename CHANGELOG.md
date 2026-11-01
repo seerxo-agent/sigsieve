@@ -6,6 +6,12 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Tests
 
+- Prepared, not yet executed: a cross-user test for F-46
+  (`tests/cross_user.rs`, `scripts/cross-user-test.sh`, manual workflow
+  `cross-user.yml`). On a disposable Linux runner, an agent run by a second
+  user behind a socket file owned by the test user must be refused by the
+  peer credential, and the test must fail when that check is removed. In
+  ordinary runs these tests are reported as ignored.
 - Real OpenSSH tests of the agent lifecycle under `sigsieve run`, counting
   the sign requests that reach the agent: a real `ssh-agent` killed and
   restarted on the same path (logins fail with a stale or missing socket,
