@@ -29,13 +29,12 @@ struct Session {
 fn session() -> Session {
     let mut r = protocol::Reader::new(include_bytes!("data/fuzz-seeds/session_bind/sequence"));
     let mut next = || r.string().unwrap().to_vec();
-    let s = Session {
+    Session {
         first: next(),
         last: next(),
         key: next(),
         auth: next(),
-    };
-    s
+    }
 }
 
 /// Fingerprint of the host key a bind body was made by.
