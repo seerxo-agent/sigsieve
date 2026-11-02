@@ -1,0 +1,34 @@
+.github/workflows/ci.yml
+  s_35bbcce842599b::t_815f7db9565336 165-166
+.github/workflows/cross-user.yml
+  s_35bbcce842599b::t_815f7db9565336 8-11,15-20,40-70,72,82,174-183,187-202
+docs/FINDINGS.md
+  s_35bbcce842599b::t_815f7db9565336 196-211
+  s_35bbcce842599b::t_42a34bce93d539 155-157
+docs/TESTING.md
+  s_35bbcce842599b::t_815f7db9565336 21
+scripts/f46-ci.sh
+  s_35bbcce842599b::t_815f7db9565336 1-43
+scripts/test-f46-ci.sh
+  s_35bbcce842599b::t_815f7db9565336 1-48
+CHANGELOG.md
+  s_35bbcce842599b::t_815f7db9565336 9-13
+  s_35bbcce842599b::t_c6c1774515010e 19
+  s_35bbcce842599b::t_42a34bce93d539 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1f31775f5cdf817557cf77ef381ebdafffb7ce6b",
+  "prompts": {},
+  "sessions": {
+    "s_35bbcce842599b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8fd155db-07a7-4b35-bf5d-af1e4378b17c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
