@@ -90,9 +90,19 @@ set -- $run_info
 [ "$4" = "$TAG" ] || die "run ref is '$4', not $TAG"
 run_sha=$5
 [ "${6:-}" = success ] || die "run conclusion is '${6:-in progress}', not success"
-tag_sha=$(gh api "repos/$REPO/commits/$TAG" --jq .sha)
+# refs/tags/ so a branch with the tag's name cannot answer instead (RV-3).
+tag_sha=$(gh api "repos/$REPO/commits/refs/tags/$TAG" --jq .sha)
 [ "$run_sha" = "$tag_sha" ] || die "run commit $run_sha != $TAG commit $tag_sha"
 ok "run $RUN_ID: Release build, push of $TAG at $tag_sha, success"
+
+# 1a. The tag's commit is on main, i.e. reviewed and merged (RV-1): main is
+# that commit or descends from it. A tag on any other commit, even one whose
+# own release.yml and checks pass, fails here.
+on_main=$(gh api "repos/$REPO/compare/$tag_sha...refs/heads/main" --jq .status)
+case $on_main in
+    identical | ahead) ok "$TAG commit is on main (main is $on_main)" ;;
+    *) die "$TAG commit $tag_sha is not on main (compare: '${on_main:-none}')" ;;
+esac
 
 # 1b. Every job (verify-tag, the called CI, both builds and attest) succeeded
 # on a GitHub-hosted runner: the attestation is signed by a hosted runner,

@@ -59,6 +59,7 @@ fix (where one exists).
 | F-41 | LOW (diagnostic) | RSA binding self-test refused by algorithm policy instead of exercising destination enforcement | Fixed: valid RSA/SHA-2 probe; regression catches missing enforcement for RSA, ECDSA and Ed25519 |
 | F-42 | LOW (supply chain) | Release attest job selects artifacts by name; a compromised job holding the Actions runtime token could replace an artifact before attestation | **Fixed; verified on the v0.1.0-alpha.3 tag run** (41327036746: binding step passed, three downloads by artifact ID): attest binds each artifact to its producing job's ID, zip digest and archive SHA-256 and checks zip entries before extraction (`scripts/test-attest-inputs.sh`); the rehearsal `verify` job passed (41319371149); manual `verify-release.sh` and native smoke test remain mandatory |
 | F-43 | MEDIUM (release, fails closed) | Release SBOMs had no CycloneDX `serialNumber`, which the pinned `actions/attest` requires; the first tag's SBOM attestation step would have failed | **Fixed; verified on the v0.1.0-alpha.3 tag run** (41327036746: both SBOM attestations created): deterministic `urn:uuid` serial added by `scripts/finalize-sbom.py`, checked against the action's acceptance rule; regression `scripts/test-finalize-sbom.py` |
+| F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit could get a release that verified | Fixed after v0.1.0-alpha.3: `verify-release.sh` gates on the tag commit being on `refs/heads/main`; `release.yml` checks it too (defense in depth); tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
 | F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
 
 
@@ -88,6 +89,52 @@ so they receive no F-number:
 | A-5 | `chmod` after `bind` follows symlinks | Out of scope (same-uid attacker, threat model scenario F) | Accepted |
 
 ## Details
+
+### F-45 — LOW–MEDIUM — release tag not bound to `main` (fixed after v0.1.0-alpha.3)
+
+Found by the internal (AI-assisted, not independent) pre-tag review of
+`269cf91` (RV-1). `release.yml` ran for any `v*` tag whose name matched
+`Cargo.toml`, and `scripts/verify-release.sh` checked only that the
+attestation came from that tag's own `release.yml` at that tag's commit.
+Someone able to push tags could tag an unreviewed commit, with its own
+`release.yml`, and get a release that verifies; the `main` ruleset's
+pull-request requirement would not apply. Only the maintainer can push to
+the repository, and no tag ruleset existed.
+
+Fix:
+- `verify-release.sh` fails unless GitHub's compare of the tag commit with
+  `refs/heads/main` is `identical` or `ahead`. This is the gate: a tag on a
+  commit whose own `release.yml` drops the workflow check below still fails
+  here. It resolves the tag as `refs/tags/TAG` and `main` as
+  `refs/heads/main`, so a branch named like the tag, or a tag named `main`,
+  cannot answer instead (RV-3, INFO; the old tag lookup failed closed).
+- `release.yml`'s `verify-tag` job fetches `main` and fails unless the
+  tagged commit is an ancestor of it (`git merge-base --is-ancestor`).
+  This is defense in depth: it stops the reviewed workflow from building
+  and attesting such a tag, but a tagged commit carries its own
+  `release.yml`, which could omit the step. `gh attestation verify` alone
+  does not check this; use `verify-release.sh` or the `VERIFY_OFFLINE.md`
+  compare step.
+- `docs/VERIFY_OFFLINE.md` shows both checks.
+- `scripts/test-verify-release-tag.sh` (6 cases, stubbed `gh`; runs in CI)
+  covers identical, ahead, diverged, behind, a failed and an empty compare,
+  the `refs/tags/` lookup and a tag named `main`. Four mutations (the old
+  lookup, no ancestry check, accepting `behind`, an unqualified `...main`
+  (MR-2)) are each caught.
+- The workflow step was run locally against a throwaway repository: a
+  commit on `main` and an ancestor pass; an unmerged commit fails.
+
+The commits of `v0.1.0-alpha.1` and `v0.1.0-alpha.2` are on `main`, so the
+new check accepts them (the rest of `verify-release.sh` is unchanged; the
+`v0.1.0-alpha.1` tag-push run 40248231106 was cancelled, so that tag never
+had a run the script could pass). `v0.1.0-alpha.3` (`60c9b37`) is on `main`
+(compare: `ahead`); its release run 41327036746 predates the `verify-tag` step,
+so the workflow did not check this, and the tag was checked by hand before it
+was pushed.
+
+Residual: the check proves the commit was merged, not that the merge was
+reviewed well. Rulesets are repository settings that an administrator can
+change.
 
 ### F-43 / F-44 — release SBOM attestation input (fixed, verified on the v0.1.0-alpha.3 tag run)
 
@@ -120,11 +167,12 @@ refuses a generator-supplied serial (it would be random per run, so a run
 without `SOURCE_DATE_EPOCH` fails), refuses NaN/Infinity (literal or
 overflowing, such as `1e999`), duplicate JSON keys, components without a
 string name and a dependency list naming only the root, adds `urn:uuid:` +
-UUIDv5(URL namespace, repository/commit/version/target), then reads its own
-encoded output back as the action does (UTF-8, 16 MiB limit,
-JSON.parse-compatible) and checks the action's format rule and an RFC 4122
-pattern on it before creating the output file, so a rejected SBOM leaves no
-file behind. `scripts/test-finalize-sbom.py` (57 checks; runs in CI, the
+UUIDv5(URL namespace, repository/commit/version/target), then checks its own
+encoded output before creating the output file: the action's 16 MiB size
+limit, its format rule and an RFC 4122 serial pattern. (It also re-parses the
+bytes strictly, but output the script encoded itself cannot fail that, so in
+effect this is a size and format check.) A rejected SBOM leaves no file
+behind. `scripts/test-finalize-sbom.py` (58 checks; runs in CI, the
 rehearsal and the release SBOM job) covers determinism, the fixed output
 layout including the exact `"bomFormat": "CycloneDX"` text
 `verify-release.sh` greps for, every input changing the serial, SemVer
@@ -134,10 +182,13 @@ bad arguments, and absent, malformed, foreign or SPDX-confusable serials.
 Two separate-context internal reviews of the fix (AI-assisted, not
 independent) found no fail-open issue; their LOW/INFO items are fixed. A
 32-mutation sweep of the final script, including every surviving mutation
-those reviews reported, caught 29; the three survivors are equivalent
-(`allow_nan=False` behind the finite-number parse check,
+those reviews reported, caught 29; the three survivors of that sweep are
+equivalent (`allow_nan=False` behind the finite-number parse check,
 `UnicodeEncodeError` already a `ValueError`, and reading the ASCII
-crate-name list as ASCII). It passes and gives byte-identical output on
+crate-name list as ASCII). A later review of the final commit found a
+mutation the sweep did not include, the size boundary `<=` changed to `<`
+(FB-1); a test now pins that an SBOM of exactly the limit is accepted. It
+passes and gives byte-identical output on
 Python 3.9 to 3.15 and under `LC_ALL=C`. Locally, the exact SBOM step text
 of both workflows produced byte-identical SBOMs for both targets, which the
 action's shipped detection code accepts; a cargo-cyclonedx shim that drops

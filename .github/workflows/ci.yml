@@ -158,6 +158,8 @@ jobs:
         run: python3 scripts/test-package-release.py
       - name: SBOM finalization regression (synthetic inputs)
         run: python3 scripts/test-finalize-sbom.py
+      - name: Release verification tag checks (stubbed gh)
+        run: bash scripts/test-verify-release-tag.sh
       - run: rustup show active-toolchain || rustup toolchain install
       # Pinned tool versions for reproducible supply-chain checks.
       - run: cargo install --locked cargo-audit@0.22.2 cargo-deny@0.20.2

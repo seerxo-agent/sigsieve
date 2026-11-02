@@ -4,6 +4,21 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Release engineering
+
+- F-45: a release tag must point at a commit on `main`.
+  `scripts/verify-release.sh` fails unless the tag commit is on
+  `refs/heads/main`, and resolves the tag as `refs/tags/TAG` (RV-3). The
+  reviewed `release.yml` also refuses to build such a tag (defense in
+  depth: a tagged commit carries its own workflow). Tested by
+  `scripts/test-verify-release-tag.sh` in CI.
+- `docs/VERIFY_OFFLINE.md` records the tag commit unambiguously and checks
+  that it is on `main`.
+
+### Tests
+
+- The SBOM finalization test pins the 16 MiB size boundary (FB-1).
+
 ## [0.1.0-alpha.3] - 2026-11-01 (experimental pre-release)
 
 The proxy's runtime code is unchanged from `0.1.0-alpha.2`: the only
