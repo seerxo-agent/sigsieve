@@ -4,6 +4,15 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.4] - 2026-11-02 (experimental pre-release)
+
+Runtime changes since 0.1.0-alpha.3 (see Configuration and Diagnostics
+below): `run` exits with 2 for an untrusted upstream socket, `--secretive`
+requires an absolute `HOME`, new warnings for suspicious destination
+entries, and `doctor` / `connect` self-test output is labelled and gives
+hints. F-45 (release tags must be on `main`) and F-46 (upstream peer-uid
+check, verified on Linux) are closed.
+
 ### Tests
 
 - F-46 workflow reports on every pull request: `F-46 status` is
