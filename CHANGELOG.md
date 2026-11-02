@@ -39,6 +39,15 @@ check, verified on Linux) are closed.
   `connect` are racy and advisory, and that the peer-uid check on the
   connected agent has no refusing test (it needs a second uid).
 
+- Destination binding through a served socket: denials (unbound, forwarding
+  hop only, forged session id, disallowed destination) never reach the
+  upstream agent; a binding on one connection never authorizes another
+  (checked before any signature, so the duplicate-attempt cache cannot mask
+  it); an upstream replaced under an open connection fails closed and
+  recovers.
+
+- The SBOM finalization test pins the 16 MiB size boundary (FB-1).
+
 ### Diagnostics
 
 - `doctor` (and the startup self-test of `connect`) announces its
@@ -64,15 +73,6 @@ check, verified on Linux) are closed.
 - Warnings for a fingerprint given as both an allowed key and an allowed
   destination, and for duplicate destination entries (from flags or `SIGSIEVE_DESTINATIONS`).
 
-### Tests
-
-- Destination binding through a served socket: denials (unbound, forwarding
-  hop only, forged session id, disallowed destination) never reach the
-  upstream agent; a binding on one connection never authorizes another
-  (checked before any signature, so the duplicate-attempt cache cannot mask
-  it); an upstream replaced under an open connection fails closed and
-  recovers.
-
 ### Release engineering
 
 - F-45: a release tag must point at a commit on `main`.
@@ -83,10 +83,6 @@ check, verified on Linux) are closed.
   `scripts/test-verify-release-tag.sh` in CI.
 - `docs/VERIFY_OFFLINE.md` records the tag commit unambiguously and checks
   that it is on `main`.
-
-### Tests
-
-- The SBOM finalization test pins the 16 MiB size boundary (FB-1).
 
 ## [0.1.0-alpha.3] - 2026-11-01 (experimental pre-release)
 

@@ -141,8 +141,11 @@ These remain explicit limitations of the alpha, not passing tests:
    the build job names `verify-release.sh` expects. It creates no tag,
    release or attestation.
 3. Merge the accepted candidate to `main` with a merge commit (not squash or
-   rebase, so the tested commit stays an ancestor of `main`), then tag that
-   commit; `release.yml` refuses a tag whose commit is not on `main`.
+   rebase, so the tested commit stays an ancestor of `main`), then tag the
+   **tested candidate commit itself** (the PR head whose SHA the CI,
+   rehearsal and fuzzing evidence names), not the merge commit. If the tag
+   must be on the merge commit instead, re-run those gates on it first.
+   `release.yml` refuses a tag whose commit is not on `main`.
    `release.yml` gates, builds deterministic
    macOS arm64 and Linux x86_64 archives, writes a CycloneDX SBOM sidecar
    per archive (not inside it; checked for completeness and given the

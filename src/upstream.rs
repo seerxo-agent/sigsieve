@@ -50,8 +50,8 @@ impl UpstreamError {
                 _ => None,
             },
             UpstreamError::UntrustedSocket(_) => Some(
-                "SigSieve only uses a Unix socket owned by you; check that the path is the \
-                 agent's socket",
+                "SigSieve only uses a Unix socket owned by you and served by an agent running \
+                 as you; check that the path is your agent's socket",
             ),
             _ => None,
         }
