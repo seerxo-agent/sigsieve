@@ -800,4 +800,99 @@ fn doctor_verifies_destination_binding_without_reaching_the_agent() {
     assert!(text.contains("Destination binding: enforced"), "{text}");
     // Refused inside SigSieve: the upstream agent saw no sign request at all.
     assert!(up.sign_requests().is_empty());
+    // The expected binding denial is announced before it is logged.
+    let err = stderr(&o);
+    let note = err
+        .find("self-test: sending an unbound sign request for an allowed key")
+        .unwrap_or_else(|| panic!("no binding-probe note in: {err}"));
+    let denial = err
+        .find("(destination binding)")
+        .unwrap_or_else(|| panic!("no binding denial in: {err}"));
+    assert!(note < denial, "note must precede the denial: {err}");
+}
+
+#[test]
+fn doctor_labels_its_synthetic_sign_probe() {
+    let up = MockAgent::start(three_identities(), Mode::Normal);
+    let o = out(bin()
+        .args(["doctor", "--upstream"])
+        .arg(&up.path)
+        .args(["--allow-fingerprint", ECDSA_CI_FP]));
+    assert!(o.status.success(), "{}", stdout(&o));
+    let err = stderr(&o);
+    // The probe key is synthetic; its denial must be announced as expected
+    // so the fingerprint is not mistaken for a hidden identity.
+    let note = err
+        .find("self-test: sending a sign request for a synthetic test key")
+        .unwrap_or_else(|| panic!("no probe note in: {err}"));
+    let denial = err
+        .find("denied sign request for non-allowlisted key")
+        .unwrap_or_else(|| panic!("no denial in: {err}"));
+    assert!(note < denial, "note must precede the denial: {err}");
+}
+
+#[test]
+fn doctor_gives_actionable_hints_for_unusable_upstreams() {
+    let dir = private_tempdir();
+    let doctor = |upstream: &Path| {
+        out(bin()
+            .args(["doctor", "--upstream"])
+            .arg(upstream)
+            .args(["--allow-fingerprint", ECDSA_CI_FP]))
+    };
+    let expect = |o: &Output, hint: &str| {
+        assert_eq!(o.status.code(), Some(1), "{}", stdout(o));
+        let text = stdout(o);
+        assert!(text.contains(&format!("hint: {hint}")), "{text}");
+    };
+
+    let missing = dir.path().join("missing.sock");
+    expect(&doctor(&missing), "no socket at this path");
+
+    // A socket file left behind by an agent that exited.
+    let stale = dir.path().join("stale.sock");
+    drop(std::os::unix::net::UnixListener::bind(&stale).unwrap());
+    expect(&doctor(&stale), "nothing is listening on this socket");
+
+    let plain = dir.path().join("plain");
+    fs::write(&plain, b"").unwrap();
+    expect(
+        &doctor(&plain),
+        "SigSieve only uses a Unix socket owned by you",
+    );
+
+    let locked = dir.path().join("locked");
+    fs::create_dir(&locked).unwrap();
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+    // Root ignores directory permissions; the check is meaningless then.
+    let enforced = fs::read_dir(&locked).is_err();
+    let o = doctor(&locked.join("agent.sock"));
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o700)).unwrap();
+    if enforced {
+        expect(&o, "permission denied");
+    }
+}
+
+#[test]
+fn doctor_warns_that_an_empty_allowlist_forwards_nothing() {
+    let up = MockAgent::start(three_identities(), Mode::Normal);
+    let o = out(bin().args(["doctor", "--upstream"]).arg(&up.path));
+    let text = stdout(&o);
+    // A valid configuration (exit 0), but not a working forwarding setup.
+    assert_eq!(o.status.code(), Some(0), "{text}");
+    assert!(
+        text.contains("Result: WARNING: no identities are configured for forwarding"),
+        "{text}"
+    );
+    assert!(!text.contains("all checks passed"), "{text}");
+
+    // An empty allowlist never hides a real failure behind the WARNING.
+    let dir = private_tempdir();
+    let o = out(bin()
+        .args(["doctor", "--upstream"])
+        .arg(dir.path().join("missing.sock")));
+    let text = stdout(&o);
+    assert_eq!(o.status.code(), Some(1), "{text}");
+    assert!(text.contains("Result: some checks failed"), "{text}");
+    assert!(!text.contains("WARNING"), "{text}");
 }

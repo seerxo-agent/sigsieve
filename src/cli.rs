@@ -405,6 +405,12 @@ fn self_test(socket_path: &Path, policy: &Policy) -> Result<Vec<Identity>, Strin
     protocol::put_string(&mut req, &blob);
     protocol::put_string(&mut req, b"sigsieve self-test");
     protocol::put_u32(&mut req, 0);
+    // The proxy logs the denial with the probe's fingerprint; say so first,
+    // so it is not mistaken for one of the user's hidden identities.
+    eprintln!(
+        "sigsieve: self-test: sending a sign request for a synthetic test key that is \
+         never allowlisted; the denial below is expected and is not one of your keys"
+    );
     match client.request(&req) {
         Ok(r) if r == [protocol::SSH_AGENT_FAILURE] => {}
         Ok(_) => {
@@ -426,6 +432,10 @@ fn self_test(socket_path: &Path, policy: &Policy) -> Result<Vec<Identity>, Strin
                 0
             };
             protocol::put_u32(&mut req, flags);
+            eprintln!(
+                "sigsieve: self-test: sending an unbound sign request for an allowed key; \
+                 the destination-binding denial below is expected"
+            );
             match client.request(&req) {
                 Ok(r) if r == [protocol::SSH_AGENT_FAILURE] => {}
                 Ok(_) => {
@@ -476,6 +486,9 @@ fn doctor(args: DoctorArgs) -> i32 {
         }
         Err(e) => {
             println!("Upstream agent:     FAIL ({e})");
+            if let Some(hint) = e.hint() {
+                println!("                    hint: {hint}");
+            }
             ok = false;
             None
         }
@@ -536,7 +549,15 @@ fn doctor(args: DoctorArgs) -> i32 {
         }
     }
     println!();
-    if ok {
+    if ok && policy.is_empty() {
+        // A valid configuration (nothing is exposed, so exit 0), but not a
+        // working forwarding setup: say so instead of "all checks passed".
+        println!(
+            "Result: WARNING: no identities are configured for forwarding (the allowlist \
+             is empty); add --allow-fingerprint"
+        );
+        EXIT_OK
+    } else if ok {
         println!("Result: all checks passed");
         EXIT_OK
     } else {

@@ -29,6 +29,35 @@ pub enum UpstreamError {
     UnexpectedReply(u8),
 }
 
+impl UpstreamError {
+    /// A short suggestion for `doctor`. It never contains a path, so it
+    /// discloses nothing beyond what the user passed in.
+    pub fn hint(&self) -> Option<&'static str> {
+        match self {
+            UpstreamError::Unreachable(e) => match e.kind() {
+                io::ErrorKind::NotFound => Some(
+                    "no socket at this path: check the upstream path (--upstream, \
+                     SIGSIEVE_UPSTREAM or --secretive) and that the agent is running",
+                ),
+                io::ErrorKind::PermissionDenied => Some(
+                    "permission denied: the socket or one of its parent directories is not \
+                     accessible to this user",
+                ),
+                io::ErrorKind::ConnectionRefused => Some(
+                    "nothing is listening on this socket: the agent may have exited and left \
+                     a stale socket file",
+                ),
+                _ => None,
+            },
+            UpstreamError::UntrustedSocket(_) => Some(
+                "SigSieve only uses a Unix socket owned by you; check that the path is the \
+                 agent's socket",
+            ),
+            _ => None,
+        }
+    }
+}
+
 impl fmt::Display for UpstreamError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

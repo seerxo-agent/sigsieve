@@ -4,6 +4,19 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Diagnostics
+
+- `doctor` (and the startup self-test of `connect`) announces its
+  synthetic sign probe on stderr before the expected denial, so the probe
+  key's fingerprint is not mistaken for one of your identities. Real hidden
+  identities are still never shown.
+- When the upstream agent cannot be used, `doctor` adds a hint for the
+  cause: no socket at the path, permission denied, nothing listening (a
+  stale socket), or a socket that is not yours. Hints contain no paths.
+- With an empty allowlist, `doctor` reports
+  `WARNING: no identities are configured for forwarding` instead of
+  "all checks passed" (exit code 0 is unchanged).
+
 ### Release engineering
 
 - F-45: a release tag must point at a commit on `main`.
