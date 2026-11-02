@@ -162,6 +162,8 @@ jobs:
         run: bash scripts/test-verify-release-tag.sh
       - name: F-46 evidence verification (throwaway repository)
         run: bash scripts/test-verify-f46-evidence.sh
+      - name: F-46 CI status decision (scope and NOT_APPLICABLE / VERIFIED / NOT_VERIFIED)
+        run: bash scripts/test-f46-ci.sh
       - run: rustup show active-toolchain || rustup toolchain install
       # Pinned tool versions for reproducible supply-chain checks.
       - run: cargo install --locked cargo-audit@0.22.2 cargo-deny@0.20.2

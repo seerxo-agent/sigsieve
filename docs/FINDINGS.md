@@ -152,9 +152,9 @@ removes its directory. The test output, the foreign agent's request log and
 the uids of both runs are uploaded as the `f46-cross-user-evidence`
 artifact.
 
-The workflow's job condition skips pull requests from forks, and a
-separate job then fails visibly ("NOT RUN") so that a skipped job is not
-read as a pass. That condition lives in the workflow file, which a pull
+The workflow's job condition skips pull requests from forks, and
+`F-46 status` then reports NOT_VERIFIED (a failure) when the test applies,
+so that a skipped job is not read as a pass. That condition lives in the workflow file, which a pull
 request can edit, so it is not a security boundary. GitHub enforces the
 limits outside that file:
 - for a public repository, a fork's token is read-only and gets no
@@ -193,11 +193,22 @@ that moved after the run, a squash or rebase, or any other change makes it
 fail. GitHub does not re-run `pull_request` workflows when only the base
 moves, and nothing before the merge forces a re-run unless branch protection
 requires this check and an up-to-date branch. Maintainer decision
-(2026-11-02): do not make this check required yet. Because of the `paths`
-filter, a pull request that does not trigger the workflow would leave a
-required check pending and block its merge. A CI layout that reports a
-result on every pull request comes first; strict, up-to-date status checks
-are considered after that. Recovery after such a merge: run the workflow by `workflow_dispatch`
+(2026-11-02): do not make this check required yet, and first have a CI
+layout that reports a result on every pull request. That layout is now in
+the workflow: it runs on every pull request; a `scope` job decides from the
+changed paths (`git diff --no-renames` against the base) whether anything
+the test builds from, or the files that decide the status, changed; the
+privileged `cross-user` job runs only then and never for forks; and the
+`F-46 status` job always runs and reports **NOT_APPLICABLE** (pass),
+**VERIFIED** (pass, cross-user and mutant runs passed) or **NOT_VERIFIED**
+(fail: it applied but was skipped, failed or cancelled, or the scope could
+not be decided). If a required check is added later, it must be
+`F-46 status`, never `cross-user`, which is skipped when not applicable and
+would count as passing. The decision is `scripts/f46-ci.sh` (regression
+`scripts/test-f46-ci.sh`, run in `ci.yml`). Like the workflow, a pull
+request can edit it, so VERIFIED is evidence only together with the run's
+artifact and `verify-f46-evidence.sh`. Strict, up-to-date status checks
+are considered after this layout has run. Recovery after such a merge: run the workflow by `workflow_dispatch`
 on the merged commit; the verifier accepts dispatch evidence only for the
 exact commit it tested. A pull request with merge conflicts gets no run at
 all. The verifier checks the source binding only. That the run passed,

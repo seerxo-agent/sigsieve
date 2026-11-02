@@ -6,17 +6,22 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ### Tests
 
+- F-46 workflow reports on every pull request: `F-46 status` is
+  NOT_APPLICABLE, VERIFIED or NOT_VERIFIED (a skipped or failed run where
+  the test applies is never a pass); the privileged job runs only when
+  relevant and never for forks (`scripts/f46-ci.sh`, regression
+  `scripts/test-f46-ci.sh`).
 - Prepared, not yet executed: a cross-user test for F-46
   (`tests/cross_user.rs`, `scripts/cross-user-test.sh`, workflow
   `cross-user.yml`). On a disposable Linux runner, an agent run by a second
   user behind a socket file owned by the test user must be refused by the
   peer credential, and the test must fail when that check is removed. In
-  ordinary runs these tests are reported as ignored. The workflow runs on
+  ordinary runs these tests are reported as ignored. The privileged job runs on
   pull requests that touch source, dependencies, toolchain or the test,
   so F-46 can be verified before merging. It uses fresh, randomly named
   users and removes them afterwards, and refuses to run where it detects a
   container (a guard, not proof of a disposable machine). The job is
-  skipped for fork pull requests, and a visible "not run" failure is shown
+  skipped for fork pull requests, and `F-46 status` reports NOT_VERIFIED
   instead. This is not a security boundary: that depends on the
   repository's fork-approval setting, which has not been changed. The run
   records the commit it tested and that commit's tree. After merging,

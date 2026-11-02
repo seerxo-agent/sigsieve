@@ -5,28 +5,21 @@ name: Cross-user peer credential (F-46)
 # SigSieve, then proves the test fails when that check is removed.
 #
 # Triggers:
-# - pull_request, only when the code under test or the test changes. A
-#   pull_request run uses the workflow file from the pull request itself,
-#   so F-46 can be verified before anything is merged. No secrets are used
-#   and the token is read-only.
+# - pull_request, on every pull request. A pull_request run uses the
+#   workflow file from the pull request itself, so F-46 can be verified
+#   before anything is merged. No secrets are used and the token is
+#   read-only.
 # - workflow_dispatch, for a re-run on the default branch (e.g. after a
 #   merge whose base had moved). GitHub only offers it once this file is on
 #   the default branch.
+#
+# Jobs: `scope` decides whether anything the test builds from changed
+# (scripts/f46-ci.sh). `cross-user` runs the privileged test only then, and
+# never for forks. `F-46 status` always runs and reports NOT_APPLICABLE
+# (pass), VERIFIED (pass) or NOT_VERIFIED (fail); it is the job to make a
+# required check, never `cross-user`, which is skipped when not applicable.
 on:
   pull_request:
-    # Everything the tests build from: all source (the proxy and binary are
-    # exercised, not only upstream.rs), dependencies (peer credentials come
-    # from libc) and the toolchain.
-    paths:
-      - src/**
-      - Cargo.toml
-      - Cargo.lock
-      - rust-toolchain.toml
-      - tests/cross_user.rs
-      - tests/common/**
-      - tests/support/**
-      - scripts/cross-user-test.sh
-      - .github/workflows/cross-user.yml
   workflow_dispatch:
 
 permissions:
@@ -44,7 +37,39 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  scope:
+    # No privileges: reads the changed paths only.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      applicable: ${{ steps.scope.outputs.applicable }}
+      fork: ${{ steps.scope.outputs.fork }}
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          # The merge commit and its first parent (the base).
+          fetch-depth: 2
+      - id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            # --no-renames: a file moved out of src/ must count as changed there.
+            git diff --no-renames --name-only HEAD^1 HEAD > changed.txt
+            bash scripts/f46-ci.sh scope < changed.txt | tee -a "$GITHUB_OUTPUT"
+            [ "$HEAD_REPO" = "$REPO" ] && fork=false || fork=true
+          else
+            echo applicable=true | tee -a "$GITHUB_OUTPUT"
+            fork=false
+          fi
+          echo "fork=$fork" | tee -a "$GITHUB_OUTPUT"
+
   cross-user:
+    needs: scope
     # This condition skips fork pull requests, but it is NOT a security
     # boundary: a fork can delete it. GitHub enforces the real limits
     # outside this file: a fork's token is read-only and gets no secrets.
@@ -54,9 +79,7 @@ jobs:
     # external contributors" stops it. Until that setting is chosen, a
     # returning contributor's fork can run its own root code on this
     # disposable VM (as it already can through ci.yml, which uses sudo).
-    if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+    if: needs.scope.outputs.applicable == 'true' && needs.scope.outputs.fork == 'false'
     # A full, disposable GitHub-hosted VM with passwordless sudo. Never a
     # container-based or self-hosted runner (e.g. ubuntu-slim): the script
     # creates users and refuses to run in a container.
@@ -148,18 +171,32 @@ jobs:
           path: xu-evidence
           if-no-files-found: warn
 
-  fork-not-verified:
-    # A skipped job looks like a pass in the checks list. For a fork pull
-    # request, fail visibly instead: F-46 has NOT been verified for it. A
-    # maintainer can run the test from a branch of this repository after
-    # reviewing the change. No checkout, no sudo.
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name != github.repository
+  f46-status:
+    name: F-46 status
+    # Always runs, so a required check never waits forever. A skipped or
+    # failed cross-user job where the test applies is NOT_VERIFIED (fail),
+    # never a pass. The decision is scripts/f46-ci.sh (regression:
+    # scripts/test-f46-ci.sh). Like this file, a pull request can change it;
+    # a VERIFIED status is evidence only together with the run's artifact
+    # and scripts/verify-f46-evidence.sh. No sudo in this job.
+    needs: [scope, cross-user]
+    if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - run: |
-          echo "::error::F-46 cross-user test not run for a fork pull request; this is not a verification"
-          echo "## F-46 cross-user test: NOT RUN (fork pull request)" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - env:
+          SCOPE: ${{ needs.scope.result }}
+          APPLICABLE: ${{ needs.scope.outputs.applicable }}
+          FORK: ${{ needs.scope.outputs.fork }}
+          XU: ${{ needs.cross-user.result }}
+        run: |
+          set +e
+          out=$(bash scripts/f46-ci.sh status "$SCOPE" "$APPLICABLE" "$FORK" "$XU"); rc=$?
+          echo "$out"
+          echo "## F-46: $out" >> "$GITHUB_STEP_SUMMARY"
+          [ "$rc" = 0 ] || echo "::error::$out"
+          exit "$rc"
