@@ -1,8 +1,12 @@
 # Threat model
 
-Status: maintained by the project authors for `v0.1.0-alpha.2`, release source
-`fc7484be0371242f517b6628b0f7dcc3a9a12a29`. **No independent external
-security review.** Guarantees and their evidence are in
+Status: this threat model describes the project security boundaries; it was
+originally maintained for `v0.1.0-alpha.2` (source
+`fc7484be0371242f517b6628b0f7dcc3a9a12a29`). The current release is
+[`v0.1.0-alpha.4`](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4)
+(source `5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`). This revision of
+the document is an editorial update, **not** a new independent validation of
+the release. **No independent external security review.** Guarantees and their evidence are in
 [SECURITY_MODEL.md](SECURITY_MODEL.md); residual limits in
 [LIMITATIONS.md](LIMITATIONS.md); the findings register in
 [FINDINGS.md](FINDINGS.md).
