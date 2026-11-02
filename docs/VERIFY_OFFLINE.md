@@ -68,7 +68,8 @@ gh api "repos/$repo/compare/$commit...refs/heads/main" --jq .status
 ```
 
 Copy the files to the offline machine. Also take the commit SHA. For
-`v0.1.0-alpha.3` it is `60c9b3777ce41cedc035c373836a8c0ea5c7e4cd`, as published in [INSTALL.md](INSTALL.md);
+`v0.1.0-alpha.4` it is `5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`, as published in [INSTALL.md](INSTALL.md);
+for `v0.1.0-alpha.3` it is `60c9b3777ce41cedc035c373836a8c0ea5c7e4cd`;
 for `v0.1.0-alpha.2` it is `fc7484be0371242f517b6628b0f7dcc3a9a12a29`.
 
 ## 2. Offline: checksums

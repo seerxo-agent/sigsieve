@@ -14,8 +14,9 @@ Do not substitute a newer `main` archive or an unverified Actions artifact.
 **Upgrading from alpha.3:** `sigsieve run` now exits with code 2 when the
 upstream path is not a Unix socket, or the socket or the agent serving it
 belongs to another user (a supervisor that restarts on failure will restart
-it); `--secretive` requires an absolute `HOME`; `doctor` output is
-labelled and gives hints. See the
+it); `--secretive` requires an absolute `HOME`; new warnings for duplicate
+or conflicting destination entries; `doctor` output is labelled, gives
+hints and warns on an empty allowlist. See the
 [CHANGELOG](https://github.com/semihbugrasezer/sigsieve/blob/5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751/CHANGELOG.md).
 
 ## Supported downloads
