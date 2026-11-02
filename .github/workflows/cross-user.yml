@@ -1,0 +1,202 @@
+name: Cross-user peer credential (F-46)
+
+# Proves that an upstream agent run by another user is refused by the peer
+# credential even when its socket file is owned by the user running
+# SigSieve, then proves the test fails when that check is removed.
+#
+# Triggers:
+# - pull_request, on every pull request. A pull_request run uses the
+#   workflow file from the pull request itself, so F-46 can be verified
+#   before anything is merged. No secrets are used and the token is
+#   read-only.
+# - workflow_dispatch, for a re-run on the default branch (e.g. after a
+#   merge whose base had moved). GitHub only offers it once this file is on
+#   the default branch.
+#
+# Jobs: `scope` decides whether anything the test builds from changed
+# (scripts/f46-ci.sh). `cross-user` runs the privileged test only then, and
+# never for forks. `F-46 status` always runs and reports NOT_APPLICABLE
+# (pass), VERIFIED (pass) or NOT_VERIFIED (fail); it is the job to make a
+# required check, never `cross-user`, which is skipped when not applicable.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cross-user-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  scope:
+    # No privileges: reads the changed paths only.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      applicable: ${{ steps.scope.outputs.applicable }}
+      fork: ${{ steps.scope.outputs.fork }}
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          # The merge commit and its first parent (the base).
+          fetch-depth: 2
+      - id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            # --no-renames: a file moved out of src/ must count as changed there.
+            git diff --no-renames --name-only HEAD^1 HEAD > changed.txt
+            bash scripts/f46-ci.sh scope < changed.txt | tee -a "$GITHUB_OUTPUT"
+            [ "$HEAD_REPO" = "$REPO" ] && fork=false || fork=true
+          else
+            echo applicable=true | tee -a "$GITHUB_OUTPUT"
+            fork=false
+          fi
+          echo "fork=$fork" | tee -a "$GITHUB_OUTPUT"
+
+  cross-user:
+    needs: scope
+    # This condition skips fork pull requests, but it is NOT a security
+    # boundary: a fork can delete it. GitHub enforces the real limits
+    # outside this file: a fork's token is read-only and gets no secrets.
+    # Whether a fork's edited workflow runs without a maintainer's approval
+    # depends on the repository setting "Approval for running fork pull
+    # request workflows from contributors"; only "Require approval for all
+    # external contributors" stops it. Until that setting is chosen, a
+    # returning contributor's fork can run its own root code on this
+    # disposable VM (as it already can through ci.yml, which uses sudo).
+    if: needs.scope.outputs.applicable == 'true' && needs.scope.outputs.fork == 'false'
+    # A full, disposable GitHub-hosted VM with passwordless sudo. Never a
+    # container-based or self-hosted runner (e.g. ubuntu-slim): the script
+    # creates users and refuses to run in a container.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Record the tested commits
+        # A pull_request run tests GitHub's temporary merge commit. Record
+        # it, its parents and its tree; scripts/verify-f46-evidence.sh later
+        # checks that the merged commit has exactly this tree.
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p xu-evidence
+          parents=$(git cat-file -p HEAD | sed -n 's/^parent //p' | tr '\n' ' ')
+          {
+            echo "event=$EVENT"
+            echo "tested=$(git rev-parse HEAD)"
+            echo "tree=$(git rev-parse 'HEAD^{tree}')"
+            echo "parents=${parents% }"
+            echo "pr_head=${HEAD_SHA:-}"
+          } | tee xu-evidence/tested-commits.txt
+          if [ "$EVENT" = pull_request ]; then
+            set -- $parents
+            [ "$#" = 2 ] && [ "$2" = "$HEAD_SHA" ] \
+              || { echo "::error::tested commit is not a merge of the pull request head"; exit 1; }
+            # The base actually tested is the first parent, not the
+            # event payload's base.sha, which can differ.
+            echo "base_tested=$1" | tee -a xu-evidence/tested-commits.txt
+          fi
+      - name: Install pinned Rust toolchain (rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Require tools
+        run: |
+          for t in python3 useradd userdel runuser pkill stat sudo systemd-detect-virt; do
+            command -v "$t" || { echo "::error::missing $t"; exit 1; }
+          done
+          echo "virt: $(systemd-detect-virt || true)"
+      - name: Build
+        run: |
+          cargo build --locked
+          cargo test --locked --test cross_user --no-run --message-format=json > build.json
+          python3 -I -c 'import json,sys
+          exe=[m["executable"] for m in map(json.loads, open(sys.argv[1])) if m.get("reason")=="compiler-artifact" and m.get("target",{}).get("name")=="cross_user" and m.get("executable")]
+          assert len(exe)==1, exe
+          print(exe[0])' build.json > test-bin.txt
+          cat test-bin.txt
+      - name: Cross-user tests pass (executed, not skipped)
+        run: XU_EVIDENCE="$PWD/xu-evidence" sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,XU_EVIDENCE bash scripts/cross-user-test.sh pass "$(cat test-bin.txt)" target/debug/sigsieve
+      - name: Remove the upstream peer-uid check (mutant)
+        run: |
+          perl -0pi -e 's/Ok\(uid\) if uid == me => \{\}/Ok(_) => {}/' src/upstream.rs
+          grep -c 'Ok(_) => {}' src/upstream.rs | grep -qx 1 || { echo "::error::mutant not applied"; exit 1; }
+          git diff --stat
+          cargo build --locked
+          cargo test --locked --test cross_user --no-run --message-format=json > build.json
+          python3 -I -c 'import json,sys
+          exe=[m["executable"] for m in map(json.loads, open(sys.argv[1])) if m.get("reason")=="compiler-artifact" and m.get("target",{}).get("name")=="cross_user" and m.get("executable")]
+          assert len(exe)==1, exe
+          print(exe[0])' build.json > test-bin.txt
+      - name: Cross-user tests fail on the mutant
+        run: XU_EVIDENCE="$PWD/xu-evidence" sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,XU_EVIDENCE bash scripts/cross-user-test.sh fail "$(cat test-bin.txt)" target/debug/sigsieve
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## F-46 cross-user evidence"
+            echo '```'; cat xu-evidence/tested-commits.txt 2>/dev/null || echo "tested commits: NOT RECORDED"; echo '```'
+            for m in pass fail; do
+              f="xu-evidence/$m-test-output.txt"
+              if [ -f "$f" ]; then
+                echo "### $m run"; echo '```'; grep -E '^test |^test result' "$f" || echo "(no test lines)"; echo '```'
+                cat "xu-evidence/$m-environment.txt"
+              else
+                echo "### $m run: NOT EXECUTED"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+      # actions/upload-artifact v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: f46-cross-user-evidence
+          path: xu-evidence
+          if-no-files-found: warn
+
+  f46-status:
+    name: F-46 status
+    # Always runs, so a required check never waits forever. A skipped or
+    # failed cross-user job where the test applies is NOT_VERIFIED (fail),
+    # never a pass. The decision is scripts/f46-ci.sh (regression:
+    # scripts/test-f46-ci.sh). Like this file, a pull request can change it;
+    # a VERIFIED status is evidence only together with the run's artifact
+    # and scripts/verify-f46-evidence.sh. No sudo in this job.
+    needs: [scope, cross-user]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - env:
+          SCOPE: ${{ needs.scope.result }}
+          APPLICABLE: ${{ needs.scope.outputs.applicable }}
+          FORK: ${{ needs.scope.outputs.fork }}
+          XU: ${{ needs.cross-user.result }}
+        run: |
+          set +e
+          out=$(bash scripts/f46-ci.sh status "$SCOPE" "$APPLICABLE" "$FORK" "$XU"); rc=$?
+          echo "$out"
+          echo "## F-46: $out" >> "$GITHUB_STEP_SUMMARY"
+          [ "$rc" = 0 ] || echo "::error::$out"
+          exit "$rc"
