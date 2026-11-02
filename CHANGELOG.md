@@ -4,7 +4,7 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.1.0-alpha.3] - not yet tagged (experimental pre-release candidate)
+## [0.1.0-alpha.3] - 2026-11-01 (experimental pre-release)
 
 The proxy's runtime code is unchanged from `0.1.0-alpha.2`: the only
 changes under `src/` are in test code. This candidate changes how releases

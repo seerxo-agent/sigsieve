@@ -21,8 +21,11 @@ for the limited device record.
 The released `v0.1.0-alpha.2` evidence is pinned to
 `fc7484be0371242f517b6628b0f7dcc3a9a12a29`. The
 [release record](TESTING.md#release-candidate-evidence-2026-10-28) identifies
-its CI, fuzzing, distribution and owner-assisted device checks. These results
-do not validate later executable revisions or untested devices/services.
+its CI, fuzzing, distribution and owner-assisted device checks. The current
+`v0.1.0-alpha.3` release (`60c9b3777ce41cedc035c373836a8c0ea5c7e4cd`) has its own
+[release record](TESTING.md#release-evidence-v010-alpha3-2026-11-01); it does
+not change runtime code, and the device checks were not repeated for it. These
+results do not validate later executable revisions or untested devices/services.
 
 ## Two modes
 

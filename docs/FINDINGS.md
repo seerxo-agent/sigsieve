@@ -57,9 +57,9 @@ fix (where one exists).
 | F-31 | HIGH | Review of F-29/F-30: a relay's own `-F` was ignored for its nested hops; hop forwardings were not checked; quoting (`e'x'ec`) hid `Match exec`; X11 forwarding ran xauth with the login agent; unsafe `-F` paths reached ssh's ProxyJump shell command; concurrent stale-socket recovery could have two winners | Fixed (details below) |
 | F-40 | LOW (availability) | A slow downstream reader could keep a reply write going indefinitely: SO_SNDTIMEO restarts on every partial transfer | Fixed: nonblocking reply writes under one whole-reply deadline; red/green regression |
 | F-41 | LOW (diagnostic) | RSA binding self-test refused by algorithm policy instead of exercising destination enforcement | Fixed: valid RSA/SHA-2 probe; regression catches missing enforcement for RSA, ECDSA and Ed25519 |
-| F-42 | LOW (supply chain) | Release attest job selects artifacts by name; a compromised job holding the Actions runtime token could replace an artifact before attestation | **Fixed in the workflow; tag path not yet run**: attest binds each artifact to its producing job's ID, zip digest and archive SHA-256 and checks zip entries before extraction (`scripts/test-attest-inputs.sh`); hosted evidence will come from the rehearsal `verify` job once it has passed (not yet run); blocks the next tag's release until that tag's attest log confirms the binding ([RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)); manual `verify-release.sh` and native smoke test remain mandatory |
-| F-43 | MEDIUM (release, fails closed) | Release SBOMs had no CycloneDX `serialNumber`, which the pinned `actions/attest` requires; the first tag's SBOM attestation step would have failed | **Fixed in the workflow; tag path not yet run**: deterministic `urn:uuid` serial added by `scripts/finalize-sbom.py`, checked against the action's acceptance rule; regression `scripts/test-finalize-sbom.py` |
-| F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed in the workflow; tag path not yet run**: both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
+| F-42 | LOW (supply chain) | Release attest job selects artifacts by name; a compromised job holding the Actions runtime token could replace an artifact before attestation | **Fixed; verified on the v0.1.0-alpha.3 tag run** (41327036746: binding step passed, three downloads by artifact ID): attest binds each artifact to its producing job's ID, zip digest and archive SHA-256 and checks zip entries before extraction (`scripts/test-attest-inputs.sh`); the rehearsal `verify` job passed (41319371149); manual `verify-release.sh` and native smoke test remain mandatory |
+| F-43 | MEDIUM (release, fails closed) | Release SBOMs had no CycloneDX `serialNumber`, which the pinned `actions/attest` requires; the first tag's SBOM attestation step would have failed | **Fixed; verified on the v0.1.0-alpha.3 tag run** (41327036746: both SBOM attestations created): deterministic `urn:uuid` serial added by `scripts/finalize-sbom.py`, checked against the action's acceptance rule; regression `scripts/test-finalize-sbom.py` |
+| F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
 
 
 ### Review scope
@@ -89,7 +89,7 @@ so they receive no F-number:
 
 ## Details
 
-### F-43 / F-44 — release SBOM attestation input (fixed, tag path not yet run)
+### F-43 / F-44 — release SBOM attestation input (fixed, verified on the v0.1.0-alpha.3 tag run)
 
 Found by the internal (AI-assisted, not independent) pre-tag review of
 `269cf91`, the first alpha.3 candidate.
@@ -148,7 +148,7 @@ rehearsal did); the SBOM job remains untrusted (R-3). The tag-only attest
 step has still not run; the first tag's attest log and `verify-release.sh`
 remain the proof.
 
-### F-42 — LOW — attest job trusts artifacts by name (fixed, tag path not yet run)
+### F-42 — LOW — attest job trusts artifacts by name (fixed, verified on the v0.1.0-alpha.3 tag run)
 
 Found by the internal review of the SBOM branch (suspected, not
 demonstrated). The release `attest` job downloads `sigsieve-<target>`
