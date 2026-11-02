@@ -373,9 +373,12 @@ fn try_setup(dest_key: &[&str]) -> Option<Result<Env, String>> {
             .spawn()
             .unwrap(),
     );
+    // Its own budget: the first sshd's startup and the destination host-key
+    // generation (RSA-3072 takes up to seconds) must not use it up.
+    let started2 = Instant::now();
     while TcpStream::connect(("127.0.0.1", dest_port)).is_err() {
         assert!(
-            start.elapsed() < Duration::from_secs(10),
+            started2.elapsed() < Duration::from_secs(10),
             "second sshd did not start"
         );
         thread::sleep(Duration::from_millis(50));
