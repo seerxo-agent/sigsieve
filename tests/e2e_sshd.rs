@@ -42,6 +42,28 @@ fn ok(cmd: &mut Command) -> String {
     String::from_utf8_lossy(&o.stdout).into_owned()
 }
 
+/// Whether `sshd -t` accepts a configuration keyword (with a throwaway
+/// host key, since `-t` requires one).
+fn sshd_accepts(sshd: &str, d: &Path, line: &str) -> bool {
+    let probe = d.join("probe");
+    fs::create_dir_all(&probe).unwrap();
+    let key = probe.join("hk");
+    if !key.exists() {
+        ok(Command::new("ssh-keygen")
+            .args(["-q", "-N", "", "-t", "ed25519", "-f"])
+            .arg(&key));
+    }
+    let cfg = probe.join("cfg");
+    fs::write(&cfg, format!("HostKey {}\n{line}\n", key.display())).unwrap();
+    Command::new(sshd)
+        .arg("-t")
+        .arg("-f")
+        .arg(&cfg)
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
 fn fingerprint(pubkey: &Path) -> String {
     ok(Command::new("ssh-keygen").arg("-lf").arg(pubkey))
         .split_whitespace()
@@ -286,6 +308,13 @@ fn try_setup(dest_key: &[&str]) -> Option<Result<Env, String>> {
         )
         .unwrap();
     }
+    // A copy of the allowed (synthetic) key, for tests that restart the
+    // agent; ssh itself is only ever given public keys (IdentitiesOnly).
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(d.join("restart"))
+        .unwrap();
+    fs::copy(d.join("k").join("ci"), d.join("restart").join("ci")).unwrap();
     // Private keys are only needed inside the agent.
     fs::remove_dir_all(d.join("k")).unwrap();
 
@@ -298,6 +327,13 @@ fn try_setup(dest_key: &[&str]) -> Option<Result<Env, String>> {
     fs::copy(d.join("p/ci.pub"), d.join("ak_hop")).unwrap();
     let [login_port, hop_port, dest_port] = free_ports();
     let cfg = d.join("sshd_config");
+    // OpenSSH 9.8+ penalizes a source address after failed logins; the tests
+    // fail logins from 127.0.0.1 on purpose. Older sshd rejects the keyword.
+    let penalties = if sshd_accepts(sshd, &d, "PerSourcePenalties no") {
+        "PerSourcePenalties no\n"
+    } else {
+        ""
+    };
     fs::write(
         &cfg,
         format!(
@@ -305,7 +341,7 @@ fn try_setup(dest_key: &[&str]) -> Option<Result<Env, String>> {
              PidFile {d}/sshd.pid\nAuthorizedKeysFile {d}/ak_login\nStrictModes no\n\
              UsePAM no\nPasswordAuthentication no\nKbdInteractiveAuthentication no\n\
              AllowAgentForwarding yes\nAllowTcpForwarding no\nX11Forwarding no\n\
-             PermitUserEnvironment no\nLogLevel ERROR\n\
+             PermitUserEnvironment no\nLogLevel ERROR\n{penalties}\
              Match LocalPort {hop_port}\n    AuthorizedKeysFile {d}/ak_hop\n",
             hk = hostkey.display(),
             d = d.display()
@@ -358,7 +394,7 @@ fn try_setup(dest_key: &[&str]) -> Option<Result<Env, String>> {
             "ListenAddress 127.0.0.1\nPort {dest_port}\nHostKey {hk}\nPidFile {d}/sshd2.pid\n\
              AuthorizedKeysFile {d}/ak_hop\nStrictModes no\nUsePAM no\n\
              PasswordAuthentication no\nKbdInteractiveAuthentication no\n\
-             AllowAgentForwarding yes\nAllowTcpForwarding local\nX11Forwarding no\nLogLevel ERROR\n",
+             AllowAgentForwarding yes\nAllowTcpForwarding local\nX11Forwarding no\nLogLevel ERROR\n{penalties}",
             hk = hostkey2.display(),
             d = d.display()
         ),
@@ -1203,4 +1239,413 @@ fn destination_binding_with_gpg_agent_upstream() {
         )),
         "{err}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Agent lifecycle and session interruption over real OpenSSH (alpha.4).
+// A real `ssh` client logs in to the throwaway sshd through `sigsieve run`
+// in destination-binding mode. Between SigSieve and the real ssh-agent a
+// relay counts the sign requests that actually reach the agent.
+
+mod lifecycle {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::os::unix::net::{UnixListener, UnixStream};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    const SIGN_REQUEST: u8 = 13;
+    const SIGN_RESPONSE: u8 = 14;
+    const SUCCESS: u8 = 6;
+    const EXTENSION: u8 = 27;
+
+    fn read_frame(s: &mut UnixStream) -> Option<Vec<u8>> {
+        let mut len = [0u8; 4];
+        s.read_exact(&mut len).ok()?;
+        let n = u32::from_be_bytes(len) as usize;
+        if n > 256 * 1024 {
+            return None;
+        }
+        let mut buf = vec![0u8; n];
+        s.read_exact(&mut buf).ok()?;
+        Some(buf)
+    }
+
+    fn write_frame(s: &mut UnixStream, payload: &[u8]) -> bool {
+        let mut f = (payload.len() as u32).to_be_bytes().to_vec();
+        f.extend_from_slice(payload);
+        s.write_all(&f).is_ok()
+    }
+
+    /// Between SigSieve and the real ssh-agent. Connects to the agent path
+    /// anew for each connection (so the agent can be restarted) and counts
+    /// sign requests delivered to the agent. With `drop_signs` set it closes
+    /// both sides when a sign request arrives, without delivering it: an
+    /// upstream that goes away while the request is pending.
+    struct CountingRelay {
+        path: PathBuf,
+        delivered: Arc<AtomicUsize>,
+        dropped: Arc<AtomicUsize>,
+        drop_signs: Arc<AtomicBool>,
+    }
+
+    impl CountingRelay {
+        fn start(dir: &Path, agent: &Path) -> CountingRelay {
+            let path = dir.join("relay.sock");
+            let listener = UnixListener::bind(&path).unwrap();
+            let delivered = Arc::new(AtomicUsize::new(0));
+            let dropped = Arc::new(AtomicUsize::new(0));
+            let drop_signs = Arc::new(AtomicBool::new(false));
+            let (dl, dr, ds, agent) = (
+                Arc::clone(&delivered),
+                Arc::clone(&dropped),
+                Arc::clone(&drop_signs),
+                agent.to_path_buf(),
+            );
+            thread::spawn(move || {
+                for client in listener.incoming() {
+                    let Ok(mut client) = client else { continue };
+                    let (dl, dr, ds, agent) = (
+                        Arc::clone(&dl),
+                        Arc::clone(&dr),
+                        Arc::clone(&ds),
+                        agent.clone(),
+                    );
+                    thread::spawn(move || {
+                        let Ok(mut up) = UnixStream::connect(&agent) else {
+                            return;
+                        };
+                        while let Some(req) = read_frame(&mut client) {
+                            let is_sign = req.first() == Some(&SIGN_REQUEST);
+                            if is_sign && ds.load(Ordering::SeqCst) {
+                                dr.fetch_add(1, Ordering::SeqCst);
+                                return;
+                            }
+                            if !write_frame(&mut up, &req) {
+                                return;
+                            }
+                            if is_sign {
+                                dl.fetch_add(1, Ordering::SeqCst);
+                            }
+                            let Some(reply) = read_frame(&mut up) else {
+                                return;
+                            };
+                            if !write_frame(&mut client, &reply) {
+                                return;
+                            }
+                        }
+                    });
+                }
+            });
+            CountingRelay {
+                path,
+                delivered,
+                dropped,
+                drop_signs,
+            }
+        }
+
+        fn delivered(&self) -> usize {
+            self.delivered.load(Ordering::SeqCst)
+        }
+    }
+
+    /// Between the ssh client and SigSieve: forwards and records what the
+    /// client sends, so a real session's frames can be replayed later.
+    fn capture_relay(dir: &Path, target: &Path) -> (PathBuf, Arc<Mutex<Vec<Vec<u8>>>>) {
+        let path = dir.join("capture.sock");
+        let listener = UnixListener::bind(&path).unwrap();
+        let frames = Arc::new(Mutex::new(Vec::new()));
+        let (rec, target) = (Arc::clone(&frames), target.to_path_buf());
+        thread::spawn(move || {
+            for client in listener.incoming() {
+                let Ok(mut client) = client else { continue };
+                let Ok(mut up) = UnixStream::connect(&target) else {
+                    continue;
+                };
+                while let Some(req) = read_frame(&mut client) {
+                    rec.lock().unwrap().push(req.clone());
+                    if !write_frame(&mut up, &req) {
+                        break;
+                    }
+                    let Some(reply) = read_frame(&mut up) else {
+                        break;
+                    };
+                    if !write_frame(&mut client, &reply) {
+                        break;
+                    }
+                }
+            }
+        });
+        (path, frames)
+    }
+
+    struct Run(Child);
+
+    impl Drop for Run {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    impl Run {
+        fn alive(&mut self) -> bool {
+            self.0.try_wait().unwrap().is_none()
+        }
+    }
+
+    /// `sigsieve run` allowing `ci` only towards the second sshd's host key.
+    fn start_run(env: &Env, upstream: &Path, socket: &Path) -> Run {
+        let ci = fingerprint(&env.pubkey("ci"));
+        let run = Run(Command::new(env!("CARGO_BIN_EXE_sigsieve"))
+            .args(["run", "--upstream"])
+            .arg(upstream)
+            .args(["--allow-fingerprint", &ci])
+            .args(["--allow-destination", &env.dest_hostkey_fp, "--socket"])
+            .arg(socket)
+            .env_remove("SSH_AUTH_SOCK")
+            .stdout(Stdio::null())
+            .stderr(fs::File::create(socket.with_extension("err")).unwrap())
+            .spawn()
+            .unwrap());
+        let start = Instant::now();
+        while !socket.exists() {
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "sigsieve run did not start"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        run
+    }
+
+    fn ssh_cmd(env: &Env, agent: &Path, port: u16, identity: &str, remote: &str) -> Command {
+        let mut c = Command::new("ssh");
+        c.args(env.ssh_opts(port, identity))
+            .args(["-o", "ConnectTimeout=10"])
+            .arg("-o")
+            .arg(format!("IdentityAgent={}", agent.display()))
+            .arg("127.0.0.1")
+            .arg(remote)
+            .env_remove("SSH_AUTH_SOCK")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        c
+    }
+
+    fn login(env: &Env, agent: &Path, port: u16, identity: &str) -> Option<i32> {
+        ssh_cmd(env, agent, port, identity, "true")
+            .status()
+            .unwrap()
+            .code()
+    }
+
+    /// The forbidden requests: `ci` to a server that authorizes it but whose
+    /// host key is not an allowed destination (refused by destination
+    /// binding alone), and the hidden `admin` key (refused by identity
+    /// filtering, the sign allowlist and the destination check together).
+    fn assert_forbidden_fail(env: &Env, sock: &Path) {
+        assert_ne!(
+            login(env, sock, env.hop_port, "ci"),
+            Some(0),
+            "disallowed destination"
+        );
+        assert_ne!(
+            login(env, sock, env.login_port, "admin"),
+            Some(0),
+            "hidden key"
+        );
+    }
+
+    fn restart_agent(env: &mut Env) {
+        let _ = fs::remove_file(&env.agent_sock); // a killed agent leaves its socket
+        env._agent = Killer(
+            Command::new("ssh-agent")
+                .args(["-D", "-a"])
+                .arg(&env.agent_sock)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let start = Instant::now();
+        while !env.agent_sock.exists() {
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "ssh-agent did not restart"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        ok(Command::new("ssh-add")
+            .env("SSH_AUTH_SOCK", &env.agent_sock)
+            .arg(env.d().join("restart").join("ci")));
+    }
+
+    #[test]
+    fn real_agent_killed_and_restarted_under_a_running_proxy() {
+        let Some(mut env) = setup() else { return };
+        let d = env.d().to_path_buf();
+        // Two proxies: one behind the counting relay (sign requests counted at
+        // the agent), one configured with the agent's own path, so SigSieve
+        // itself meets the stale socket, the missing path and the new agent.
+        let relay = CountingRelay::start(&d, &env.agent_sock);
+        let sock = d.join("f.sock");
+        let mut run = start_run(&env, &relay.path, &sock);
+        let direct = d.join("direct.sock");
+        let mut run_direct = start_run(&env, &env.agent_sock, &direct);
+
+        // Before: the allowed login is signed once; forbidden ones never are.
+        assert_eq!(login(&env, &sock, env.dest_port, "ci"), Some(0));
+        assert_eq!(relay.delivered(), 1);
+        assert_forbidden_fail(&env, &sock);
+        assert_eq!(relay.delivered(), 1);
+        assert_eq!(login(&env, &direct, env.dest_port, "ci"), Some(0));
+        assert_forbidden_fail(&env, &direct);
+        assert_eq!(relay.delivered(), 1);
+
+        // The agent dies and leaves its socket (connection refused), then the
+        // socket is removed (no such path). Both proxies keep running and the
+        // allowed login fails. (Forbidden logins would fail here anyway.)
+        let _ = env._agent.0.kill();
+        let _ = env._agent.0.wait();
+        assert!(env.agent_sock.exists(), "expected a stale agent socket");
+        assert_ne!(login(&env, &sock, env.dest_port, "ci"), Some(0));
+        assert_ne!(login(&env, &direct, env.dest_port, "ci"), Some(0));
+        fs::remove_file(&env.agent_sock).unwrap();
+        assert_ne!(login(&env, &direct, env.dest_port, "ci"), Some(0));
+        assert!(run.alive(), "sigsieve run exited when the agent died");
+        assert!(
+            run_direct.alive(),
+            "sigsieve run exited when the agent died"
+        );
+
+        // A new agent on the same path holds only the allowed key. Each login
+        // is a new connection with its own binding and signature; nothing
+        // from before the restart is reused.
+        restart_agent(&mut env);
+        assert_eq!(login(&env, &sock, env.dest_port, "ci"), Some(0));
+        assert_eq!(relay.delivered(), 2);
+        assert_forbidden_fail(&env, &sock);
+        assert_eq!(relay.delivered(), 2);
+        assert_eq!(login(&env, &direct, env.dest_port, "ci"), Some(0));
+        assert_forbidden_fail(&env, &direct);
+        assert!(run.alive() && run_direct.alive());
+    }
+
+    #[test]
+    fn concurrent_real_sessions_interruption_and_replay() {
+        let Some(env) = setup() else { return };
+        let d = env.d().to_path_buf();
+        let relay = CountingRelay::start(&d, &env.agent_sock);
+        let sock = d.join("f.sock");
+        let mut run = start_run(&env, &relay.path, &sock);
+
+        // Three allowed sessions that stay open, and forbidden attempts at the
+        // same time.
+        let mut allowed: Vec<Child> = (0..3)
+            .map(|_| {
+                ssh_cmd(&env, &sock, env.dest_port, "ci", "sleep 4")
+                    .spawn()
+                    .unwrap()
+            })
+            .collect();
+        let mut forbidden: Vec<Child> = (0..3)
+            .map(|_| {
+                ssh_cmd(&env, &sock, env.hop_port, "ci", "true")
+                    .spawn()
+                    .unwrap()
+            })
+            .chain((0..2).map(|_| {
+                ssh_cmd(&env, &sock, env.login_port, "admin", "true")
+                    .spawn()
+                    .unwrap()
+            }))
+            .collect();
+        for c in &mut forbidden {
+            assert_ne!(
+                c.wait().unwrap().code(),
+                Some(0),
+                "a forbidden session logged in"
+            );
+        }
+        // Wait until all three have been signed, then kill one client while
+        // the other sessions are still running. (OpenSSH closes its agent
+        // connection after authentication, so this ends an ssh session, not
+        // an in-flight agent request; see the pending-request case below.)
+        let start = Instant::now();
+        while relay.delivered() < 3 {
+            assert!(
+                start.elapsed() < Duration::from_secs(20),
+                "allowed logins were not signed"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        let _ = allowed[0].kill();
+        let _ = allowed[0].wait();
+        for c in allowed.iter_mut().skip(1) {
+            assert_eq!(
+                c.wait().unwrap().code(),
+                Some(0),
+                "an allowed session failed"
+            );
+        }
+        assert_eq!(
+            relay.delivered(),
+            3,
+            "exactly one signature per allowed login"
+        );
+
+        // Upstream goes away while a sign request is pending: the login fails
+        // and the request is not delivered (it was in flight, not processed).
+        relay.drop_signs.store(true, Ordering::SeqCst);
+        assert_ne!(login(&env, &sock, env.dest_port, "ci"), Some(0));
+        assert_eq!(relay.dropped.load(Ordering::SeqCst), 1);
+        assert_eq!(relay.delivered(), 3);
+        relay.drop_signs.store(false, Ordering::SeqCst);
+
+        // A real session through a capturing relay, then replayed after it
+        // has disconnected.
+        let (cap, frames) = capture_relay(&d, &sock);
+        assert_eq!(login(&env, &cap, env.dest_port, "ci"), Some(0));
+        assert_eq!(relay.delivered(), 4);
+        let frames = frames.lock().unwrap().clone();
+        let binds: Vec<&Vec<u8>> = frames.iter().filter(|f| f[0] == EXTENSION).collect();
+        let sign = frames
+            .iter()
+            .find(|f| f[0] == SIGN_REQUEST)
+            .expect("captured sign request");
+        assert!(!binds.is_empty(), "the real session sent no session-bind");
+
+        // Replaying the session's own binds and signature request on a new
+        // connection: the bind is accepted, the signature is not (the
+        // duplicate-attempt cache, F-22), and nothing reaches the agent.
+        let mut c = UnixStream::connect(&sock).unwrap();
+        for b in &binds {
+            assert!(write_frame(&mut c, b));
+            assert_eq!(read_frame(&mut c).unwrap(), vec![SUCCESS]);
+        }
+        assert!(write_frame(&mut c, sign));
+        assert_ne!(
+            read_frame(&mut c).unwrap()[0],
+            SIGN_RESPONSE,
+            "replayed signature"
+        );
+        // Another connection reusing only the signature request, without
+        // binds: refused by destination binding before the cache is reached.
+        let mut c2 = UnixStream::connect(&sock).unwrap();
+        assert!(write_frame(&mut c2, sign));
+        assert_ne!(
+            read_frame(&mut c2).unwrap()[0],
+            SIGN_RESPONSE,
+            "unbound reuse signed"
+        );
+        assert_eq!(relay.delivered(), 4, "a replay reached the agent");
+
+        // And the proxy still serves a fresh, legitimate login.
+        assert_eq!(login(&env, &sock, env.dest_port, "ci"), Some(0));
+        assert_eq!(relay.delivered(), 5);
+        assert!(run.alive());
+    }
 }
