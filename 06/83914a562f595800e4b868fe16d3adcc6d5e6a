@@ -1,0 +1,30 @@
+docs/RELEASE_CHECKLIST.md
+  s_35bbcce842599b::t_68efdab5d6f3fd 58-81
+scripts/verify-release.sh
+  s_35bbcce842599b::t_68efdab5d6f3fd 5,33
+CHANGELOG.md
+  s_35bbcce842599b::t_6d01addef68ca3 7
+  s_35bbcce842599b::t_68efdab5d6f3fd 8-15
+Cargo.toml
+  s_35bbcce842599b::t_68efdab5d6f3fd 3
+Cargo.lock
+  s_35bbcce842599b::t_c7da9824538ac6 855
+fuzz/Cargo.lock
+  s_35bbcce842599b::t_44c974d6ed756f 695
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0683914a562f595800e4b868fe16d3adcc6d5e6a",
+  "prompts": {},
+  "sessions": {
+    "s_35bbcce842599b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8fd155db-07a7-4b35-bf5d-af1e4378b17c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
