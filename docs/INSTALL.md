@@ -1,15 +1,22 @@
-# Install SigSieve v0.1.0-alpha.3
+# Install SigSieve v0.1.0-alpha.4
 
 SigSieve is **experimental, unaudited security software**. Read the
 [security model](SECURITY_MODEL.md) and [known limitations](LIMITATIONS.md)
 before forwarding an SSH agent. Keep ordinary SSH access available.
 
 The current verified binary pre-release is
-[**v0.1.0-alpha.3**](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.3),
+[**v0.1.0-alpha.4**](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4),
 built from immutable commit
-`60c9b3777ce41cedc035c373836a8c0ea5c7e4cd`. Its release files cannot be
+`5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`. Its release files cannot be
 changed after publication (GitHub immutable release).
 Do not substitute a newer `main` archive or an unverified Actions artifact.
+
+**Upgrading from alpha.3:** `sigsieve run` now exits with code 2 when the
+upstream path is not a Unix socket, or the socket or the agent serving it
+belongs to another user (a supervisor that restarts on failure will restart
+it); `--secretive` requires an absolute `HOME`; `doctor` output is
+labelled and gives hints. See the
+[CHANGELOG](https://github.com/semihbugrasezer/sigsieve/blob/5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751/CHANGELOG.md).
 
 ## Supported downloads
 
@@ -44,15 +51,15 @@ binary**, and installs to `~/.local/bin` (not a system directory).
 (
   set -eu
   repo=semihbugrasezer/sigsieve
-  tag=v0.1.0-alpha.3
-  commit=60c9b3777ce41cedc035c373836a8c0ea5c7e4cd
+  tag=v0.1.0-alpha.4
+  commit=5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751
   case "$(uname -s)/$(uname -m)" in
     Darwin/arm64)
       target=aarch64-apple-darwin
-      expected_sha=18a6cd645f99012fe128961a42c489495e816f1b3664c56b788dc61a50b6f5b2 ;;
+      expected_sha=cf3dbde8703a6f3e9eaa34dff5b83d4e651b80a2d875150c35a26ef2bbc61cf0 ;;
     Linux/x86_64)
       target=x86_64-unknown-linux-gnu
-      expected_sha=889a6a166402fe768b9ace765504dd83b9466fc2be3d1399725631664aa41169 ;;
+      expected_sha=da3a05419bef31800b1781df58977b69df96dc9dacbe250780ff73e1a5801011 ;;
     *) echo "No verified binary for this OS/architecture; build from source." >&2; exit 1 ;;
   esac
   name="sigsieve-$tag-$target"
@@ -82,7 +89,7 @@ binary**, and installs to `~/.local/bin` (not a system directory).
 )
 ```
 
-Expected version: `sigsieve 0.1.0-alpha.3`. Add `~/.local/bin` to your
+Expected version: `sigsieve 0.1.0-alpha.4`. Add `~/.local/bin` to your
 `PATH` if you want to run `sigsieve` without its full path.
 
 The release archive also contains `LICENSE`, `THIRD_PARTY_LICENSES.txt`,
@@ -91,21 +98,23 @@ its source revision. Inspect these files before using the program.
 macOS code signing or notarization is **not** claimed. If macOS blocks
 execution, do not blindly disable Gatekeeper; use a source build or ask for help.
 
-The published `v0.1.0-alpha.3` archives' and SBOMs' SHA-256 values are:
+The published `v0.1.0-alpha.4` archives' and SBOMs' SHA-256 values are:
 
 ```text
-18a6cd645f99012fe128961a42c489495e816f1b3664c56b788dc61a50b6f5b2  sigsieve-v0.1.0-alpha.3-aarch64-apple-darwin.tar.gz
-6c6e11c207021632759860db01e509e45306f3be08be21879f03931dc69bdc6e  sigsieve-v0.1.0-alpha.3-aarch64-apple-darwin.cdx.json
-889a6a166402fe768b9ace765504dd83b9466fc2be3d1399725631664aa41169  sigsieve-v0.1.0-alpha.3-x86_64-unknown-linux-gnu.tar.gz
-6216c8c6b57318a86fbef7aba8982cd75b6484ca27f74d15f625bca0b767e1a1  sigsieve-v0.1.0-alpha.3-x86_64-unknown-linux-gnu.cdx.json
+cf3dbde8703a6f3e9eaa34dff5b83d4e651b80a2d875150c35a26ef2bbc61cf0  sigsieve-v0.1.0-alpha.4-aarch64-apple-darwin.tar.gz
+65a57cb8260ded85ad57846bac6b24983ca73585b51cac756cb930b9992d6c7c  sigsieve-v0.1.0-alpha.4-aarch64-apple-darwin.cdx.json
+da3a05419bef31800b1781df58977b69df96dc9dacbe250780ff73e1a5801011  sigsieve-v0.1.0-alpha.4-x86_64-unknown-linux-gnu.tar.gz
+d5b4c0d3d6bf72d6913934cb5a105886490381e6c6dc4a199cb7bc1758f8dfd6  sigsieve-v0.1.0-alpha.4-x86_64-unknown-linux-gnu.cdx.json
 ```
 
-Release evidence for `v0.1.0-alpha.3`: the
-[release build](https://github.com/semihbugrasezer/sigsieve/actions/runs/41327036746)
+Release evidence for `v0.1.0-alpha.4`: the
+[release build](https://github.com/semihbugrasezer/sigsieve/actions/runs/41538765784)
 (provenance and SBOM attestations), native macOS arm64 verification with
 `scripts/verify-release.sh`, and the
-[Linux x86_64 verification](https://github.com/semihbugrasezer/sigsieve/actions/runs/41332325926)
-each passed.
+[Linux x86_64 verification](https://github.com/semihbugrasezer/sigsieve/actions/runs/41540423408)
+each passed. Earlier releases' evidence is in their release notes
+([alpha.3](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.3),
+[alpha.2](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.2)).
 
 The hardcoded digest prevents accepting an archive and checksum that have both
 changed since this guide was reviewed. Checksums alone do not prove build
@@ -114,7 +123,7 @@ binds the archive to this repository's `release.yml`, immutable tag ref and
 source digest, while denying self-hosted runners. See the
 [release verification procedure](RELEASE_CHECKLIST.md).
 
-Each `v0.1.0-alpha.3` archive has a CycloneDX SBOM sidecar
+Each `v0.1.0-alpha.4` archive has a CycloneDX SBOM sidecar
 (`$name.cdx.json` and `.sha256`) with its own build provenance, and an SBOM
 attestation for the archive. To verify those, or to verify on a machine
 without network access by using downloaded attestation bundles, see
@@ -134,8 +143,8 @@ release commit:
   set -eu
   git clone https://github.com/semihbugrasezer/sigsieve.git
   cd sigsieve
-  git checkout v0.1.0-alpha.3
-  test "$(git rev-parse HEAD)" = 60c9b3777ce41cedc035c373836a8c0ea5c7e4cd
+  git checkout v0.1.0-alpha.4
+  test "$(git rev-parse HEAD)" = 5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751
   cargo install --locked --path .
   "${CARGO_HOME:-$HOME/.cargo}/bin/sigsieve" --version
 )

@@ -16,14 +16,15 @@ agent socket it forwards.
 
 > [!WARNING]
 > **Experimental security software. Not independently audited.**
-> `0.1.0-alpha.3` is an experimental pre-release. Prebuilt archives are only
+> `0.1.0-alpha.4` is an experimental pre-release. Prebuilt archives are only
 > those attached to its verified pre-release on the
 > [Releases page](https://github.com/semihbugrasezer/sigsieve/releases); a tag
 > or CI artifact alone is not a release. There is no Homebrew installation.
 > One owner-assisted Secretive signing and destination-binding test passed on
-> the `v0.1.0-alpha.2` release candidate; `v0.1.0-alpha.3` does not change the
-> proxy's runtime code, and that test was not repeated for it. Other devices
-> and integrations remain unverified. Read the
+> the `v0.1.0-alpha.2` release candidate. It was not repeated for later
+> releases, and `v0.1.0-alpha.4` changes runtime behaviour (see the
+> [CHANGELOG](CHANGELOG.md)), so real Secretive and Touch ID use with alpha.4
+> is unverified. Other devices and integrations remain unverified. Read the
 > [security model](docs/SECURITY_MODEL.md) and [limitations](docs/LIMITATIONS.md)
 > before relying on it, and keep ordinary SSH access available.
 
@@ -72,7 +73,7 @@ before using it with a Git hosting service.
 
 ## Install
 
-**[Download the verified experimental v0.1.0-alpha.3 release](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.3)**
+**[Download the verified experimental v0.1.0-alpha.4 release](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4)**
 for macOS Apple Silicon or Linux x86_64. See the
 **[installation guide](docs/INSTALL.md)** for platform detection, SHA-256 and
 build provenance verification, and user-local installation. Linux builds use
@@ -89,8 +90,8 @@ checked-out commit is not the release commit:
   set -eu
   git clone https://github.com/semihbugrasezer/sigsieve.git
   cd sigsieve
-  git checkout v0.1.0-alpha.3
-  test "$(git rev-parse HEAD)" = 60c9b3777ce41cedc035c373836a8c0ea5c7e4cd
+  git checkout v0.1.0-alpha.4
+  test "$(git rev-parse HEAD)" = 5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751
   cargo install --locked --path .
   "${CARGO_HOME:-$HOME/.cargo}/bin/sigsieve" --version
 )
@@ -162,22 +163,25 @@ CLI options, common errors and returning to ordinary SSH, follow the
 
 These are distinct kinds of evidence, not security certifications. Test
 results apply to the revision exercised; a green older run does not validate
-a new candidate. The `v0.1.0-alpha.3` release evidence below is for
-`60c9b3777ce41cedc035c373836a8c0ea5c7e4cd`; see the
-[release notes](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.3).
+a new candidate. The `v0.1.0-alpha.4` release evidence below is for
+`5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`; see the
+[release notes](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4).
+Evidence for `v0.1.0-alpha.3` (`60c9b37`) is in its
+[release notes](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.3)
+and [evidence record](docs/TESTING.md#release-evidence-v010-alpha3-2026-11-01).
 Evidence for the earlier `v0.1.0-alpha.2` release (`fc7484be`) is kept in its
 [release evidence record](docs/TESTING.md#release-candidate-evidence-2026-10-28).
 
 | Evidence | Current scope |
 |---|---|
 | Code review | Internal AI-assisted reviews in separate contexts; [findings and residual risks](docs/FINDINGS.md). No independent external audit. |
-| Automated tests | Parsers, policy, adversarial agents, lifecycle and resource limits; [test layers and historical results](docs/TESTING.md). |
+| Automated tests | Parsers, policy, adversarial agents, lifecycle and resource limits; a two-user Linux test of the upstream peer-uid check ([F-46](docs/FINDINGS.md)); [test layers and historical results](docs/TESTING.md). |
 | Real OpenSSH | Real `ssh-agent`, `ssh` and throwaway `sshd` tests in CI on macOS arm64 and Linux x86_64/aarch64; inspect [CI for your exact commit](https://github.com/semihbugrasezer/sigsieve/actions/workflows/ci.yml). |
-| Real Secretive (ECDSA P-256) | Historical, on the `v0.1.0-alpha.2` candidate (runtime code unchanged in alpha.3; not repeated): owner-assisted test with one real key and two localhost SSH servers: allowed signing, verified hostbound login, forbidden-destination and generic signing refusal (9/9 checks). No unexpected Touch ID prompt reported during the two forbidden steps; full prompt counts and Secretive version were not recorded. [Recorded results and limits](docs/SECRETIVE_INTEGRATION.md#recorded-real-device-results). |
+| Real Secretive (ECDSA P-256) | Historical, on the `v0.1.0-alpha.2` candidate (not repeated for alpha.3 or alpha.4; alpha.4 changes runtime behaviour): owner-assisted test with one real key and two localhost SSH servers: allowed signing, verified hostbound login, forbidden-destination and generic signing refusal (9/9 checks). No unexpected Touch ID prompt reported during the two forbidden steps; full prompt counts and Secretive version were not recorded. [Recorded results and limits](docs/SECRETIVE_INTEGRATION.md#recorded-real-device-results). |
 | Git hosts | 2026-10-27 advertisement measurements: GitHub advertises hostbound authentication (end-to-end unverified); GitLab.com and Bitbucket Cloud do not. [Measurements and caveats](docs/SSH_COMPATIBILITY.md#git-hosting-services). |
-| Fuzzing | [Four-target, one-hour-per-target campaign](https://github.com/semihbugrasezer/sigsieve/actions/runs/41319373654) completed for release commit `60c9b37` (264,681,077 reported executions, no crash/sanitizer failure); the earlier [`fc7484b` campaign](https://github.com/semihbugrasezer/sigsieve/actions/runs/40730071966) is kept for alpha.2. Not evidence of the absence of vulnerabilities. [Testing details](docs/TESTING.md). |
+| Fuzzing | [Four-target, one-hour-per-target campaign](https://github.com/semihbugrasezer/sigsieve/actions/runs/41527783557) completed for release commit `5ea37b7` (287,516,615 reported executions, no crash/sanitizer failure); the earlier [`60c9b37` campaign](https://github.com/semihbugrasezer/sigsieve/actions/runs/41319373654) (alpha.3) and [`fc7484b` campaign](https://github.com/semihbugrasezer/sigsieve/actions/runs/40730071966) (alpha.2) are kept. Not evidence of the absence of vulnerabilities. [Testing details](docs/TESTING.md). |
 | Other integrations | 1Password and physical FIDO keys untested; SSH identity certificates unsupported. [Key types and protocol matrix](docs/SSH_COMPATIBILITY.md). |
-| Distribution | [v0.1.0-alpha.3 is published](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.3) as an immutable release; [release build](https://github.com/semihbugrasezer/sigsieve/actions/runs/41327036746), native macOS verification and [Linux verification](https://github.com/semihbugrasezer/sigsieve/actions/runs/41332325926) passed with provenance, CycloneDX SBOM sidecars and SBOM attestations. [Install safely](docs/INSTALL.md). |
+| Distribution | [v0.1.0-alpha.4 is published](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4) as an immutable release; [release build](https://github.com/semihbugrasezer/sigsieve/actions/runs/41538765784), native macOS verification and [Linux verification](https://github.com/semihbugrasezer/sigsieve/actions/runs/41540423408) passed with provenance, CycloneDX SBOM sidecars and SBOM attestations. [Install safely](docs/INSTALL.md). |
 
 ## Learn more and contribute
 
