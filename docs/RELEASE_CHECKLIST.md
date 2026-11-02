@@ -57,7 +57,10 @@ SSH host-key verification and recovery access.
 
 ## Candidate record: v0.1.0-alpha.4
 
-Not yet tagged. Runtime code changes since `v0.1.0-alpha.3`: `run` exits
+Published on 2026-11-02 from `5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`
+([release](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4)).
+The tag points at the tested candidate commit itself; `main` (`11cc3c1`)
+contains it with the identical tree. Runtime code changes since `v0.1.0-alpha.3`: `run` exits
 with 2 for an untrusted upstream, `--secretive` requires an absolute
 `HOME`, destination-entry warnings, `doctor` / `connect` self-test labels
 and hints (see CHANGELOG). Supported prebuilt targets stay macOS arm64 and
@@ -68,16 +71,16 @@ evidence record, not into this file.
 
 | Gate | Status |
 |---|---|
-| Version 0.1.0-alpha.4 in `Cargo.toml` and both lockfiles | Done on the release-preparation branch |
-| Hosted CI on the exact candidate SHA, including `msrv (Rust 1.88)` | Pending |
-| `F-46 status` on the candidate's PR (VERIFIED or NOT_APPLICABLE) | Pending |
-| Release rehearsal (`workflow_dispatch`) on the exact candidate SHA, including the OIDC-free `verify` job | Pending |
-| Coverage-guided fuzzing, 3,600 s per target, on the exact candidate SHA | Pending |
-| Separate-context internal (AI-assisted) security review of the release path and runtime changes | Pending; not an external audit |
-| F-42: the tag's `attest` job log shows the binding step passed and all three downloads were by ID | Only possible after tagging; blocks publication |
-| F-45: the tag commit is on `refs/heads/main` (checked by `verify-release.sh` and `release.yml`) | Only possible after tagging; blocks publication |
-| `scripts/verify-release.sh RUN_ID v0.1.0-alpha.4` on macOS arm64 and the **Verify release** workflow on Linux report `RESULT: PASS`, including SBOM sidecars and attestations | Only possible after tagging; blocks publication |
-| README / INSTALL point at the new release only after it is published | Post-publication step |
+| Version 0.1.0-alpha.4 in `Cargo.toml` and both lockfiles | Done |
+| Hosted CI on the exact candidate SHA, including `msrv (Rust 1.88)` | Done: run 41519403249 |
+| `F-46 status` on the candidate's PR (VERIFIED or NOT_APPLICABLE) | Done: VERIFIED, run 41519403122 |
+| Release rehearsal (`workflow_dispatch`) on the exact candidate SHA, including the OIDC-free `verify` job | Done: run 41527758832 |
+| Coverage-guided fuzzing, 3,600 s per target, on the exact candidate SHA | Done: run 41527783557 (287,516,615 executions, no crash) |
+| Separate-context internal (AI-assisted) security review of the release path and runtime changes | Done; not an external audit. No CRITICAL/HIGH/MEDIUM finding; LOW/INFO fixes are in the candidate |
+| F-42: the tag's `attest` job log shows the binding step passed and all three downloads were by ID | Done: release run 41538765784 |
+| F-45: the tag commit is on `refs/heads/main` (checked by `verify-release.sh` and `release.yml`) | Done: `verify-tag` in run 41538765784 and both verifications |
+| `scripts/verify-release.sh RUN_ID v0.1.0-alpha.4` on macOS arm64 and the **Verify release** workflow on Linux report `RESULT: PASS`, including SBOM sidecars and attestations | Done: macOS locally; Linux run 41540423408 (dispatched from `main`, verifying the tag's assets) |
+| README / INSTALL point at the new release only after it is published | Done in the post-release documentation PR |
 
 ## Candidate record: v0.1.0-alpha.3
 
