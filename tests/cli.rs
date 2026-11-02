@@ -858,7 +858,7 @@ fn doctor_gives_actionable_hints_for_unusable_upstreams() {
     fs::write(&plain, b"").unwrap();
     expect(
         &doctor(&plain),
-        "SigSieve only uses a Unix socket owned by you",
+        "SigSieve only uses a Unix socket owned by you and served by an agent running as you",
     );
 
     let locked = dir.path().join("locked");

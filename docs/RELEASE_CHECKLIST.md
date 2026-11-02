@@ -55,6 +55,30 @@ SSH host-key verification and recovery access.
 - Publish release notes with the exact commit, CI links, supported platforms,
   checks performed and remaining limitations; mark alpha releases as pre-release.
 
+## Candidate record: v0.1.0-alpha.4
+
+Not yet tagged. Runtime code changes since `v0.1.0-alpha.3`: `run` exits
+with 2 for an untrusted upstream, `--secretive` requires an absolute
+`HOME`, destination-entry warnings, `doctor` / `connect` self-test labels
+and hints (see CHANGELOG). Supported prebuilt targets stay macOS arm64 and
+Linux x86_64; Linux arm64 is CI-tested but source-only; Intel macOS and
+Windows are not validated. A gate is only ticked from evidence on the exact
+candidate SHA; run IDs go into the release notes and the post-release
+evidence record, not into this file.
+
+| Gate | Status |
+|---|---|
+| Version 0.1.0-alpha.4 in `Cargo.toml` and both lockfiles | Done on the release-preparation branch |
+| Hosted CI on the exact candidate SHA, including `msrv (Rust 1.88)` | Pending |
+| `F-46 status` on the candidate's PR (VERIFIED or NOT_APPLICABLE) | Pending |
+| Release rehearsal (`workflow_dispatch`) on the exact candidate SHA, including the OIDC-free `verify` job | Pending |
+| Coverage-guided fuzzing, 3,600 s per target, on the exact candidate SHA | Pending |
+| Separate-context internal (AI-assisted) security review of the release path and runtime changes | Pending; not an external audit |
+| F-42: the tag's `attest` job log shows the binding step passed and all three downloads were by ID | Only possible after tagging; blocks publication |
+| F-45: the tag commit is on `refs/heads/main` (checked by `verify-release.sh` and `release.yml`) | Only possible after tagging; blocks publication |
+| `scripts/verify-release.sh RUN_ID v0.1.0-alpha.4` on macOS arm64 and the **Verify release** workflow on Linux report `RESULT: PASS`, including SBOM sidecars and attestations | Only possible after tagging; blocks publication |
+| README / INSTALL point at the new release only after it is published | Post-publication step |
+
 ## Candidate record: v0.1.0-alpha.3
 
 Published on 2026-11-01 from `60c9b3777ce41cedc035c373836a8c0ea5c7e4cd`
@@ -117,8 +141,11 @@ These remain explicit limitations of the alpha, not passing tests:
    the build job names `verify-release.sh` expects. It creates no tag,
    release or attestation.
 3. Merge the accepted candidate to `main` with a merge commit (not squash or
-   rebase, so the tested commit stays an ancestor of `main`), then tag that
-   commit; `release.yml` refuses a tag whose commit is not on `main`.
+   rebase, so the tested commit stays an ancestor of `main`), then tag the
+   **tested candidate commit itself** (the PR head whose SHA the CI,
+   rehearsal and fuzzing evidence names), not the merge commit. If the tag
+   must be on the merge commit instead, re-run those gates on it first.
+   `release.yml` refuses a tag whose commit is not on `main`.
    `release.yml` gates, builds deterministic
    macOS arm64 and Linux x86_64 archives, writes a CycloneDX SBOM sidecar
    per archive (not inside it; checked for completeness and given the

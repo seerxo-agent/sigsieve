@@ -4,6 +4,15 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.0-alpha.4] - 2026-11-02 (experimental pre-release)
+
+Runtime changes since 0.1.0-alpha.3 (see Configuration and Diagnostics
+below): `run` exits with 2 for an untrusted upstream socket, `--secretive`
+requires an absolute `HOME`, new warnings for suspicious destination
+entries, and `doctor` / `connect` self-test output is labelled and gives
+hints. F-45 (release tags must be on `main`) and F-46 (upstream peer-uid
+check, verified on Linux) are closed.
+
 ### Tests
 
 - F-46 workflow reports on every pull request: `F-46 status` is
@@ -11,22 +20,15 @@ The project follows [Semantic Versioning](https://semver.org/).
   the test applies is never a pass); the privileged job runs only when
   relevant and never for forks (`scripts/f46-ci.sh`, regression
   `scripts/test-f46-ci.sh`).
-- Prepared, not yet executed: a cross-user test for F-46
-  (`tests/cross_user.rs`, `scripts/cross-user-test.sh`, workflow
-  `cross-user.yml`). On a disposable Linux runner, an agent run by a second
-  user behind a socket file owned by the test user must be refused by the
-  peer credential, and the test must fail when that check is removed. In
-  ordinary runs these tests are reported as ignored. The privileged job runs on
-  pull requests that touch source, dependencies, toolchain or the test,
-  so F-46 can be verified before merging. It uses fresh, randomly named
-  users and removes them afterwards, and refuses to run where it detects a
-  container (a guard, not proof of a disposable machine). The job is
-  skipped for fork pull requests, and `F-46 status` reports NOT_VERIFIED
-  instead. This is not a security boundary: that depends on the
-  repository's fork-approval setting, which has not been changed. The run
-  records the commit it tested and that commit's tree. After merging,
-  `scripts/verify-f46-evidence.sh` checks that the merged commit, or a
-  manual re-run on it, has exactly that tree.
+- Cross-user test for F-46 (`tests/cross_user.rs`,
+  `scripts/cross-user-test.sh`, workflow `cross-user.yml`): an agent run by a
+  second user behind a socket file owned by the test user is refused by the
+  peer credential, and the test fails when that check is removed. It runs on
+  a disposable GitHub-hosted Linux VM, with fresh randomly named users that
+  are removed afterwards; in ordinary runs these tests are reported as
+  ignored. **F-46 closed:** verified on Linux in PR #44 (run 41455680046:
+  4/4 passed; mutant 1 passed / 3 failed; merged tree confirmed by
+  `scripts/verify-f46-evidence.sh`).
 - Real OpenSSH tests of the agent lifecycle under `sigsieve run`, counting
   the sign requests that reach the agent: a real `ssh-agent` killed and
   restarted on the same path (logins fail with a stale or missing socket,
@@ -36,6 +38,15 @@ The project follows [Semantic Versioning](https://semver.org/).
 - Findings register: F-46 records that the upstream path checks before
   `connect` are racy and advisory, and that the peer-uid check on the
   connected agent has no refusing test (it needs a second uid).
+
+- Destination binding through a served socket: denials (unbound, forwarding
+  hop only, forged session id, disallowed destination) never reach the
+  upstream agent; a binding on one connection never authorizes another
+  (checked before any signature, so the duplicate-attempt cache cannot mask
+  it); an upstream replaced under an open connection fails closed and
+  recovers.
+
+- The SBOM finalization test pins the 16 MiB size boundary (FB-1).
 
 ### Diagnostics
 
@@ -62,15 +73,6 @@ The project follows [Semantic Versioning](https://semver.org/).
 - Warnings for a fingerprint given as both an allowed key and an allowed
   destination, and for duplicate destination entries (from flags or `SIGSIEVE_DESTINATIONS`).
 
-### Tests
-
-- Destination binding through a served socket: denials (unbound, forwarding
-  hop only, forged session id, disallowed destination) never reach the
-  upstream agent; a binding on one connection never authorizes another
-  (checked before any signature, so the duplicate-attempt cache cannot mask
-  it); an upstream replaced under an open connection fails closed and
-  recovers.
-
 ### Release engineering
 
 - F-45: a release tag must point at a commit on `main`.
@@ -81,10 +83,6 @@ The project follows [Semantic Versioning](https://semver.org/).
   `scripts/test-verify-release-tag.sh` in CI.
 - `docs/VERIFY_OFFLINE.md` records the tag commit unambiguously and checks
   that it is on `main`.
-
-### Tests
-
-- The SBOM finalization test pins the 16 MiB size boundary (FB-1).
 
 ## [0.1.0-alpha.3] - 2026-11-01 (experimental pre-release)
 

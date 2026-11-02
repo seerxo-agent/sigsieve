@@ -61,7 +61,7 @@ fix (where one exists).
 | F-43 | MEDIUM (release, fails closed) | Release SBOMs had no CycloneDX `serialNumber`, which the pinned `actions/attest` requires; the first tag's SBOM attestation step would have failed | **Fixed; verified on the v0.1.0-alpha.3 tag run** (41327036746: both SBOM attestations created): deterministic `urn:uuid` serial added by `scripts/finalize-sbom.py`, checked against the action's acceptance rule; regression `scripts/test-finalize-sbom.py` |
 | F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit could get a release that verified | Fixed after v0.1.0-alpha.3: `verify-release.sh` gates on the tag commit being on `refs/heads/main`; `release.yml` checks it too (defense in depth); tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
 | F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
-| F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, has no test that makes it refuse | Open. Test prepared, **not yet executed**: `tests/cross_user.rs` with `scripts/cross-user-test.sh` and the workflow `cross-user.yml` (two users on a disposable Linux runner, plus the mutant without the check). Pathname checks before `connect` are documented as advisory |
+| F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, had no test that makes it refuse | **Closed: verified on Linux** (PR #44, workflow run 41455680046): two-user test 4/4 passed, foreign agent received no request; mutant without the check 1 passed / 3 failed on their own assertions; merged commit `e77632d` has the tested tree (`verify-f46-evidence.sh`). macOS cross-user not tested. Pathname checks before `connect` remain advisory |
 
 
 ### Review scope
@@ -91,7 +91,7 @@ so they receive no F-number:
 
 ## Details
 
-### F-46 — INFO — upstream connect: pathname checks are racy, peer-uid rejection is untested
+### F-46 — INFO — upstream connect: pathname checks are racy, peer-uid rejection was untested (closed: verified on Linux)
 
 Found by the internal (AI-assisted, not independent) alpha.4 lifecycle
 review. Each upstream request runs `Upstream::connect` (`src/upstream.rs`):
@@ -118,11 +118,11 @@ and restarted on the same path, with SigSieve configured with that path
 (`lifecycle::real_agent_killed_and_restarted_under_a_running_proxy`). These
 exercise steps 1 and 2; none of them exercises step 3 refusing.
 
-What is not: no executed test makes step 3 refuse, because that needs an
-agent running as a different uid, i.e. root. A mutation that removed step 3
-passes the suite that has run so far. No production code was changed.
+Before PR #44, no executed test made step 3 refuse, because that needs an
+agent running as a different uid, i.e. root; a mutation that removed step 3
+passed the suite. No production code was changed to close this finding.
 
-Prepared, not yet run: `tests/cross_user.rs`, run by
+Now executed on Linux (see "Verification record" below): `tests/cross_user.rs`, run by
 `scripts/cross-user-test.sh` from the workflow `cross-user.yml` on a
 disposable GitHub-hosted Ubuntu runner. User B starts a mock agent
 (`tests/support/xu-mock-agent.py`, which logs every request and, unlike
@@ -223,7 +223,26 @@ repository that shows all of the following, and only once
 2. the mutant run (peer-uid check removed): each of the 3 cross-user tests
    failed on its own assertion and the foreign agent received requests;
 3. the same-uid control passed in both runs.
-Until then F-46 stays open.
+
+#### Verification record (2026-11-02)
+PR #44, head `969cdae`, workflow "Cross-user peer credential (F-46)" run
+41455680046 on a GitHub-hosted `ubuntu-24.04` VM (kernel 7.0.0-1017-azure,
+`systemd-detect-virt`: microsoft; users with uid 999 and 997):
+- tested commit `8abf25e` (temporary merge; parents base `a218021`, head
+  `969cdae`), tree `e76f2fe`;
+- real run: `test result: ok. 4 passed; 0 failed; 0 ignored`; the foreign
+  agent received 0 requests;
+- mutant run (peer-uid check removed): `1 passed; 3 failed; 0 ignored`;
+  failures "a foreign agent was used", "sigsieve run kept running with a
+  foreign agent", "a request reached the foreign agent"; the foreign agent
+  received 4 requests (3 identity requests, 1 sign request);
+- `F-46 status`: VERIFIED; the same-uid control passed in both runs;
+- merged as `e77632d` (merge commit, parents `a218021`, `969cdae`);
+  `scripts/verify-f46-evidence.sh e77632d tested-commits.txt`: OK.
+
+Closed on that evidence. Limits: Linux only (macOS `getpeereid` has no
+cross-user test); a same-uid substitution remains out of scope (threat
+model scenario F); the evidence artifact is kept by the maintainer.
 
 ### F-45 — LOW–MEDIUM — release tag not bound to `main` (fixed after v0.1.0-alpha.3)
 
