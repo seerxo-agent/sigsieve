@@ -1,0 +1,21 @@
+README.md
+  s_35bbcce842599b::t_aabe16cedc4fdf 19,24-27,76,93-94,166-171,178,180,182,184
+docs/INSTALL.md
+  s_35bbcce842599b::t_aabe16cedc4fdf 1,8,10,14-20,54-55,59,62,92,101,104-107,110-111,114-117,126,146-147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "686e7bccbd021ca5ecf846c1332581a80864f88b",
+  "prompts": {},
+  "sessions": {
+    "s_35bbcce842599b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8fd155db-07a7-4b35-bf5d-af1e4378b17c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
