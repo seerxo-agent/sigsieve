@@ -4,9 +4,10 @@
 Secure Enclave (ECDSA P-256) and serves them through an SSH agent socket.
 SigSieve sits in front of that socket and never sees private keys. Allowed
 signing requests are delegated to Secretive; its key storage and user-presence
-policy remain in control. One owner-assisted allowed-key signing and destination-binding test passed
-on release commit `fc7484b`; this does not guarantee every Secretive
-configuration.
+policy remain in control. Owner-assisted allowed-key signing and
+destination-binding tests passed on `v0.1.0-alpha.2` (`fc7484b`, 2026-10-28)
+and on the attested `v0.1.0-alpha.4` macOS arm64 binary (2026-11-03, Secretive
+4.0.0); this does not guarantee every Secretive configuration.
 See the [recorded results](#recorded-real-device-results).
 
 The released `v0.1.0-alpha.2` source is
@@ -112,4 +113,6 @@ destination.
 | 2026-10-24 | `connect --dry-run` against the real ssh_config | PASS: login agent kept (Secretive via IdentityAgent), only filtered socket forwarded |
 | 2026-10-28 | Candidate `fc7484b`: real Secretive signing, P-256 key, signature verified locally, 1 identity forwarded to localhost sshd | PASS: 9/9 scripted checks, including hostbound allowed destination, forbidden destination refusal after key offer, generic-signing refusal, socket cleanup and unchanged upstream key count |
 | 2026-10-28 | Device-owner Touch ID observations during forbidden destination and generic signing steps | No unexpected prompts observed for those two steps; full per-step counts and Secretive version were not recorded |
-| pending | Integration with other Secretive versions, production SSH services, and full user-presence prompt matrix | not verified |
+| 2026-11-03 | `v0.1.0-alpha.4` attested `aarch64-apple-darwin` binary (sha256 `12b65a3e…2778`), macOS 27.2 arm64, OpenSSH 10.5p1, Secretive 4.0.0 (1.35554366823); one P-256 key created for the test with "Require authentication", 4 keys in Secretive | `sigsieve doctor --secretive`: all checks passed. `scripts/agent-integration-check.sh` from the tag: 5/5 without signing, 6/6 with `--sign-allowed` (signature verified). Owner-assisted localhost check (two unprivileged sshd with throwaway host keys, forwarded filtered agent): 13/13 — exactly 1 key forwarded; allowed destination authenticated; forbidden destination and generic signing refused, both logged by SigSieve as destination-binding denials, which alpha.4 issues before contacting the upstream agent; filtered socket removed; upstream key count unchanged |
+| 2026-11-03 | Device-owner Touch ID observations for the alpha.4 run | No prompt reported for doctor and the no-signing check; 1 prompt during `--sign-allowed`; 2 prompts during the localhost check, which made two signatures (login to the forwarding server and the hop to the allowed destination). Prompts were not timed per step |
+| pending | Integration with other Secretive versions, Intel Macs, production SSH services, the Homebrew-built binary, and a per-step user-presence prompt matrix | not verified |
