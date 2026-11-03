@@ -1,0 +1,48 @@
+tests/e2e_sshd.rs
+  s_35bbcce842599b::t_9729073240e177 1274-1298,1647-1649,1661-1676
+docs/USAGE.md
+  s_35bbcce842599b::t_6fbee5b4baf815 185
+tests/proxy_binding.rs
+  s_35bbcce842599b::t_c77e6750718210 53-61,272-481
+docs/RESOURCE_LIMITS.md
+  s_35bbcce842599b::t_6fbee5b4baf815 19
+src/binding.rs
+  s_35bbcce842599b::t_da52c6efa045b0 168-169,175,196,803,836
+  s_35bbcce842599b::t_b0f690ef799519 725-732,928
+src/fuzzing.rs
+  s_35bbcce842599b::t_da52c6efa045b0 83
+src/proxy/resources.rs
+  s_35bbcce842599b::t_089240a6edc4e1 101-107,171-180,278-311,313-345
+  s_35bbcce842599b::t_6781a0ae84ddcf 312
+  s_35bbcce842599b::t_f15ef331bc01d3 346
+docs/FINDINGS.md
+  s_35bbcce842599b::t_6fbee5b4baf815 40,65,626-632,636,662-682
+docs/LIMITATIONS.md
+  s_35bbcce842599b::t_6fbee5b4baf815 38-46
+docs/SECURITY_MODEL.md
+  s_35bbcce842599b::t_6fbee5b4baf815 64-65
+docs/THREAT_MODEL.md
+  s_35bbcce842599b::t_6fbee5b4baf815 84-85
+docs/SSH_COMPATIBILITY.md
+  s_35bbcce842599b::t_6fbee5b4baf815 60,173-213
+CHANGELOG.md
+  s_35bbcce842599b::t_6fbee5b4baf815 7-17
+src/proxy.rs
+  s_35bbcce842599b::t_089240a6edc4e1 235,237-245,248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "351eee9e291e4a6ce03419c25d8326b095b887ef",
+  "prompts": {},
+  "sessions": {
+    "s_35bbcce842599b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8fd155db-07a7-4b35-bf5d-af1e4378b17c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
