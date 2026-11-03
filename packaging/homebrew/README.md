@@ -1,10 +1,10 @@
 # Homebrew formula (for the maintainer-owned tap)
 
-`sigsieve.rb` is the formula for the tap `semihbugrasezer/homebrew-sigsieve`.
-It is **not** in homebrew-core. Until the tap repository is published,
-`brew install semihbugrasezer/sigsieve/sigsieve` does not work; use
-[docs/INSTALL.md](../../docs/INSTALL.md). Publishing the tap requires
-maintainer approval.
+`sigsieve.rb` is the formula for the published tap
+[`semihbugrasezer/homebrew-sigsieve`](https://github.com/semihbugrasezer/homebrew-sigsieve)
+(`brew install semihbugrasezer/sigsieve/sigsieve`). The tap's
+`Formula/sigsieve.rb` must be a reviewed copy of this file. It is **not** in
+homebrew-core.
 
 SigSieve stays an **experimental, not independently audited** pre-release
 whichever way it is installed. Packaging changes neither of those.
@@ -67,21 +67,28 @@ Run in a local, unpublished tap created with `brew tap-new --no-git`
 | Wrong `sha256` in the formula | refused: "reports different checksum" |
 | `brew install semihbugrasezer/sigsieve/sigsieve` without a prior `brew trust` | Homebrew 7 trusts the explicitly named formula and installs it |
 
+Published tap, same day: the tap's formula equals this file at `main`
+`f80ebd3`; from a clean state (no tap, install, trust or binary),
+`brew install semihbugrasezer/sigsieve/sigsieve`, `brew test`,
+`brew audit --strict --online`, uninstall, reinstall, `brew test` again, and
+`brew uninstall` + `brew untap` (clean afterwards) all passed.
+
 Not tested: Linux (Homebrew on Linux), Intel macOS, upgrade from an older
-formula version (no earlier published formula exists), a fresh macOS install.
+formula version (no earlier published formula exists), a freshly installed
+macOS.
 
-## Publishing the tap (maintainer)
+## The tap (maintainer)
 
-1. Create the public repository `semihbugrasezer/homebrew-sigsieve` with
-   `Formula/sigsieve.rb` copied from this directory and a short README that
+1. The public repository `semihbugrasezer/homebrew-sigsieve` holds
+   `Formula/sigsieve.rb` (a copy of this directory's formula) and a README that
    repeats the experimental status and links to
    [docs/INSTALL.md](../../docs/INSTALL.md).
-2. Users then install with
+2. Users install with
    `brew install semihbugrasezer/sigsieve/sigsieve` (or `brew tap
    semihbugrasezer/sigsieve` first). Uninstall:
    `brew uninstall sigsieve && brew untap semihbugrasezer/sigsieve`.
-3. After publishing, run the same steps as above against the published tap
-   on a clean machine before announcing it.
+3. After each tap update, run the steps above against the published tap
+   from a clean state.
 
 ## Updating for a new release
 
