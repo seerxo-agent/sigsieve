@@ -39,7 +39,7 @@ results do not validate later executable revisions or untested devices/services.
 | Which keys the remote side can list | allowlisted only | allowlisted only |
 | Which keys can sign | allowlisted only | allowlisted only |
 | What an allowed key can sign | **anything** the remote host asks for | only SSH user-authentication requests for a session cryptographically bound to an allowed destination host key |
-| Where an allowed key can authenticate | **any** server that trusts it, while you are connected | only the allowed destination(s) |
+| Where an allowed key can authenticate | **any** server that trusts it, while you are connected | only the allowed destination host key(s), as any username, from any host on the forwarding path |
 | `session-bind@openssh.com` | rejected (not forwarded) | verified and recorded per connection (not forwarded) |
 | Works with servers lacking `publickey-hostbound` | yes | no; hostbound authentication is required for every signature |
 
@@ -54,20 +54,24 @@ implement OpenSSH's path or username constraints. Protocol references:
 [PROTOCOL.agent](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.agent)
 and [agent-restrict](https://www.openssh.org/agent-restrict.html).
 
-### Why destination binding holds against a malicious forwarding host
+### What destination binding does and does not prevent against a malicious forwarding host
 
 1. Every binding is verified: the destination's host key must have signed the
    session identifier, which is the server signature from the SSH key
-   exchange. Only a party that completed a key exchange with that server holds
-   such a signature.
+   exchange. A verified binding proves that the destination's host key signed
+   that session identifier. It does not prove that the session is current:
+   OpenSSH notes the agent cannot guarantee the freshness of these messages,
+   and a host that has seen a binding can replay it (F-22, F-47).
 2. A signature is produced only for a well-formed userauth request whose
    session identifier equals the latest (authentication) binding, so it is
    only valid inside that one SSH session with that one server.
 3. On forwarded connections the request must be `publickey-hostbound`, which
    embeds the server host key in the signed data; the destination server
-   rejects a request carrying another key. This stops an attacker who holds
-   the private host key of some permitted host (root on the forwarding host
-   always holds that host's key) from forging bindings for other sessions.
+   rejects a request carrying another key. An attacker who holds the private
+   host key of some permitted host (root on the forwarding host always holds
+   that host's key) can still forge a binding, but the signed request then
+   names that host key, and a destination that verifies hostbound requests
+   rejects it.
 4. Nothing may be bound after an authentication binding, and a sign request
    on a connection whose last binding is a forwarding hop is refused.
 
