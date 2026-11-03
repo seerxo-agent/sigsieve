@@ -50,7 +50,15 @@ fn bind_request(body: &[u8]) -> Vec<u8> {
 }
 
 fn serve_bound(upstream: &Path, key: &[u8], destinations: &[Fingerprint]) -> Harness {
-    let (policy, _) = Policy::from_fingerprints(&[Fingerprint::of_blob(key).to_string()]).unwrap();
+    serve_bound_keys(upstream, &[key], destinations)
+}
+
+fn serve_bound_keys(upstream: &Path, keys: &[&[u8]], destinations: &[Fingerprint]) -> Harness {
+    let fps: Vec<String> = keys
+        .iter()
+        .map(|k| Fingerprint::of_blob(k).to_string())
+        .collect();
+    let (policy, _) = Policy::from_fingerprints(&fps).unwrap();
     let dests: Vec<String> = destinations.iter().map(|d| d.to_string()).collect();
     let policy = policy.with_destinations(&dests).unwrap();
     start_proxy_with_policy(upstream, policy, test_limits(), Duration::from_secs(5))
@@ -260,4 +268,218 @@ fn upstream_replaced_under_an_open_connection_fails_closed_then_recovers() {
     assert!(is_sign_response(&roundtrip(&mut c, &sign)));
     assert_eq!(back.sign_requests().len(), 1);
     assert!(good.sign_requests().is_empty());
+}
+
+/// A synthetic ed25519 destination host that can bind any session id.
+struct Host(ed25519_dalek::SigningKey);
+
+impl Host {
+    fn new(seed: u8) -> Self {
+        Host(ed25519_dalek::SigningKey::from_bytes(&[seed; 32]))
+    }
+
+    fn blob(&self) -> Vec<u8> {
+        let mut b = Vec::new();
+        put_string(&mut b, b"ssh-ed25519");
+        put_string(&mut b, self.0.verifying_key().as_bytes());
+        b
+    }
+
+    fn bind(&self, sid: &[u8], forwarding: bool) -> Vec<u8> {
+        use ed25519_dalek::Signer;
+        let mut sig = Vec::new();
+        put_string(&mut sig, b"ssh-ed25519");
+        put_string(&mut sig, &self.0.sign(sid).to_bytes());
+        let mut body = Vec::new();
+        put_string(&mut body, &self.blob());
+        put_string(&mut body, sid);
+        put_string(&mut body, &sig);
+        body.push(forwarding as u8);
+        bind_request(&body)
+    }
+}
+
+/// To-be-signed hostbound userauth data, as OpenSSH builds it.
+fn userauth(sid: &[u8], user: &[u8], key: &[u8], pkalg: &[u8], hostkey: &[u8]) -> Vec<u8> {
+    let mut d = Vec::new();
+    put_string(&mut d, sid);
+    d.push(50); // SSH2_MSG_USERAUTH_REQUEST
+    put_string(&mut d, user);
+    put_string(&mut d, b"ssh-connection");
+    put_string(&mut d, b"publickey-hostbound-v00@openssh.com");
+    d.push(1);
+    put_string(&mut d, pkalg);
+    put_string(&mut d, key);
+    put_string(&mut d, hostkey);
+    d
+}
+
+fn key_alg(key: &[u8]) -> Vec<u8> {
+    protocol::Reader::new(key).string().unwrap().to_vec()
+}
+
+#[test]
+fn f47_user_name_variants_of_a_recorded_session_get_no_further_signature() {
+    // F-47: the recorded session's binds replayed on fresh connections, with
+    // the signed userauth re-encoded for other user names. Before the fix,
+    // each variant was a new duplicate-cache digest and was signed.
+    let s = session();
+    let mut r = protocol::Reader::new(&s.last);
+    let (hostkey, sid) = (r.string().unwrap().to_vec(), r.string().unwrap().to_vec());
+    let alg = key_alg(&s.key);
+    // The construction reproduces the recorded request byte for byte.
+    assert_eq!(userauth(&sid, b"testuser", &s.key, &alg, &hostkey), s.auth);
+    let up = MockAgent::start(three_identities(), Mode::Normal);
+    let p = serve_bound(&up.path, &s.key, &[host_of(&s.last)]);
+    let replay = |user: &[u8]| {
+        let mut c = connect(&p.path);
+        assert_eq!(roundtrip(&mut c, &bind_request(&s.first)), SUCCESS);
+        assert_eq!(roundtrip(&mut c, &bind_request(&s.last)), SUCCESS);
+        let data = userauth(&sid, user, &s.key, &alg, &hostkey);
+        is_sign_response(&roundtrip(&mut c, &sign_request(&s.key, &data, 0)))
+    };
+    assert!(replay(b"testuser"), "the first attempt is signed");
+    for user in [&b"u0"[..], b"u1", b"u2", b"u3", b"u4", b"root", b"testuser"] {
+        assert!(!replay(user), "variant {user:?} was signed");
+    }
+    // Same connection, after the signature: variants are refused too.
+    let mut c = connect(&p.path);
+    assert_eq!(roundtrip(&mut c, &bind_request(&s.first)), SUCCESS);
+    assert_eq!(roundtrip(&mut c, &bind_request(&s.last)), SUCCESS);
+    for flags in [0, 2, 4] {
+        let data = userauth(&sid, b"other", &s.key, &alg, &hostkey);
+        assert_eq!(
+            roundtrip(&mut c, &sign_request(&s.key, &data, flags)),
+            FAILURE
+        );
+    }
+    assert_eq!(up.sign_requests(), vec![sign_request(&s.key, &s.auth, 0)]);
+}
+
+#[test]
+fn rsa_algorithm_variants_share_one_signature_per_session() {
+    let host = Host::new(9);
+    let rsa = blob(RSA_LEGACY);
+    let up = MockAgent::start(three_identities(), Mode::Normal);
+    let p = serve_bound_keys(&up.path, &[&rsa], &[Fingerprint::of_blob(&host.blob())]);
+    let mut c = connect(&p.path);
+    assert_eq!(roundtrip(&mut c, &host.bind(b"session-1", false)), SUCCESS);
+    let sha256 = userauth(b"session-1", b"u", &rsa, b"rsa-sha2-256", &host.blob());
+    let sha512 = userauth(b"session-1", b"u", &rsa, b"rsa-sha2-512", &host.blob());
+    assert!(is_sign_response(&roundtrip(
+        &mut c,
+        &sign_request(&rsa, &sha256, 2)
+    )));
+    assert_eq!(roundtrip(&mut c, &sign_request(&rsa, &sha512, 4)), FAILURE);
+    assert_eq!(up.sign_requests().len(), 1);
+}
+
+#[test]
+fn legitimate_flows_keep_working_under_the_session_key_cap() {
+    let host = Host::new(9);
+    let (a, b) = (blob(ECDSA_CI), blob(ED_ADMIN));
+    let up = MockAgent::start(three_identities(), Mode::Normal);
+    let p = serve_bound_keys(&up.path, &[&a, &b], &[Fingerprint::of_blob(&host.blob())]);
+    let sign = |c: &mut std::os::unix::net::UnixStream, sid: &[u8], key: &[u8]| {
+        let data = userauth(sid, b"u", key, &key_alg(key), &host.blob());
+        is_sign_response(&roundtrip(c, &sign_request(key, &data, 0)))
+    };
+    // A request SigSieve denies does not use up the session's slot.
+    let mut c = connect(&p.path);
+    assert_eq!(roundtrip(&mut c, &host.bind(b"s1", false)), SUCCESS);
+    let wrong_host = userauth(b"s1", b"u", &a, &key_alg(&a), &Host::new(8).blob());
+    assert_eq!(
+        roundtrip(&mut c, &sign_request(&a, &wrong_host, 0)),
+        FAILURE
+    );
+    assert!(up.sign_requests().is_empty());
+    // publickey,publickey: two different keys in one session.
+    assert!(sign(&mut c, b"s1", &a));
+    assert!(sign(&mut c, b"s1", &b));
+    assert!(!sign(&mut c, b"s1", &a), "same key twice in one session");
+    // Reconnects: each new session signs once with the same key.
+    for sid in [&b"s2"[..], b"s3"] {
+        let mut c = connect(&p.path);
+        assert_eq!(roundtrip(&mut c, &host.bind(sid, false)), SUCCESS);
+        assert!(sign(&mut c, sid, &a));
+    }
+    assert_eq!(up.sign_requests().len(), 4);
+}
+
+#[test]
+fn failed_upstream_attempt_blocks_its_session_not_recovery() {
+    // A cancelled Touch ID prompt or locked agent answers FAILURE. OpenSSH
+    // then tries its next key in the same session, or the user connects
+    // again (a new session).
+    let host = Host::new(9);
+    let (key, next) = (blob(ECDSA_CI), blob(ED_ADMIN));
+    let dest = [Fingerprint::of_blob(&host.blob())];
+    let failing = MockAgent::start(three_identities(), Mode::Failure);
+    let dir = private_tempdir();
+    let link = dir.path().join("up.sock");
+    std::os::unix::fs::symlink(&failing.path, &link).unwrap();
+    let p = serve_bound_keys(&link, &[&key, &next], &dest);
+    let attempt = |sid: &[u8], user: &[u8], key: &[u8]| {
+        let mut c = connect(&p.path);
+        assert_eq!(roundtrip(&mut c, &host.bind(sid, false)), SUCCESS);
+        let data = userauth(sid, user, key, &key_alg(key), &host.blob());
+        is_sign_response(&roundtrip(&mut c, &sign_request(key, &data, 0)))
+    };
+    assert!(!attempt(b"s1", b"u", &key));
+    assert_eq!(failing.sign_requests().len(), 1);
+    // The same session and key, even re-encoded, gets no second prompt.
+    assert!(!attempt(b"s1", b"u", &key));
+    assert!(!attempt(b"s1", b"v", &key));
+    assert_eq!(failing.sign_requests().len(), 1);
+    // The next key in the same session still reaches the agent.
+    assert!(!attempt(b"s1", b"u", &next));
+    assert_eq!(failing.sign_requests().len(), 2);
+    // The agent works again: a new session is signed.
+    let working = MockAgent::start(three_identities(), Mode::Normal);
+    std::fs::remove_file(&link).unwrap();
+    std::os::unix::fs::symlink(&working.path, &link).unwrap();
+    assert!(attempt(b"s2", b"u", &key));
+    assert_eq!(working.sign_requests().len(), 1);
+}
+
+#[test]
+fn concurrent_user_name_variants_admit_exactly_one_signature() {
+    let host = Arc::new(Host::new(9));
+    let key = Arc::new(blob(ECDSA_CI));
+    let up = MockAgent::start(three_identities(), Mode::Normal);
+    let p = serve_bound_keys(&up.path, &[&key], &[Fingerprint::of_blob(&host.blob())]);
+    const N: usize = 12;
+    let barrier = Arc::new(Barrier::new(N));
+    let handles: Vec<_> = (0..N)
+        .map(|i| {
+            let (host, key, b, path) = (
+                Arc::clone(&host),
+                Arc::clone(&key),
+                Arc::clone(&barrier),
+                p.path.clone(),
+            );
+            thread::spawn(move || {
+                let mut c = connect(&path);
+                assert_eq!(roundtrip(&mut c, &host.bind(b"shared", false)), SUCCESS);
+                let user = format!("u{i}");
+                let data = userauth(
+                    b"shared",
+                    user.as_bytes(),
+                    &key,
+                    &key_alg(&key),
+                    &host.blob(),
+                );
+                let req = sign_request(&key, &data, 0);
+                b.wait();
+                is_sign_response(&roundtrip(&mut c, &req))
+            })
+        })
+        .collect();
+    let signed = handles
+        .into_iter()
+        .map(|h| h.join().unwrap())
+        .filter(|s| *s)
+        .count();
+    assert_eq!(signed, 1);
+    assert_eq!(up.sign_requests().len(), 1);
 }

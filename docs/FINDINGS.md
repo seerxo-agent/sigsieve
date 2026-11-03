@@ -37,7 +37,7 @@ fix (where one exists).
 | F-19 | LOW | Logging not rate-limited | Fixed: bounded details and suppression summaries; CLI privacy/flood regression |
 | F-20 | INFO | Only the socket's immediate parent directory is checked | Hardened: trusted ancestor ownership/modes; extended ACL and same-uid limits remain |
 | F-21 | LOW | Destination-binding mode: self-test did not prove binding is active | Fixed |
-| F-22 | LOW | Replayed authorized bind+sign sequences trigger upstream signing / Touch ID | Mitigated: shared signing budget + bounded duplicate-attempt cache; protocol-wide prevention not claimed |
+| F-22 | LOW | Replayed authorized bind+sign sequences trigger upstream signing / Touch ID | Mitigated: shared signing budget + bounded cache of one attempt per (session id, key); protocol-wide prevention not claimed |
 | F-23 | INFO | Duplicate bind does not upgrade a forwarding entry to an auth entry | Accepted (matches OpenSSH, fails closed) |
 | F-24 | MEDIUM (process) | Deployment-specific strings committed on the unpushed feature branch | Fixed: this release branch (`clean/core-candidate`) carries clean history only |
 | F-25 | LOW (supply chain) | RUSTSEC-2026-0387: `crypto-bigint` 0.5.5 timing variability (via p256/p384/p521 0.13). Not exploitable here (verification of public data only), but the audit gate failed | Fixed: upgraded to p256/p384/p521 0.14, ed25519-dalek 3, sha2 0.11 (`crypto-bigint` 0.7.6) |
@@ -62,7 +62,7 @@ fix (where one exists).
 | F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit could get a release that verified | Fixed after v0.1.0-alpha.3: `verify-release.sh` gates on the tag commit being on `refs/heads/main`; `release.yml` checks it too (defense in depth); tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
 | F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
 | F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, had no test that makes it refuse | **Closed: verified on Linux** (PR #44, workflow run 41455680046): two-user test 4/4 passed, foreign agent received no request; mutant without the check 1 passed / 3 failed on their own assertions; merged commit `e77632d` has the tested tree (`verify-f46-evidence.sh`). macOS cross-user not tested. Pathname checks before `connect` remain advisory |
-| F-47 | LOW | Duplicate-attempt cache (F-22) is bypassed by varying the userauth username: each variant of a replayed request is a new digest | **Open** (found 2026-11-03, internal review; reproduced against a recorded OpenSSH session: 5 username variants, 5 upstream signatures). Identical replays still give one signature; the signatures stay bound to the recorded session. Bounded only by the shared signing budget. Candidate fix (not implemented): a per-(session id, key) cap; legitimate in-session retries must be measured first. The original alpha.4 release notes claimed "at most one upstream signature per recorded session"; that was corrected by a [security erratum](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4) on 2026-11-03 |
+| F-47 | LOW | Duplicate-attempt cache (F-22) is bypassed by varying the userauth username: each variant of a replayed request is a new digest | **Mitigated on `main`, unreleased; independent review pending** (found 2026-11-03, internal review; reproduced against a recorded OpenSSH session: 5 username variants, 5 upstream signatures). Now one attempt per (session id, key) and window, the F-22 bound; legitimate OpenSSH flows measured first; RFC 4252 compatibility restriction [documented](SSH_COMPATIBILITY.md#one-signature-per-session-and-key). The original alpha.4 release notes claimed "at most one upstream signature per recorded session"; that was corrected by a [security erratum](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4) on 2026-11-03 |
 
 
 ### Review scope
@@ -623,18 +623,17 @@ destination can replay captured bind+sign sequences; each produces a useless
 signature over a stale session but may trigger the upstream agent's user
 presence prompt. A shared signing budget now limits attempts to a burst of 32
 and refill of 4/s; the upstream's own confirmation policy still applies.
-Destination-bound requests are hashed after full authorization (flags excluded)
-and attempts remembered across connections, including failed upstream attempts.
-Only 256 digests for up to 300 seconds are kept; there is no cached signature
-response. New sessions, eviction/expiry and a new instance can bypass duplicate
-suppression. This is bounded abuse reduction, not a replay-proof protocol.
-The username inside the userauth request is not checked (the destination
-binding does not cover it), so changing it gives a new digest that also
-passes; see F-47.
+After full authorization, a destination-bound attempt is remembered by its
+verified (session id, key) pair across connections, including failed
+upstream attempts, so other bytes of the request (user name, RSA algorithm)
+cannot buy another attempt (F-47; the flags were already excluded). Only 256 pairs for up to 300
+seconds are kept; there is no cached signature response. New sessions,
+eviction/expiry and a new instance can bypass this suppression. This is
+bounded abuse reduction, not a replay-proof protocol.
 Tests: `production_signing_budget_bounds_a_burst_without_changing_authorization`,
 `destination_bound_duplicates_do_not_reach_upstream_on_another_connection`.
 
-### F-47 — LOW — replay cache bypassed by username variation (open)
+### F-47 — LOW — replay cache bypassed by username variation (mitigated on `main`, unreleased)
 Found by an internal (AI-assisted) review on 2026-11-03, reproduced on the
 source of `main` `11cc3c1` and re-verified on `dc88af7`. `parse_userauth_request` (`src/binding.rs`) reads
 and ignores the username; the duplicate-attempt cache hashes the whole
@@ -660,8 +659,27 @@ legitimate OpenSSH flow signs twice with one key in one session (for example
 algorithm fallback) must be measured before choosing the cap;
 the cap needs its own expiry and size bound, and it is bypassed by eviction
 just like the current cache. It needs a regression test that fails without
-the cap and real-OpenSSH login tests before release. No code fix has been
-implemented; F-22 and F-47 remain open LOW limitations.
+the cap and real-OpenSSH login tests before release.
+
+Mitigation (unreleased; independent review pending, release gate S3 open):
+the duplicate-attempt cache is keyed on the verified (session id, key) pair
+instead of the request bytes, with the same window, size and failure
+handling (`src/proxy/resources.rs`). This also closes an RSA variant found
+while measuring: `rsa-sha2-256` and `rsa-sha2-512` requests for one session
+were two digests. A replayed session now yields at most one signature per
+key and window, which is the F-22 bound; F-22 stays open. Legitimate OpenSSH
+flows were measured first (2026-11-03, OpenSSH 10.5p1, macOS arm64): at most
+one signature per session and key, none refused. RFC 4252 permits more, so
+the cap is an intentional compatibility restriction, evaluated in
+[SSH_COMPATIBILITY.md](SSH_COMPATIBILITY.md#one-signature-per-session-and-key).
+Regression tests fail on the unfixed code (user-name, RSA-algorithm and
+concurrent variants signed) and pass with the cap:
+`f47_user_name_variants_of_a_recorded_session_get_no_further_signature`,
+`rsa_algorithm_variants_share_one_signature_per_session`,
+`concurrent_user_name_variants_admit_exactly_one_signature`,
+`failed_upstream_attempt_blocks_its_session_not_recovery`,
+`legitimate_flows_keep_working_under_the_session_key_cap`, and the
+real-OpenSSH replay in `concurrent_real_sessions_interruption_and_replay`.
 
 ### F-24 — process — sensitive strings
 A real host alias and a real-looking username were committed in two

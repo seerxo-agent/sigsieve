@@ -232,19 +232,20 @@ fn sign(req: &[u8], proxy: &Proxy, bindings: &Bindings) -> Vec<u8> {
         ));
         return protocol::failure();
     };
+    let mut bound = None;
     if let Some(destinations) = policy.destinations() {
-        if let Err(reason) = bindings.authorize(blob, data, destinations) {
-            log(format_args!(
-                "denied sign request for {} (destination binding): {reason}",
-                Fingerprint::of_blob(blob)
-            ));
-            return protocol::failure();
+        match bindings.authorize(blob, data, destinations) {
+            Ok(session_id) => bound = Some((session_id, blob)),
+            Err(reason) => {
+                log(format_args!(
+                    "denied sign request for {} (destination binding): {reason}",
+                    Fingerprint::of_blob(blob)
+                ));
+                return protocol::failure();
+            }
         }
     }
-    if !proxy
-        .resources
-        .signature(req, policy.destinations().is_some())
-    {
+    if !proxy.resources.signature(bound) {
         log(format_args!(
             "signing budget exhausted or duplicate destination-bound attempt; request refused"
         ));
