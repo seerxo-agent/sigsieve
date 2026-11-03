@@ -57,30 +57,48 @@ SSH host-key verification and recovery access.
 
 ## Required for a stable release (v1.0.0)
 
-The experimental label, and the "not independently audited" warning, stay
-until every gate below is **Met** on the exact release-candidate commit, or
-the maintainer has accepted a gate in writing with the user impact stated in
-the release notes. A gate is never met by an older run, by Linux evidence for
-a macOS claim, or by an internal (AI-assisted) review standing in for an
-external one. Status as of 2026-11-03, on `main` and `v0.1.0-alpha.4`:
+The experimental label stays until every gate below is **Met on the exact
+stable release-candidate commit**. Evidence from `v0.1.0-alpha.4` or any
+earlier commit is historical: it shows the gate can be met, but every
+relevant gate must be revalidated against the candidate. A gate is never met
+by Linux evidence for a macOS claim, or by an internal (AI-assisted) review
+standing in for an external one.
 
-| # | Gate | Status | Evidence / missing |
-|---|---|---|---|
-| S1 | No unresolved confirmed CRITICAL or HIGH finding in the supported threat model | Met (alpha.4) | [FINDINGS.md](FINDINGS.md); internal reviews only |
-| S2 | Every MEDIUM finding fixed, or accepted individually by the maintainer with user impact documented | Met (none open) | [FINDINGS.md](FINDINGS.md) |
-| S3 | A written stable decision for F-22 and F-47 (fix, or accepted limitation with its bound) | **Open** | F-47 candidate fix needs measurement of legitimate in-session retries first |
-| S4 | Platform evidence matches the support matrix claimed in the README and INSTALL | Partial | macOS arm64 and Linux x86_64 release binaries verified; macOS cross-user (F-46) **not verified**; Linux arm64 source-only |
-| S5 | Every Secretive configuration advertised as supported is validated on a real device for the candidate | **Open** | Last real-device run was on alpha.2; [SECRETIVE_INTEGRATION.md](SECRETIVE_INTEGRATION.md) |
-| S6 | CI and required security tests pass on the exact candidate (incl. MSRV, real OpenSSH, `F-46 status`) | Met (alpha.4) | Repeat for the candidate |
-| S7 | Release checksums, SBOMs, build provenance and SBOM attestations verified on macOS and Linux | Met (alpha.4) | `scripts/verify-release.sh`; repeat for the candidate |
-| S8 | Homebrew install, upgrade and uninstall tested against the **published** tap | **Open** | Formula tested in a local tap only ([packaging/homebrew](../packaging/homebrew/README.md)) |
-| S9 | Known limitations and recovery procedures documented for end users | Met | [LIMITATIONS.md](LIMITATIONS.md), [USAGE.md](USAGE.md) |
-| S10 | Vulnerability reporting works and security maintenance has an owner | Partial | [SECURITY.md](../SECURITY.md); private reporting setting to be confirmed by the maintainer |
-| S11 | An external technical review completed, its findings fixed or individually assessed | **Open** | [EXTERNAL_VALIDATION.md](EXTERNAL_VALIDATION.md); none done |
-| S12 | Release permissions isolated: no owner credential reachable by automation; tag and release creation owner-only | **Open** | Owner credential isolation not yet applied; tag rulesets in place |
+**Non-waivable gates** (no maintainer exception): S1, S6, S7, S9, S10 and
+S12, i.e. no open CRITICAL/HIGH finding, CI and security tests on the exact
+candidate, release integrity, user-facing limitations, working
+vulnerability reporting, and release-permission isolation. Only S2, S3, S4,
+S5, S8 and S11 may be met by an explicit, written maintainer decision that
+names the gate, the residual risk and the user impact, and is repeated in
+the release notes.
 
-A stable release candidate (`v1.0.0-rc.N`) may be tagged once S1–S3, S6, S7
-and S9 are met; it remains a pre-release. `v1.0.0` itself needs all gates.
+**External review is not an audit.** S11 is an external *technical review*.
+It does not make SigSieve independently audited. The "not independently
+audited" statement stays in the README, INSTALL and release notes, stable
+or not, until a genuine independent security audit has been completed and
+published.
+
+Status as of 2026-11-03 (historical evidence from `v0.1.0-alpha.4` where
+noted; none of it counts for the candidate until repeated):
+
+| # | Gate | Waivable | Status | Evidence / missing |
+|---|---|---|---|---|
+| S1 | No unresolved confirmed CRITICAL or HIGH finding in the supported threat model | No | Met on alpha.4 (historical) | [FINDINGS.md](FINDINGS.md); internal reviews only |
+| S2 | Every MEDIUM finding fixed, or accepted individually with user impact documented | Yes | Met on alpha.4 (none open) | [FINDINGS.md](FINDINGS.md) |
+| S3 | A written stable decision for F-22 and F-47: a fix, or an accepted limitation with its bound; no claim of protocol-level replay prevention | Yes (explicit risk acceptance) | **Open** | F-47 candidate fix needs measurement of legitimate in-session retries first |
+| S4 | Platform evidence matches the support matrix claimed in the README and INSTALL | Yes (narrow the claimed matrix) | Partial | macOS arm64 and Linux x86_64 release binaries verified on alpha.4; macOS cross-user (F-46) **not verified**; Linux arm64 source-only |
+| S5 | Every Secretive configuration advertised as supported is validated on a real device for the candidate | Yes (do not advertise it) | **Open** | Last real-device run was on alpha.2; [SECRETIVE_INTEGRATION.md](SECRETIVE_INTEGRATION.md) |
+| S6 | CI and required security tests pass on the exact candidate (incl. MSRV, real OpenSSH, `F-46 status`) | No | Met on alpha.4 (historical) | Repeat on the candidate |
+| S7 | Release checksums, SBOMs, build provenance and SBOM attestations verified on macOS and Linux | No | Met on alpha.4 (historical) | `scripts/verify-release.sh`; repeat on the candidate |
+| S8 | Homebrew install, upgrade and uninstall tested against the **published** tap | Yes (do not advertise Homebrew) | **Open** | Formula tested in a local tap only ([packaging/homebrew](../packaging/homebrew/README.md)) |
+| S9 | Known limitations and recovery procedures documented for end users | No | Met (review for the candidate) | [LIMITATIONS.md](LIMITATIONS.md), [USAGE.md](USAGE.md) |
+| S10 | Vulnerability reporting works and security maintenance has an owner | No | Partial | [SECURITY.md](../SECURITY.md); private reporting setting to be confirmed by the maintainer |
+| S11 | An external technical review completed, its findings fixed or individually assessed | Yes (state that none happened) | **Open** | [EXTERNAL_VALIDATION.md](EXTERNAL_VALIDATION.md); none done |
+| S12 | Release permissions isolated: no owner credential reachable by automation; tag and release creation owner-only | No | **Open** | Owner credential isolation not yet applied; tag rulesets in place |
+
+A stable release candidate (`v1.0.0-rc.N`) may be tagged once S1, S3, S6,
+S7 and S9 are met on that commit; it remains a pre-release. `v1.0.0`
+itself needs every gate met or, for waivable gates only, a written decision.
 
 ## Candidate record: v0.1.0-alpha.4
 
