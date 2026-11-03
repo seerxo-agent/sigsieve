@@ -62,7 +62,7 @@ fix (where one exists).
 | F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit could get a release that verified | Fixed after v0.1.0-alpha.3: `verify-release.sh` gates on the tag commit being on `refs/heads/main`; `release.yml` checks it too (defense in depth); tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
 | F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
 | F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, had no test that makes it refuse | **Closed: verified on Linux** (PR #44, workflow run 41455680046): two-user test 4/4 passed, foreign agent received no request; mutant without the check 1 passed / 3 failed on their own assertions; merged commit `e77632d` has the tested tree (`verify-f46-evidence.sh`). macOS cross-user not tested. Pathname checks before `connect` remain advisory |
-| F-47 | LOW | Duplicate-attempt cache (F-22) is bypassed by varying the userauth username: each variant of a replayed request is a new digest | **Open** (found 2026-11-03, internal review; reproduced against a recorded OpenSSH session: 5 username variants, 5 upstream signatures). Bounded only by the shared signing budget. Planned fix: per-(session id, key) cap with a red/green test (Alpha.5). The alpha.4 release notes' "at most one upstream signature per recorded session" overstates F-22 |
+| F-47 | LOW | Duplicate-attempt cache (F-22) is bypassed by varying the userauth username: each variant of a replayed request is a new digest | **Open** (found 2026-11-03, internal review; reproduced against a recorded OpenSSH session: 5 username variants, 5 upstream signatures). Identical replays still give one signature; the signatures stay bound to the recorded session. Bounded only by the shared signing budget. Candidate fix (not implemented): per-(session id, key) cap that still allows legitimate in-session retries. The alpha.4 release notes' "at most one upstream signature per recorded session" overstates F-22 |
 
 
 ### Review scope
@@ -640,16 +640,24 @@ source of `main` 11cc3c1. `parse_userauth_request` (`src/binding.rs`) reads
 and ignores the username; the duplicate-attempt cache hashes the whole
 request. A party that holds an authorized session's binds and userauth
 request can replay them on new connections with a different username each
-time: in a probe with the committed recorded session, five usernames gave
-five signatures from the upstream agent (each a possible user-presence
-prompt). The signatures are over the original session identifier, so they
-do not authenticate a new session; the impact is the same as F-22 (extra
+time. In a probe on the source of `main` `dc88af7` with the committed
+recorded session (each replay on a new connection with both binds; mock
+upstream): five identical replays gave one signature (the cache works),
+five username variants gave five signatures (each a possible user-presence
+prompt), every forwarded request carried the recorded session identifier,
+and a variant without the binds was refused. The signatures are over the
+original session identifier; this does not demonstrate authentication to a
+different session; the impact is the same as F-22 (extra
 upstream signing and prompts), now limited only by the shared signing budget
 (burst 32, refill 4/s), not by the cache. The alpha.4 release notes state
 "at most one upstream signature per recorded session"; that is not correct
-for this variant. Planned fix (Alpha.5): cap signatures per (session id,
-key) independently of the request bytes, with a regression test that fails
-without the cap. No fix in this change.
+for this variant. Not measured: the production signing budget's effect and
+real-agent prompts. Candidate fix (not implemented): cap signatures per
+(session id, key) independently of the request bytes. It must allow the
+legitimate retries OpenSSH makes in one session (for example an RSA key
+retried with another `rsa-sha2-*` algorithm), so a cap of 1 is too strict;
+it needs a regression test that fails without the cap and real-OpenSSH
+login tests before release. No fix in this change.
 
 ### F-24 — process — sensitive strings
 A real host alias and a real-looking username were committed in two
