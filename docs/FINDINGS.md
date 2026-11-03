@@ -62,6 +62,7 @@ fix (where one exists).
 | F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit could get a release that verified | Fixed after v0.1.0-alpha.3: `verify-release.sh` gates on the tag commit being on `refs/heads/main`; `release.yml` checks it too (defense in depth); tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
 | F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
 | F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, had no test that makes it refuse | **Closed: verified on Linux** (PR #44, workflow run 41455680046): two-user test 4/4 passed, foreign agent received no request; mutant without the check 1 passed / 3 failed on their own assertions; merged commit `e77632d` has the tested tree (`verify-f46-evidence.sh`). macOS cross-user not tested. Pathname checks before `connect` remain advisory |
+| F-47 | LOW | Duplicate-attempt cache (F-22) is bypassed by varying the userauth username: each variant of a replayed request is a new digest | **Open** (found 2026-11-03, internal review; reproduced against a recorded OpenSSH session: 5 username variants, 5 upstream signatures). Bounded only by the shared signing budget. Planned fix: per-(session id, key) cap with a red/green test (Alpha.5). The alpha.4 release notes' "at most one upstream signature per recorded session" overstates F-22 |
 
 
 ### Review scope
@@ -627,8 +628,28 @@ and attempts remembered across connections, including failed upstream attempts.
 Only 256 digests for up to 300 seconds are kept; there is no cached signature
 response. New sessions, eviction/expiry and a new instance can bypass duplicate
 suppression. This is bounded abuse reduction, not a replay-proof protocol.
+The username inside the userauth request is not checked (the destination
+binding does not cover it), so changing it gives a new digest that also
+passes; see F-47.
 Tests: `production_signing_budget_bounds_a_burst_without_changing_authorization`,
 `destination_bound_duplicates_do_not_reach_upstream_on_another_connection`.
+
+### F-47 — LOW — replay cache bypassed by username variation (open)
+Found by an internal (AI-assisted) review on 2026-11-03 and reproduced on the
+source of `main` 11cc3c1. `parse_userauth_request` (`src/binding.rs`) reads
+and ignores the username; the duplicate-attempt cache hashes the whole
+request. A party that holds an authorized session's binds and userauth
+request can replay them on new connections with a different username each
+time: in a probe with the committed recorded session, five usernames gave
+five signatures from the upstream agent (each a possible user-presence
+prompt). The signatures are over the original session identifier, so they
+do not authenticate a new session; the impact is the same as F-22 (extra
+upstream signing and prompts), now limited only by the shared signing budget
+(burst 32, refill 4/s), not by the cache. The alpha.4 release notes state
+"at most one upstream signature per recorded session"; that is not correct
+for this variant. Planned fix (Alpha.5): cap signatures per (session id,
+key) independently of the request bytes, with a regression test that fails
+without the cap. No fix in this change.
 
 ### F-24 — process — sensitive strings
 A real host alias and a real-looking username were committed in two
