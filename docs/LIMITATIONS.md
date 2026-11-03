@@ -37,8 +37,10 @@ behind wording that suggests otherwise.
    Signing attempts have a shared budget (32 initially, refilling at 4/s).
    Destination-bound attempts also suppress exact duplicates across clients:
    at most 256 SHA256 digests for up to 300 seconds. This is abuse reduction,
-   not protocol-wide replay prevention: new sessions, cache eviction/expiry
-   and new instances can trigger further prompts. Failed attempts are remembered;
+   not protocol-wide replay prevention: new sessions, cache eviction/expiry,
+   new instances, and a varied request for the same recorded session (for
+   example a different username, [F-47](FINDINGS.md)) can trigger further
+   prompts. Failed attempts are remembered;
    no signature response is cached and no failed request is automatically retried.
 8. **Logging** emits at most 16 detail lines per second per process, plus a
    suppression summary on the next window or shutdown. Payloads, session IDs
