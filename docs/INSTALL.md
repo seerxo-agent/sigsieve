@@ -30,9 +30,27 @@ Linux arm64 is tested in CI but has no prebuilt archive. Intel macOS and
 Windows are not validated. OpenSSH 8.4+ is required; proxy-jump/relay sessions
 require 8.7+.
 
-Homebrew and crates.io installs are **not available**. An unpublished draft
-formula lives in [`packaging/homebrew`](../packaging/homebrew/README.md) for
-maintainer review only.
+A crates.io package is **not available**.
+
+### Homebrew (builds from source)
+
+```sh
+brew install semihbugrasezer/sigsieve/sigsieve
+sigsieve --version   # sigsieve 0.1.0-alpha.4
+```
+
+The maintainer-owned tap
+[`semihbugrasezer/homebrew-sigsieve`](https://github.com/semihbugrasezer/homebrew-sigsieve)
+builds tag `v0.1.0-alpha.4` (commit `5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`)
+from GitHub's source archive with `cargo install --locked`. Homebrew verifies
+the archive's SHA-256, which was checked against the tag's `git archive`; it
+does **not** verify GitHub build provenance. If you need provenance, use the
+attested archives below. It installs only the binary (no service, no
+configuration, no change to `~/.ssh` or your agent). Tested on macOS Apple
+Silicon (install, `brew test`, uninstall, reinstall); Linux Homebrew and Intel
+macOS are not tested. Uninstall:
+`brew uninstall sigsieve && brew untap semihbugrasezer/sigsieve`. Details:
+[`packaging/homebrew`](../packaging/homebrew/README.md).
 
 ## Verify and install a published archive
 

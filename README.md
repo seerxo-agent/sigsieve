@@ -57,7 +57,15 @@ Download the [**v0.1.0-alpha.4 experimental release**](https://github.com/semihb
 | Linux ARM64 | CI-tested; build from source |
 | Intel macOS / Windows | Not validated |
 
-The checkout pins Rust **1.99.1** for builds; the declared minimum supported Rust version is **1.88**. OpenSSH **8.4+** is required, with additional requirements for proxy hops and destination binding. There is **no published Homebrew formula or crates.io package**; macOS binaries are **not notarized**.
+**Homebrew (macOS, builds from source):**
+
+```sh
+brew install semihbugrasezer/sigsieve/sigsieve
+```
+
+The [tap](https://github.com/semihbugrasezer/homebrew-sigsieve) builds the same immutable `v0.1.0-alpha.4` tag from source and checks the source archive's SHA-256. That checksum is **not** GitHub build provenance; use the prebuilt archives and the installation guide if you need provenance verification. Tested on macOS Apple Silicon only. Uninstall with `brew uninstall sigsieve && brew untap semihbugrasezer/sigsieve`.
+
+The checkout pins Rust **1.99.1** for builds; the declared minimum supported Rust version is **1.88**. OpenSSH **8.4+** is required, with additional requirements for proxy hops and destination binding. There is **no crates.io package**, and macOS binaries are **not notarized**.
 
 For a fully isolated demonstration without your own agent or remote hosts, start with the [five-minute synthetic-key quickstart](docs/QUICKSTART.md).
 
