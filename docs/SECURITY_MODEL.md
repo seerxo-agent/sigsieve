@@ -29,8 +29,10 @@ The current [`v0.1.0-alpha.4`](https://github.com/semihbugrasezer/sigsieve/relea
 release (commit `5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`) does change
 runtime behavior. Its automated evidence is described in the
 [release notes](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4);
-Secretive/Touch ID behavior on alpha.4 has not been reverified. These
-results do not validate later executable revisions or untested devices/services.
+Secretive was checked with alpha.4 on 2026-11-03 for one configuration
+only (see [SECRETIVE_INTEGRATION.md](SECRETIVE_INTEGRATION.md#recorded-real-device-results)).
+These results do not validate later executable revisions or untested
+devices/services.
 
 ## Two modes
 

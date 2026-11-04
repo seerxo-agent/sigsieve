@@ -13,7 +13,7 @@ Your existing agent—such as [Secretive](https://github.com/maxgoedjen/secretiv
 **Free and MIT-licensed. No account, telemetry, hosted service, or mandatory cloud dependency.**
 
 > [!WARNING]
-> **Experimental security software — not independently audited.** The current pre-release is [v0.1.0-alpha.4](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4). Automated security tests do not establish production-grade security assurance. Real Secretive signing and destination binding were observed on an earlier **alpha.2** candidate, but **Secretive/Touch ID behavior has not been reverified for alpha.4**. Read the [security model](docs/SECURITY_MODEL.md) and [known limitations](docs/LIMITATIONS.md) before using agent forwarding, and retain an ordinary SSH access path.
+> **Experimental security software — not independently audited.** The current pre-release is [v0.1.0-alpha.4](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4). Automated security tests do not establish production-grade security assurance. Real Secretive filtering, signing and destination binding were checked with alpha.4 on 2026-11-03 for **one** configuration only (one P-256 test key, Secretive 4.0.0, macOS 27.2 arm64, localhost test servers; Touch ID prompts not attributed per step); other devices, Secretive versions and real services are not covered ([details](docs/SECRETIVE_INTEGRATION.md#recorded-real-device-results)). Read the [security model](docs/SECURITY_MODEL.md) and [known limitations](docs/LIMITATIONS.md) before using agent forwarding, and retain an ordinary SSH access path.
 
 ## Why SigSieve?
 

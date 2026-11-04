@@ -62,7 +62,7 @@ fix (where one exists).
 | F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit could get a release that verified | Fixed after v0.1.0-alpha.3: `verify-release.sh` gates on the tag commit being on `refs/heads/main`; `release.yml` checks it too (defense in depth); tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
 | F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
 | F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, had no test that makes it refuse | **Closed: verified on Linux** (PR #44, workflow run 41455680046): two-user test 4/4 passed, foreign agent received no request; mutant without the check 1 passed / 3 failed on their own assertions; merged commit `e77632d` has the tested tree (`verify-f46-evidence.sh`). macOS cross-user not tested. Pathname checks before `connect` remain advisory |
-| F-47 | LOW | Duplicate-attempt cache (F-22) is bypassed by varying the userauth username: each variant of a replayed request is a new digest | **Fixed on `main` (PR #57, `1e2523c`), not released; independent review pending** (found 2026-11-03, internal review; reproduced against a recorded OpenSSH session: 5 username variants, 5 upstream signatures). Now one attempt per (session id, key) and window, the F-22 bound; legitimate OpenSSH flows measured first; RFC 4252 compatibility restriction [documented](SSH_COMPATIBILITY.md#one-signature-per-session-and-key). The original alpha.4 release notes claimed "at most one upstream signature per recorded session"; that was corrected by a [security erratum](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4) on 2026-11-03 |
+| F-47 | LOW | Duplicate-attempt cache (F-22) is bypassed by varying the userauth username: each variant of a replayed request is a new digest | **Fixed on `main` (PR #57, `1e2523c`), not released; not externally reviewed (S11 waived)** (found 2026-11-03, internal review; reproduced against a recorded OpenSSH session: 5 username variants, 5 upstream signatures). Now one attempt per (session id, key) and window, the F-22 bound; legitimate OpenSSH flows measured first; RFC 4252 compatibility restriction [documented](SSH_COMPATIBILITY.md#one-signature-per-session-and-key). The original alpha.4 release notes claimed "at most one upstream signature per recorded session"; that was corrected by a [security erratum](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4) on 2026-11-03 |
 
 
 ### Review scope
@@ -662,8 +662,9 @@ just like the current cache. It needs a regression test that fails without
 the cap and real-OpenSSH login tests before release.
 
 Fix (merged in PR #57, `main` `1e2523c`, 2026-11-04; not in any release;
-F-46 verified, run 41836309445; merged by owner decision before the
-independent review, which is still pending; release gate S3 open):
+F-46 verified, run 41836309445; merged by owner decision without an
+external review; no external review is planned before v1.0.0, release gate
+S11 waived on 2026-11-05):
 the duplicate-attempt cache is keyed on the verified (session id, key) pair
 instead of the request bytes, with the same window, size and failure
 handling (`src/proxy/resources.rs`). This also closes an RSA variant found

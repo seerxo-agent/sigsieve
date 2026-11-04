@@ -2,6 +2,8 @@
 
 Status: **not started**. No external expert or trial participants have been
 selected. This is a protocol and reporting template, not completed validation.
+Maintainer decision 2026-11-05: no external technical review before v1.0.0
+(release gate S11 waived; stated in the release notes).
 
 Evaluate the published experimental `v0.1.0-alpha.2`, release source
 `fc7484be0371242f517b6628b0f7dcc3a9a12a29`. Record the documentation revision
