@@ -142,7 +142,11 @@ behind wording that suggests otherwise.
   one-hour-per-target fuzz campaign (no reported crash or sanitizer failure).
   This does not prove the absence of vulnerabilities; longer campaigns and
   deeper coverage remain outstanding. See [exact-SHA results](TESTING.md#release-candidate-evidence-2026-10-28).
-- No independent external security review.
+- No independent external security review or audit (release gate S11
+  waived by the maintainer on 2026-11-05).
+- The upstream peer-uid check (F-46) is verified by a cross-user test on
+  Linux only. **No macOS cross-user test** has been run; Linux results are
+  not macOS evidence.
 - Development automation (AI coding agents) runs under the maintainer's own
   macOS user. It acts on GitHub only through an account without write
   access, and merges, tags and releases are done by the maintainer, but it
