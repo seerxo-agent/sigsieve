@@ -692,7 +692,7 @@ dependencies = [
 
 [[package]]
 name = "sigsieve"
-version = "0.1.0-alpha.4"
+version = "1.0.0-rc.1"
 dependencies = [
  "base64",
  "clap",
