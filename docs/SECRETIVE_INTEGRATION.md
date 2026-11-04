@@ -40,6 +40,12 @@ authentication caching. SigSieve does not change this:
   contacted, so it never triggers a prompt and is never signed.
 - A request for an allowed key is passed to Secretive unchanged. It may or
   may not prompt, depending on Secretive.
+- With destination binding, each SSH connection gets **one** signing attempt
+  per key ([F-47](FINDINGS.md)). If you cancel or fail the Touch ID prompt,
+  SigSieve refuses another attempt with that key on the same connection, so
+  a replaying host cannot raise repeated prompts. OpenSSH then tries your
+  next key, if any; to retry the same key, run `ssh` again (a new
+  connection). Normal OpenSSH logins never need a second attempt.
 - `doctor` and `connect` self-tests list keys and send a sign request for a
   *synthetic* key that SigSieve rejects. With destination binding they also
   probe an unbound allowed-key request, which SigSieve must reject locally.
