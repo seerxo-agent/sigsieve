@@ -140,6 +140,11 @@ behind wording that suggests otherwise.
   This does not prove the absence of vulnerabilities; longer campaigns and
   deeper coverage remain outstanding. See [exact-SHA results](TESTING.md#release-candidate-evidence-2026-10-28).
 - No independent external security review.
+- Development automation (AI coding agents) runs under the maintainer's own
+  macOS user. It acts on GitHub only through an account without write
+  access, and merges, tags and releases are done by the maintainer, but it
+  is not isolated from the maintainer's local credentials (release gate S12
+  separates permissions, it does not claim credential isolation).
 - Real Secretive testing is limited to owner-assisted observations, including
   signing and destination binding against two localhost test servers on
   `fc7484b`. No interoperability assurance for other devices, services,
