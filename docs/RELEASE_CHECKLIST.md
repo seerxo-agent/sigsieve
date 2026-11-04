@@ -67,7 +67,7 @@ standing in for an external one.
 **Non-waivable gates** (no maintainer exception): S1, S6, S7, S9, S10 and
 S12, i.e. no open CRITICAL/HIGH finding, CI and security tests on the exact
 candidate, release integrity, user-facing limitations, working
-vulnerability reporting, and release-permission isolation. Only S2, S3, S4,
+vulnerability reporting, and release-permission separation. Only S2, S3, S4,
 S5, S8 and S11 may be met by an explicit, written maintainer decision that
 names the gate, the residual risk and the user impact, and is repeated in
 the release notes.
@@ -94,7 +94,7 @@ noted; none of it counts for the candidate until repeated):
 | S9 | Known limitations and recovery procedures documented for end users | No | Met (review for the candidate) | [LIMITATIONS.md](LIMITATIONS.md), [USAGE.md](USAGE.md) |
 | S10 | Vulnerability reporting works and security maintenance has an owner | No | Partial | [SECURITY.md](../SECURITY.md); GitHub private vulnerability reporting enabled (repository API, 2026-11-03); no end-to-end test report yet |
 | S11 | An external technical review completed, its findings fixed or individually assessed | Yes (state that none happened) | **Open** | [EXTERNAL_VALIDATION.md](EXTERNAL_VALIDATION.md); none done |
-| S12 | Release permissions isolated: no owner credential reachable by automation; tag and release creation owner-only | No | **Open** | Tag rulesets in place; the automation account has no push, maintain or admin rights (2026-11-03). Owner credential isolation on the maintainer's machine not yet applied or verified. Maintainer decision 2026-11-03: owner tokens are not revoked GitHub-side, so copies taken earlier stay valid; how S12 closes without revocation is undecided |
+| S12 | Release permissions separated: automation acts only through an account with no write, maintain or admin role on the repository (pull requests from its own fork); merges, `v*` tags and releases are made by the maintainer; `v*` tags are owner-created only and immutable; published releases are immutable. Local credential isolation is **not** claimed; this residual risk is stated in [LIMITATIONS.md](LIMITATIONS.md#verification-gaps-see-release_checklistmd) and the release notes | No | Partial | Redefined by maintainer decision 2026-11-04 (previously "no owner credential reachable by automation", which the maintainer chose not to implement: no separate macOS user, owner tokens not revoked). Verified 2026-11-04 as the automation account: no admin/maintain/push on the repository; rulesets `main protection`, `release tags: create`, `release tags: immutable` active. Bypass lists and immutable releases are visible only to an admin: maintainer to confirm on the candidate |
 
 A stable release candidate (`v1.0.0-rc.N`) may be tagged once S1, S3, S6,
 S7 and S9 are met on that commit; it remains a pre-release. `v1.0.0`
