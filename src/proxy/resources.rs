@@ -98,10 +98,13 @@ impl Resources {
         self.lock().connections.take(Instant::now())
     }
 
-    pub(super) fn signature(&self, request: &[u8], destination_bound: bool) -> bool {
-        // Exclude RSA flags: changing the signature algorithm must not cause another prompt.
-        let digest =
-            destination_bound.then(|| Sha256::digest(&request[..request.len() - 4]).into());
+    /// Admit one signature. A destination-bound attempt is remembered by its
+    /// verified (session id, key) pair, so a recorded session cannot obtain
+    /// another signature for the same key by changing the user name or the
+    /// RSA algorithm (F-47); the flags were already excluded. Legitimate OpenSSH clients sign at
+    /// most once per session and key.
+    pub(super) fn signature(&self, bound: Option<(&[u8], &[u8])>) -> bool {
+        let digest = bound.map(|(session_id, key)| session_key_digest(session_id, key));
         self.signature_at(digest, Instant::now())
     }
 
@@ -163,6 +166,16 @@ impl Resources {
             state = next;
         }
     }
+}
+
+/// Length-prefixed, so no two distinct pairs share an encoding.
+fn session_key_digest(session_id: &[u8], key: &[u8]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    for part in [session_id, key] {
+        h.update((part.len() as u64).to_be_bytes());
+        h.update(part);
+    }
+    h.finalize().into()
 }
 
 pub(super) struct Permit<'a>(&'a Resources);
@@ -259,14 +272,76 @@ mod tests {
             now + DUPLICATE_WINDOW
         ));
         assert!(resources.signature_at(None, now + DUPLICATE_WINDOW));
-        let resources = Resources::new(&limits);
-        let mut request = b"synthetic-authorized-request".to_vec();
-        request.extend_from_slice(&2u32.to_be_bytes());
-        assert!(resources.signature(&request, true));
-        let last = request.len() - 1;
-        request[last] = 4;
-        assert!(!resources.signature(&request, true));
         assert!(resources.signature_at(None, now + DUPLICATE_WINDOW));
+    }
+
+    #[test]
+    fn one_destination_bound_signature_per_session_and_key() {
+        let limits = Limits {
+            max_clients: 1000,
+            signing_rate: 1000,
+            ..Limits::default()
+        };
+        let resources = Resources::new(&limits);
+        assert!(resources.signature(Some((b"s1", b"key-a"))));
+        // Same session and key: refused, whatever else the request said.
+        assert!(!resources.signature(Some((b"s1", b"key-a"))));
+        // Another key in the same session (publickey,publickey), and the same
+        // key in another session (reconnect), are each admitted once.
+        assert!(resources.signature(Some((b"s1", b"key-b"))));
+        assert!(resources.signature(Some((b"s2", b"key-a"))));
+        assert!(!resources.signature(Some((b"s2", b"key-a"))));
+        // Length prefixes: moving bytes between the fields is a new pair.
+        assert!(resources.signature(Some((b"s1k", b"ey-a"))));
+        assert_ne!(
+            session_key_digest(b"ab", b"c"),
+            session_key_digest(b"a", b"bc")
+        );
+        // Unbound signing is not deduplicated.
+        assert!(resources.signature(None));
+        assert!(resources.signature(None));
+    }
+
+    #[test]
+    fn refused_for_budget_is_not_remembered() {
+        let resources = Resources::new(&Limits {
+            max_clients: 1,
+            signing_rate: 1,
+            ..Limits::default()
+        });
+        let now = Instant::now(); // after the budget's own start
+        let d = Some(session_key_digest(b"s1", b"key-a"));
+        let other = Some(session_key_digest(b"s1", b"key-b"));
+        assert!(resources.signature_at(other, now));
+        // Budget empty: refused, and the pair is not consumed by the refusal.
+        assert!(!resources.signature_at(d, now));
+        assert!(resources.signature_at(d, now + Duration::from_secs(1)));
+        assert!(!resources.signature_at(d, now + Duration::from_secs(2)));
+    }
+
+    #[test]
+    fn concurrent_attempts_for_one_session_and_key_admit_exactly_one() {
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+        let resources = Arc::new(Resources::new(&Limits {
+            max_clients: 1000,
+            signing_rate: 1000,
+            ..Limits::default()
+        }));
+        let barrier = Arc::new(Barrier::new(16));
+        let admitted: usize = (0..16)
+            .map(|_| {
+                let (r, b) = (Arc::clone(&resources), Arc::clone(&barrier));
+                thread::spawn(move || {
+                    b.wait();
+                    r.signature(Some((b"s1", b"key-a")))
+                })
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|h| h.join().unwrap() as usize)
+            .sum();
+        assert_eq!(admitted, 1);
     }
 
     #[test]

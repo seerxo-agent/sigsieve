@@ -61,7 +61,8 @@ and [agent-restrict](https://www.openssh.org/agent-restrict.html).
    exchange. A verified binding proves that the destination's host key signed
    that session identifier. It does not prove that the session is current:
    OpenSSH notes the agent cannot guarantee the freshness of these messages,
-   and a host that has seen a binding can replay it (F-22, F-47).
+   and a host that has seen a binding can replay it (F-22; one attempt per
+   session and key, F-47).
 2. A signature is produced only for a well-formed userauth request whose
    session identifier equals the latest (authentication) binding, so it is
    only valid inside that one SSH session with that one server.

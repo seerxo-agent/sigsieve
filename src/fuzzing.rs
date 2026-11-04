@@ -80,7 +80,7 @@ fn bound_authorization(data: &[u8]) -> Option<Result<(), Denied>> {
     let _ = b.bind(last);
     let dest = Reader::new(last).string().ok()?;
     let allowed = [Fingerprint::of_blob(dest)].into_iter().collect();
-    let result = b.authorize(key, auth, &allowed);
+    let result = b.authorize(key, auth, &allowed).map(|_| ());
     if result.is_ok() {
         assert!(b.authorize(key, auth, &BTreeSet::new()).is_err());
         let mut trailing = auth.to_vec();

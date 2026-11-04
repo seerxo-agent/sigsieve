@@ -165,13 +165,14 @@ impl Bindings {
     }
 
     /// Decide whether `key_blob` may sign `data` on this connection, given the
-    /// allowed destination host keys.
+    /// allowed destination host keys. Returns the verified session id the
+    /// request authenticates.
     pub fn authorize(
         &self,
         key_blob: &[u8],
         data: &[u8],
         destinations: &BTreeSet<Fingerprint>,
-    ) -> Result<(), Denied> {
+    ) -> Result<&[u8], Denied> {
         if self.attempted && self.list.is_empty() {
             return Err(Denied::BindFailedEarlier);
         }
@@ -192,7 +193,7 @@ impl Bindings {
         if !destinations.contains(&dest) {
             return Err(Denied::DestinationNotAllowed(dest));
         }
-        Ok(())
+        Ok(&last.session_id)
     }
 
     pub fn len(&self) -> usize {
@@ -721,8 +722,14 @@ pub(crate) mod tests {
         let mut b = Bindings::default();
         b.bind(&dest.bind_body(b"s1", false)).unwrap();
         let auth = |alg: &[u8]| userauth(b"s1", &rsa, alg, Some(&dest.public_blob()));
-        assert_eq!(b.authorize(&rsa, &auth(b"rsa-sha2-256"), &allowed), Ok(()));
-        assert_eq!(b.authorize(&rsa, &auth(b"rsa-sha2-512"), &allowed), Ok(()));
+        assert_eq!(
+            b.authorize(&rsa, &auth(b"rsa-sha2-256"), &allowed),
+            Ok(&b"s1"[..])
+        );
+        assert_eq!(
+            b.authorize(&rsa, &auth(b"rsa-sha2-512"), &allowed),
+            Ok(&b"s1"[..])
+        );
         assert_eq!(
             b.authorize(&rsa, &auth(b"ssh-rsa"), &allowed),
             Err(Denied::NotUserauth)
@@ -793,7 +800,7 @@ pub(crate) mod tests {
         // Neither attempt changed the bindings or what may be signed.
         assert_eq!(b.len(), 2);
         let s2 = userauth(b"s2", &key, alg, Some(&dest.public_blob()));
-        assert_eq!(b.authorize(&key, &s2, &allowed), Ok(()));
+        assert_eq!(b.authorize(&key, &s2, &allowed), Ok(&b"s2"[..]));
         let s3 = userauth(b"s3", &key, alg, Some(&dest.public_blob()));
         assert_eq!(
             b.authorize(&key, &s3, &allowed),
@@ -826,7 +833,7 @@ pub(crate) mod tests {
         );
         b.bind(&dest.bind_body(b"s2", false)).unwrap();
         let good = userauth(b"s2", &key, alg, Some(&dest.public_blob()));
-        assert_eq!(b.authorize(&key, &good, &allowed), Ok(()));
+        assert_eq!(b.authorize(&key, &good, &allowed), Ok(&b"s2"[..]));
 
         // Arbitrary data, wrong session, plain publickey on forwarded path,
         // host key mismatch, wrong key or algorithm.
@@ -918,7 +925,7 @@ pub(crate) mod tests {
                 &userauth(b"s", &key, alg, Some(&dest.public_blob())),
                 &allowed
             ),
-            Ok(())
+            Ok(&b"s"[..])
         );
     }
 

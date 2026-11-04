@@ -57,6 +57,7 @@ after 300 s.
 | Bindings per connection | ≤ 16; none after an authentication binding |
 | Failed initial binding | terminal for that connection: subsequent binds and restricted signing are refused, even if a remote peer offers a valid binding |
 | Userauth methods | **`publickey-hostbound-v00@openssh.com` always required**; ordinary `publickey` is refused, including on single-binding connections; real OpenSSH E2E: a client using `PubkeyAuthentication=unbound` towards an allowed, correctly bound destination is refused (`destination_binding_refuses_plain_publickey_to_allowed_destination`) |
+| Signatures per session | at most one per (session id, key), across connections, for 300 s; [see below](#one-signature-per-session-and-key) |
 | Server support | `publickey-hostbound` is advertised by OpenSSH ≥ 8.9 servers. For Git hosting services see [below](#git-hosting-services); an advertisement is not proof that a service accepts it, so test with `connect` before relying on it |
 | `restrict-destination` constraints in the upstream agent | not used; keys constrained in an upstream OpenSSH agent refuse to sign through SigSieve (fail closed, tested) |
 
@@ -169,3 +170,44 @@ Include lines are refused. Put Include comments on separate lines. Literal
 Unicode paths are supported; wildcard basenames must be ASCII. `?` is scanned
 as `*`, so the scan may inspect additional files and refuse a configuration
 OpenSSH would accept. Use a dedicated `-F` file when these restrictions matter.
+
+## One signature per session and key
+
+In destination-binding mode SigSieve signs at most one userauth request per
+verified session id and key (F-47), however the request varies (user name,
+RSA algorithm or flags). Attempts are remembered across connections for up to
+300 seconds (256 pairs), including attempts the upstream agent failed or the
+user cancelled. Another key in the same session, and the same key in a new
+session, are unaffected.
+
+RFC 4252 allows more than this: the user name "MAY change" between attempts
+(section 5), and nothing limits how often a client signs with one key. A
+client that does either within one destination-bound session gets
+`SSH_AGENT_FAILURE` for the repeat and must open a new connection. This is
+an intentional restriction. Its reach is narrow, because destination-bound
+signing already requires OpenSSH-specific behaviour on both ends: the client
+must send `session-bind@openssh.com` and the server must accept
+`publickey-hostbound-v00@openssh.com` (OpenSSH ≥ 8.9).
+
+OpenSSH stays within the limit (openssh-portable `master` `3c6ec4c63734`):
+
+- The client uses one user name per connection (`sshconnect2.c`); the server
+  disconnects on a change ("Change of username or service not allowed",
+  `auth2.c`).
+- The client tries each key once per authentication stage. After a partial
+  success it may offer a key again, but the server refuses a previously used
+  key (`auth2_key_already_used`, `auth2-pubkey.c`) before any signature.
+- The client signs again with the same key only if the agent returned the
+  wrong signature type, and then asks for the key's base algorithm. SigSieve
+  answers a wrong-type signature with `SSH_AGENT_FAILURE`, which does not
+  trigger that retry, and refuses `ssh-rsa` (SHA-1) anyway.
+
+Measured on 2026-11-03 (OpenSSH 10.5p1 client and server, macOS 27.2 arm64,
+synthetic keys, localhost; directly and through a forwarding hop): single
+key, unauthorized first key, no authorized key, `publickey,publickey` with
+one and two keys, an RSA-SHA2-256-only server, reconnects, a dropped
+connection, ControlMaster and ProxyJump all used at most one signature per
+session and key, and SigSieve refused none of them. Not measured: other SSH
+clients that implement `session-bind@openssh.com`, non-OpenSSH servers that
+accept hostbound authentication, Linux and older OpenSSH builds, and
+hardware-agent cancel and retry within one session.

@@ -4,6 +4,17 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- F-47: destination-bound signing is limited to one attempt per verified
+  (session id, key), across connections, for the existing 300 s / 256-entry
+  window. A replayed session can no longer obtain extra signatures by
+  changing the user name or the RSA algorithm (`rsa-sha2-256` / `-512`).
+  Compatibility: a client that signs twice with one key in one
+  destination-bound session is refused the second time (OpenSSH does not do
+  this; see `docs/SSH_COMPATIBILITY.md`). Replay prevention is still not
+  claimed (F-22).
+
 ## [0.1.0-alpha.4] - 2026-11-02 (experimental pre-release)
 
 Runtime changes since 0.1.0-alpha.3 (see Configuration and Diagnostics

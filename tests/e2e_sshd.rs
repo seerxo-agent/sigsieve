@@ -1271,6 +1271,31 @@ mod lifecycle {
         Some(buf)
     }
 
+    /// A captured SIGN_REQUEST with the userauth user name replaced.
+    fn with_user(sign: &[u8], user: &[u8]) -> Vec<u8> {
+        fn string(b: &[u8], at: usize) -> (usize, usize) {
+            let n = u32::from_be_bytes(b[at..at + 4].try_into().unwrap()) as usize;
+            (at + 4, at + 4 + n)
+        }
+        let put = |out: &mut Vec<u8>, v: &[u8]| {
+            out.extend_from_slice(&(v.len() as u32).to_be_bytes());
+            out.extend_from_slice(v);
+        };
+        let (k0, k1) = string(sign, 1);
+        let (d0, d1) = string(sign, k1);
+        let data = &sign[d0..d1];
+        let (_, sid_end) = string(data, 0);
+        let (_, user_end) = string(data, sid_end + 1); // after the message byte
+        let mut new_data = data[..sid_end + 1].to_vec();
+        put(&mut new_data, user);
+        new_data.extend_from_slice(&data[user_end..]);
+        let mut out = vec![SIGN_REQUEST];
+        put(&mut out, &sign[k0..k1]);
+        put(&mut out, &new_data);
+        out.extend_from_slice(&sign[d1..]); // flags
+        out
+    }
+
     fn write_frame(s: &mut UnixStream, payload: &[u8]) -> bool {
         let mut f = (payload.len() as u32).to_be_bytes().to_vec();
         f.extend_from_slice(payload);
@@ -1619,8 +1644,9 @@ mod lifecycle {
         assert!(!binds.is_empty(), "the real session sent no session-bind");
 
         // Replaying the session's own binds and signature request on a new
-        // connection: the bind is accepted, the signature is not (the
-        // duplicate-attempt cache, F-22), and nothing reaches the agent.
+        // connection: the bind is accepted, the signature is not (one
+        // signature per session and key, F-22/F-47), and nothing reaches the
+        // agent.
         let mut c = UnixStream::connect(&sock).unwrap();
         for b in &binds {
             assert!(write_frame(&mut c, b));
@@ -1632,6 +1658,22 @@ mod lifecycle {
             SIGN_RESPONSE,
             "replayed signature"
         );
+        // F-47: the same replay with the signed userauth re-encoded for other
+        // user names (the session id, key and host key unchanged): refused,
+        // one signature per recorded session and key.
+        for user in [&b"u0"[..], b"u1", b"root"] {
+            let mut c = UnixStream::connect(&sock).unwrap();
+            for b in &binds {
+                assert!(write_frame(&mut c, b));
+                assert_eq!(read_frame(&mut c).unwrap(), vec![SUCCESS]);
+            }
+            assert!(write_frame(&mut c, &with_user(sign, user)));
+            assert_ne!(
+                read_frame(&mut c).unwrap()[0],
+                SIGN_RESPONSE,
+                "user-name variant {user:?} signed"
+            );
+        }
         // Another connection reusing only the signature request, without
         // binds: refused by destination binding before the cache is reached.
         let mut c2 = UnixStream::connect(&sock).unwrap();

@@ -16,7 +16,7 @@ There is no new daemon, privilege, runtime dependency or automatic retry.
 | Started downstream frame / whole reply write | 10 s / 10 s | Close client |
 | Idle client | 300 s | Close client |
 | Agent frame | 256 KiB | Reject/close before allocation |
-| Destination-bound duplicate cache | 256 SHA256 digests, at most 300 s | Oldest evicted; repeated attempt refused while remembered |
+| Destination-bound duplicate cache | 256 (session id, key) digests, at most 300 s | Oldest evicted; another attempt for a remembered session and key refused |
 | Runtime log details | 16/s per process | Count suppression; summary at next window or shutdown |
 
 The initial signing burst matches the existing 32-client cap. Four upstream

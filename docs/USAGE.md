@@ -181,8 +181,9 @@ sigsieve connect  HOST [--upstream PATH | --secretive] --allow-fingerprint FP...
 | `refusing to replace existing path …` | Another process uses the socket, or SigSieve cannot prove it is a stale one of its own. The message says which; see below. |
 | The jump host rejects your key | Hops do not receive `connect`'s `-o` options: put their `User`, `IdentityFile`, `IdentityAgent` in ssh_config. |
 | Destination-bound authentication fails | Check that the destination supports hostbound authentication and the **remote** SSH client selected an allowed Ed25519/ECDSA host key, not RSA. See [compatibility](SSH_COMPATIBILITY.md#git-hosting-services); `doctor` cannot check the remote host. |
+| Touch ID cancelled, then the login fails | Expected with destination binding: one attempt per key per connection, even a cancelled one. Run `ssh` again. |
 | More Touch ID prompts than expected | Allowed remote requests can trigger Secretive prompts. Check its per-key setting; stop forwarding if prompts are unexpected. Report a prompt during a known denied-key check privately. |
-| `signing budget exhausted or duplicate …` | The session is busy or that destination-bound authentication was already attempted. Start a new SSH authentication session; repeated requests do not automatically retry the agent. |
+| `signing budget exhausted or duplicate …` | The session is busy, or this key was already used for this destination-bound session (one attempt per session and key, even if it failed or was cancelled). Start a new SSH connection; repeated requests do not automatically retry the agent. |
 
 `sigsieve doctor` checks a setup without connecting; `connect --dry-run`
 prints the verified plan.
