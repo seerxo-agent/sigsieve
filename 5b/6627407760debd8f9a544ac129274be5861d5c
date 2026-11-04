@@ -1,0 +1,27 @@
+README.md
+  s_35bbcce842599b::t_1737b22bd00a3b 16
+docs/RELEASE_CHECKLIST.md
+  s_35bbcce842599b::t_1737b22bd00a3b 81,88,96
+docs/FINDINGS.md
+  s_35bbcce842599b::t_1737b22bd00a3b 65,665-667
+docs/EXTERNAL_VALIDATION.md
+  s_35bbcce842599b::t_1737b22bd00a3b 5-6
+docs/SECURITY_MODEL.md
+  s_35bbcce842599b::t_1737b22bd00a3b 32-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5b6627407760debd8f9a544ac129274be5861d5c",
+  "prompts": {},
+  "sessions": {
+    "s_35bbcce842599b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8fd155db-07a7-4b35-bf5d-af1e4378b17c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
