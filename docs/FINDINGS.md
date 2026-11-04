@@ -62,7 +62,7 @@ fix (where one exists).
 | F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit could get a release that verified | Fixed after v0.1.0-alpha.3: `verify-release.sh` gates on the tag commit being on `refs/heads/main`; `release.yml` checks it too (defense in depth); tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
 | F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
 | F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, had no test that makes it refuse | **Closed: verified on Linux** (PR #44, workflow run 41455680046): two-user test 4/4 passed, foreign agent received no request; mutant without the check 1 passed / 3 failed on their own assertions; merged commit `e77632d` has the tested tree (`verify-f46-evidence.sh`). macOS cross-user not tested. Pathname checks before `connect` remain advisory |
-| F-47 | LOW | Duplicate-attempt cache (F-22) is bypassed by varying the userauth username: each variant of a replayed request is a new digest | **Fix proposed, not released; independent review and F-46 verification pending** (found 2026-11-03, internal review; reproduced against a recorded OpenSSH session: 5 username variants, 5 upstream signatures). Now one attempt per (session id, key) and window, the F-22 bound; legitimate OpenSSH flows measured first; RFC 4252 compatibility restriction [documented](SSH_COMPATIBILITY.md#one-signature-per-session-and-key). The original alpha.4 release notes claimed "at most one upstream signature per recorded session"; that was corrected by a [security erratum](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4) on 2026-11-03 |
+| F-47 | LOW | Duplicate-attempt cache (F-22) is bypassed by varying the userauth username: each variant of a replayed request is a new digest | **Fixed on `main` (PR #57, `1e2523c`), not released; independent review pending** (found 2026-11-03, internal review; reproduced against a recorded OpenSSH session: 5 username variants, 5 upstream signatures). Now one attempt per (session id, key) and window, the F-22 bound; legitimate OpenSSH flows measured first; RFC 4252 compatibility restriction [documented](SSH_COMPATIBILITY.md#one-signature-per-session-and-key). The original alpha.4 release notes claimed "at most one upstream signature per recorded session"; that was corrected by a [security erratum](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4) on 2026-11-03 |
 
 
 ### Review scope
@@ -633,7 +633,7 @@ bounded abuse reduction, not a replay-proof protocol.
 Tests: `production_signing_budget_bounds_a_burst_without_changing_authorization`,
 `destination_bound_duplicates_do_not_reach_upstream_on_another_connection`.
 
-### F-47 — LOW — replay cache bypassed by username variation (fix proposed, not released)
+### F-47 — LOW — replay cache bypassed by username variation (fixed on `main`, not released)
 Found by an internal (AI-assisted) review on 2026-11-03, reproduced on the
 source of `main` `11cc3c1` and re-verified on `dc88af7`. `parse_userauth_request` (`src/binding.rs`) reads
 and ignores the username; the duplicate-attempt cache hashes the whole
@@ -661,8 +661,9 @@ the cap needs its own expiry and size bound, and it is bypassed by eviction
 just like the current cache. It needs a regression test that fails without
 the cap and real-OpenSSH login tests before release.
 
-Proposed fix (not in any release; independent review and F-46 verification
-pending; release gate S3 open):
+Fix (merged in PR #57, `main` `1e2523c`, 2026-11-04; not in any release;
+F-46 verified, run 41836309445; merged by owner decision before the
+independent review, which is still pending; release gate S3 open):
 the duplicate-attempt cache is keyed on the verified (session id, key) pair
 instead of the request bytes, with the same window, size and failure
 handling (`src/proxy/resources.rs`). This also closes an RSA variant found
