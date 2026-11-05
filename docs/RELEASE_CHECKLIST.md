@@ -100,6 +100,33 @@ A stable release candidate (`v1.0.0-rc.N`) may be tagged once S1, S3, S6,
 S7 and S9 are met on that commit; it remains a pre-release. `v1.0.0`
 itself needs every gate met or, for waivable gates only, a written decision.
 
+## Candidate record: v1.0.0-rc.1
+
+Not tagged. Every gate below is pending until it has evidence on the exact
+candidate SHA; run IDs go into the release notes and the evidence record.
+The candidate stays a pre-release. Runtime change since `v0.1.0-alpha.4`:
+F-47 (one destination-bound signature per session id and key). Supported
+prebuilt targets: macOS arm64 and Linux x86_64; Linux arm64 source-only;
+Intel macOS and Windows not validated.
+
+| Gate | Status |
+|---|---|
+| Version 1.0.0-rc.1 in `Cargo.toml` and both lockfiles | Done in this change |
+| Hosted CI on the exact candidate SHA, including `msrv (Rust 1.88)` | Pending |
+| `F-46 status` VERIFIED or NOT_APPLICABLE for the candidate (fork PRs: owner's `verify/` branch run) | Pending |
+| Release rehearsal (`workflow_dispatch`) on the exact candidate SHA, including the OIDC-free `verify` job | Pending |
+| Coverage-guided fuzzing, 3,600 s per target, on the exact candidate SHA | Pending |
+| S1/S2: no open CRITICAL/HIGH/MEDIUM finding; S9: limitations reviewed for the candidate | Pending |
+| F-42: the tag's `attest` job log shows the binding step passed and all three downloads were by ID | Pending (after the tag) |
+| F-45: the tag commit is on `refs/heads/main` | Pending (after the tag) |
+| S7: `scripts/verify-release.sh RUN_ID v1.0.0-rc.1` on macOS arm64 and the **Verify release** workflow on Linux report `RESULT: PASS` | Pending (after the tag) |
+| S5: real Secretive device test with the candidate binary, including a cancelled Touch ID prompt and reconnect | Pending (after the tag) |
+| S8: Homebrew upgrade from `v0.1.0-alpha.4` to the candidate against the published tap | Pending (after the tag) |
+| S10: one end-to-end private vulnerability report received and closed | Pending |
+| S12: maintainer confirms the `v*` tag ruleset bypass list and immutable releases (admin view) | Pending |
+| Release notes state "No independent external security review or audit has been performed." and that local credential isolation is not provided (S11, S12) | Pending |
+| README / INSTALL point at the candidate only after it is published | Pending |
+
 ## Candidate record: v0.1.0-alpha.4
 
 Published on 2026-11-02 from `5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`

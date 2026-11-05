@@ -4,6 +4,13 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-11-05 (release candidate, pre-release)
+
+First release candidate for 1.0.0. Runtime change since 0.1.0-alpha.4: the
+F-47 fix below. No independent external security review or audit has been
+performed (release gate S11 waived by the maintainer). Supported prebuilt
+targets stay macOS arm64 and Linux x86_64; Linux arm64 is source-only.
+
 ### Security
 
 - F-47: destination-bound signing is limited to one attempt per verified
