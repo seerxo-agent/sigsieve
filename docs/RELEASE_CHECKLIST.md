@@ -78,32 +78,48 @@ audited" statement stays in the README, INSTALL and release notes, stable
 or not, until a genuine independent security audit has been completed and
 published.
 
-Status as of 2026-11-05 (historical evidence from `v0.1.0-alpha.4` where
-noted; none of it counts for the candidate until repeated):
+Status as of 2026-11-06. RC1 evidence below belongs to commit
+`c4fa7a5eeba0283dc14d73a87ff996b876050394`; checks that depend on the
+final stable source or binary must be repeated on that candidate:
 
 | # | Gate | Waivable | Status | Evidence / missing |
 |---|---|---|---|---|
-| S1 | No unresolved confirmed CRITICAL or HIGH finding in the supported threat model | No | Met on alpha.4 (historical) | [FINDINGS.md](FINDINGS.md); internal reviews only |
-| S2 | Every MEDIUM finding fixed, or accepted individually with user impact documented | Yes | Met on alpha.4 (none open) | [FINDINGS.md](FINDINGS.md) |
+| S1 | No unresolved confirmed CRITICAL or HIGH finding in the supported threat model | No | Met on RC1; recheck stable candidate | [FINDINGS.md](FINDINGS.md); no open CRITICAL/HIGH on RC1, internal reviews only |
+| S2 | Every MEDIUM finding fixed, or accepted individually with user impact documented | Yes | Met on RC1; recheck stable candidate | [FINDINGS.md](FINDINGS.md); none open on RC1 |
 | S3 | A written stable decision for F-22 and F-47: a fix, or an accepted limitation with its bound; no claim of protocol-level replay prevention | Yes (explicit risk acceptance) | Met (decision; recheck on the candidate) | Legitimate-flow measurement done 2026-11-03 (synthetic keys, localhost, OpenSSH 10.5p1 on macOS 27.2 arm64): at most one signature per (session id, key) and one user name per session; the F-47 replay yielded one signature per user-name variant. Maintainer decision: fix. One attempt per (session id, key) merged in PR #57 (`1e2523c`, 2026-11-04), F-46 verified; F-22 stays an accepted bound: at most one signature per recorded session and key while remembered (300 s, 256 entries; expiry, eviction, new sessions and a new instance allow more); no protocol-level replay prevention. Compatibility restriction: a cancelled or failed Touch ID prompt cannot be retried with the same key on the same connection (reconnect; [SSH_COMPATIBILITY.md](SSH_COMPATIBILITY.md#one-signature-per-session-and-key)). Not externally reviewed (see S11); non-OpenSSH clients and servers not measured |
-| S4 | Platform evidence matches the support matrix claimed in the README and INSTALL | Yes (narrow the claimed matrix) | Partial | macOS arm64 and Linux x86_64 release binaries verified on alpha.4; macOS cross-user (F-46) **not verified**; Linux arm64 source-only |
-| S5 | Every Secretive configuration advertised as supported is validated on a real device for the candidate | Yes (do not advertise it) | Partial | alpha.4 (historical): one P-256 test key, Secretive 4.0.0, macOS 27.2 arm64, localhost SSH servers, 2026-11-03: filtering, allowed-key signing and destination binding passed ([SECRETIVE_INTEGRATION.md](SECRETIVE_INTEGRATION.md#recorded-real-device-results)); repeat on the candidate; Touch ID prompts not attributed per step |
-| S6 | CI and required security tests pass on the exact candidate (incl. MSRV, real OpenSSH, `F-46 status`) | No | Met on alpha.4 (historical) | Repeat on the candidate |
-| S7 | Release checksums, SBOMs, build provenance and SBOM attestations verified on macOS and Linux | No | Met on alpha.4 (historical) | `scripts/verify-release.sh`; repeat on the candidate |
+| S4 | Platform evidence matches the support matrix claimed in the README and INSTALL | Yes (narrow the claimed matrix) | Met on RC1; recheck stable candidate | macOS arm64 and Linux x86_64 release binaries verified; macOS cross-user (F-46) **not verified**; Linux arm64 source-only |
+| S5 | Every Secretive configuration advertised as supported is validated on a real device for the candidate | Yes (do not advertise it) | Met for the one advertised RC1 configuration; repeat stable binary | RC1: one P-256 test key, Secretive 4.0.0, macOS 27.2 arm64, localhost SSH servers, 2026-11-06: 13/13 positive checks, expected cancellation refusal, reconnect 13/13 ([SECRETIVE_INTEGRATION.md](SECRETIVE_INTEGRATION.md#recorded-real-device-results)); other configurations unverified |
+| S6 | CI and required security tests pass on the exact candidate (incl. MSRV, real OpenSSH, `F-46 status`) | No | Met on RC1; pending on stable candidate | CI run 42023039963, F-46 run 42023334020, fuzz run 42023341824; repeat on stable candidate |
+| S7 | Release checksums, SBOMs, build provenance and SBOM attestations verified on macOS and Linux | No | Met on RC1; pending on stable candidate | Release run 42090685138, macOS native verification PASS, Linux [Verify release](https://github.com/semihbugrasezer/sigsieve/actions/runs/42187936220) PASS; repeat on stable candidate |
 | S8 | Homebrew install, upgrade and uninstall tested against the **published** tap | Yes (do not advertise Homebrew) | Partial | alpha.4 (historical): install, `brew test`, uninstall, reinstall against the published tap on macOS arm64 passed; **upgrade not tested** (needs a second published version); Linux Homebrew not tested ([packaging/homebrew](../packaging/homebrew/README.md)) |
 | S9 | Known limitations and recovery procedures documented for end users | No | Met (review for the candidate) | [LIMITATIONS.md](LIMITATIONS.md), [USAGE.md](USAGE.md) |
-| S10 | Vulnerability reporting works and security maintenance has an owner | No | Partial | [SECURITY.md](../SECURITY.md); GitHub private vulnerability reporting enabled (repository API, 2026-11-03); no end-to-end test report yet |
+| S10 | Vulnerability reporting works and security maintenance has an owner | No | Met (2026-11-06) | A harmless TEST ONLY advisory was submitted privately by `seerxo-agent`, received and closed by owner; never published. The owner retains the private advisory evidence; [SECURITY.md](../SECURITY.md) |
 | S11 | An external technical review completed, its findings fixed or individually assessed | Yes (state that none happened) | **Waived** (written maintainer decision 2026-11-05) | Decision: no external technical review before v1.0.0. Residual risk: design and implementation errors that internal (AI-assisted) review and automated tests missed, including in the F-47 fix and destination binding. User impact: users rely on the published tests, findings register and limitations only. Must be stated in the release notes of every v1 release. [EXTERNAL_VALIDATION.md](EXTERNAL_VALIDATION.md) |
-| S12 | Release permissions separated: automation acts only through an account with no write, maintain or admin role on the repository (pull requests from its own fork); merges, `v*` tags and releases are made by the maintainer; `v*` tags are owner-created only and immutable; published releases are immutable. Local credential isolation is **not** claimed; this residual risk is stated in [LIMITATIONS.md](LIMITATIONS.md#verification-gaps-see-release_checklistmd) and the release notes | No | Partial | Redefined by maintainer decision 2026-11-04 (previously "no owner credential reachable by automation", which the maintainer chose not to implement: no separate macOS user, owner tokens not revoked). Verified 2026-11-04 as the automation account: no admin/maintain/push on the repository; rulesets `main protection`, `release tags: create`, `release tags: immutable` active. Bypass lists and immutable releases are visible only to an admin: maintainer to confirm on the candidate |
+| S12 | Release permissions separated: automation acts only through an account with no write, maintain or admin role on the repository (pull requests from its own fork); merges, `v*` tags and releases are made by the maintainer; `v*` tags are owner-created only and immutable; published releases are immutable. Local credential isolation is **not** claimed; this residual risk is stated in [LIMITATIONS.md](LIMITATIONS.md#verification-gaps-see-release_checklistmd) and the release notes | No | GitHub settings met (owner check 2026-11-06); final publication check pending | Owner confirmed release immutability enabled for future releases, only repository admin bypass on tag creation, no bypass on tag immutability, and no direct `seerxo-agent` write/maintain/admin access. Vercel App removed from this repository's selected access. Local owner credentials remain reachable to automation under the same macOS user; do not claim isolation. Confirm the actual published release is immutable after publication |
 
 A stable release candidate (`v1.0.0-rc.N`) may be tagged once S1, S3, S6,
 S7 and S9 are met on that commit; it remains a pre-release. `v1.0.0`
 itself needs every gate met or, for waivable gates only, a written decision.
 
+## Stable preparation branch: release/v1.0.0
+
+This branch changes the package version and release documentation. It is not
+a validated stable candidate until its final commit has exact-head CI,
+security tests, fuzzing, release rehearsal, reviewed findings and S9 limits
+review. Its [release notes draft](RELEASE_NOTES_V1.0.0_DRAFT.md) has explicit
+publication placeholders. After pre-tag gates pass, the owner may create the
+final tag solely to build release artifacts. S7 requires verifying those
+artifacts on macOS and Linux; S8 requires a real upgrade against the
+published 1.0.0 formula. **Do not publish the GitHub Release until both are
+complete.** No final tag or GitHub Release has been created by this
+preparation.
+
 ## Candidate record: v1.0.0-rc.1
 
-Not tagged. Every gate below is pending until it has evidence on the exact
-candidate SHA; run IDs go into the release notes and the evidence record.
+Annotated tag `v1.0.0-rc.1` points to
+`c4fa7a5eeba0283dc14d73a87ff996b876050394`. GitHub Release was not
+published for RC1. Its evidence is historical for the final stable source;
+run IDs go into the release notes and the evidence record.
 The candidate stays a pre-release. Runtime change since `v0.1.0-alpha.4`:
 F-47 (one destination-bound signature per session id and key). Supported
 prebuilt targets: macOS arm64 and Linux x86_64; Linux arm64 source-only;
@@ -111,21 +127,21 @@ Intel macOS and Windows not validated.
 
 | Gate | Status |
 |---|---|
-| Version 1.0.0-rc.1 in `Cargo.toml` and both lockfiles | Done in this change |
-| Hosted CI on the exact candidate SHA, including `msrv (Rust 1.88)` | Pending |
-| `F-46 status` VERIFIED or NOT_APPLICABLE for the candidate (fork PRs: owner's `verify/` branch run) | Pending |
-| Release rehearsal (`workflow_dispatch`) on the exact candidate SHA, including the OIDC-free `verify` job | Pending |
-| Coverage-guided fuzzing, 3,600 s per target, on the exact candidate SHA | Pending |
-| S1/S2: no open CRITICAL/HIGH/MEDIUM finding; S9: limitations reviewed for the candidate | Pending |
-| F-42: the tag's `attest` job log shows the binding step passed and all three downloads were by ID | Pending (after the tag) |
-| F-45: the tag commit is on `refs/heads/main` | Pending (after the tag) |
-| S7: `scripts/verify-release.sh RUN_ID v1.0.0-rc.1` on macOS arm64 and the **Verify release** workflow on Linux report `RESULT: PASS` | Pending (after the tag) |
-| S5: real Secretive device test with the candidate binary, including a cancelled Touch ID prompt and reconnect | Pending (after the tag) |
-| S8: Homebrew upgrade from `v0.1.0-alpha.4` to the candidate against the published tap | Pending (after the tag) |
-| S10: one end-to-end private vulnerability report received and closed | Pending |
-| S12: maintainer confirms the `v*` tag ruleset bypass list and immutable releases (admin view) | Pending |
-| Release notes state "No independent external security review or audit has been performed." and that local credential isolation is not provided (S11, S12) | Pending |
-| README / INSTALL point at the candidate only after it is published | Pending |
+| Version 1.0.0-rc.1 in `Cargo.toml` and both lockfiles | Done |
+| Hosted CI on the exact candidate SHA, including `msrv (Rust 1.88)` | Done: run 42023039963 |
+| `F-46 status` VERIFIED or NOT_APPLICABLE for the candidate | Done: run 42023334020 |
+| Release rehearsal (`workflow_dispatch`) on the exact candidate SHA, including the OIDC-free `verify` job | Done: run 42023338126 |
+| Coverage-guided fuzzing, 3,600 s per target, on the exact candidate SHA | Done: run 42023341824 |
+| S1/S2: no open CRITICAL/HIGH/MEDIUM finding; S9: limitations reviewed for the candidate | Done for RC1; recheck stable candidate |
+| F-42: the tag's `attest` job log shows the binding step passed and all three downloads were by ID | Done: release run 42090685138 |
+| F-45: the tag commit is on `refs/heads/main` | Done: release run 42090685138 |
+| S7: `scripts/verify-release.sh RUN_ID v1.0.0-rc.1` on macOS arm64 and the **Verify release** workflow on Linux report `RESULT: PASS` | Done: macOS native PASS; Linux run 42187936220 PASS |
+| S5: real Secretive device test with the candidate binary, including a cancelled Touch ID prompt and reconnect | Done: 2026-11-06, scoped configuration in [SECRETIVE_INTEGRATION.md](SECRETIVE_INTEGRATION.md#recorded-real-device-results) |
+| S8: Homebrew upgrade from `v0.1.0-alpha.4` to 1.0.0 against the published tap | Pending until the 1.0.0 formula is published |
+| S10: one end-to-end private vulnerability report received and closed | Done: 2026-11-06 test advisory above |
+| S12: maintainer confirms the `v*` tag ruleset bypass list and immutable releases (admin view) | Done: 2026-11-06 owner check; actual final release immutability pending |
+| Release notes state "No independent external security review or audit has been performed." and that local credential isolation is not provided (S11, S12) | Pending final release notes |
+| README / INSTALL point at the candidate only after it is published | RC1 GitHub Release not published; no RC1 install link claimed |
 
 ## Candidate record: v0.1.0-alpha.4
 
@@ -238,7 +254,8 @@ These remain explicit limitations of the alpha, not passing tests:
    SBOMs and verifies their checksums, their provenance and the archives'
    SBOM attestations; a missing SBOM fails. Both must report
    `RESULT: PASS`; `INCOMPLETE` is not a pass.
-5. Create a GitHub pre-release and attach only those verified artifacts:
+5. Create a GitHub Release (marked pre-release for alpha and RC tags) and
+   attach only those verified artifacts:
    both archives, both SBOMs and all four `.sha256` files. Link
    [VERIFY_OFFLINE.md](VERIFY_OFFLINE.md) in the release notes.
    Source installation must name the same immutable release tag.

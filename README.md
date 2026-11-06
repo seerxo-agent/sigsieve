@@ -3,7 +3,7 @@
 **Least-privilege SSH agent forwarding for macOS and Linux.**
 
 [![CI](https://github.com/semihbugrasezer/sigsieve/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/semihbugrasezer/sigsieve/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.1.0--alpha.4-orange)](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4)
+[![Releases](https://img.shields.io/badge/GitHub-releases-blue)](https://github.com/semihbugrasezer/sigsieve/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 SigSieve is an open-source, local SSH-agent filtering proxy. It lets you **forward selected SSH identities instead of your entire agent**, with optional restrictions on the destination host keys those identities may authenticate to.
@@ -13,7 +13,7 @@ Your existing agent—such as [Secretive](https://github.com/maxgoedjen/secretiv
 **Free and MIT-licensed. No account, telemetry, hosted service, or mandatory cloud dependency.**
 
 > [!WARNING]
-> **Experimental security software — not independently audited.** The current pre-release is [v0.1.0-alpha.4](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4). Automated security tests do not establish production-grade security assurance. Real Secretive filtering, signing and destination binding were checked with alpha.4 on 2026-11-03 for **one** configuration only (one P-256 test key, Secretive 4.0.0, macOS 27.2 arm64, localhost test servers; Touch ID prompts not attributed per step); other devices, Secretive versions and real services are not covered ([details](docs/SECRETIVE_INTEGRATION.md#recorded-real-device-results)). Read the [security model](docs/SECURITY_MODEL.md) and [known limitations](docs/LIMITATIONS.md) before using agent forwarding, and retain an ordinary SSH access path.
+> **Not independently audited.** Automated security tests do not establish production-grade security assurance. Real Secretive filtering, signing and destination binding were checked with the `v1.0.0-rc.1` binary for **one** configuration only (one P-256 test key, Secretive 4.0.0, macOS 27.2 arm64, localhost test servers); other devices, Secretive versions and real services are not covered ([details](docs/SECRETIVE_INTEGRATION.md#recorded-real-device-results)). Read the [security model](docs/SECURITY_MODEL.md) and [known limitations](docs/LIMITATIONS.md) before using agent forwarding, and retain an ordinary SSH access path.
 
 ## Why SigSieve?
 
@@ -48,22 +48,23 @@ SigSieve filters *requests*, not the security policy of the remote machine or th
 
 ## Install
 
-Download the [**v0.1.0-alpha.4 experimental release**](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4), then follow the **[verified installation guide](docs/INSTALL.md)**. It checks the archive checksum, a separately pinned SHA-256 digest, and GitHub build provenance before installation.
-
-| Platform | Distribution |
-| --- | --- |
-| macOS ARM64 (Apple Silicon) | Prebuilt experimental archive |
-| Linux x86_64 (Ubuntu 24.04 / glibc 2.39 baseline) | Prebuilt experimental archive |
-| Linux ARM64 | CI-tested; build from source |
-| Intel macOS / Windows | Not validated |
-
-**Homebrew (macOS, builds from source):**
+For macOS Apple Silicon, install the published Homebrew formula:
 
 ```sh
 brew install semihbugrasezer/sigsieve/sigsieve
+sigsieve --version
 ```
 
-The [tap](https://github.com/semihbugrasezer/homebrew-sigsieve) builds the same immutable `v0.1.0-alpha.4` tag from source and checks the source archive's SHA-256. That checksum is **not** GitHub build provenance; use the prebuilt archives and the installation guide if you need provenance verification. Tested on macOS Apple Silicon only. Uninstall with `brew uninstall sigsieve && brew untap semihbugrasezer/sigsieve`.
+For a prebuilt archive, follow the [verified installation guide](docs/INSTALL.md). Its pinned archive example checks the checksum, a separately pinned SHA-256 digest, and GitHub build provenance before installation. Check the version it names before running it.
+
+| Platform | Distribution |
+| --- | --- |
+| macOS ARM64 (Apple Silicon) | Prebuilt archive; Homebrew source build |
+| Linux x86_64 (Ubuntu 24.04 / glibc 2.39 baseline) | Prebuilt archive |
+| Linux ARM64 | CI-tested; build from source |
+| Intel macOS / Windows | Not validated |
+
+The [tap](https://github.com/semihbugrasezer/homebrew-sigsieve) builds a pinned immutable tag from source and checks the source archive's SHA-256. Check `sigsieve --version` after installation or upgrade; the formula can advance separately from GitHub release assets. That checksum is **not** GitHub build provenance; use the prebuilt archives and the installation guide if you need provenance verification. Tested on macOS Apple Silicon only. Uninstall with `brew uninstall sigsieve && brew untap semihbugrasezer/sigsieve`.
 
 The checkout pins Rust **1.99.1** for builds; the declared minimum supported Rust version is **1.88**. OpenSSH **8.4+** is required, with additional requirements for proxy hops and destination binding. There is **no crates.io package**, and macOS binaries are **not notarized**.
 
@@ -146,7 +147,7 @@ For the full boundary and evidence, see the [security model](docs/SECURITY_MODEL
 
 ## Verification and release integrity
 
-The published **v0.1.0-alpha.4** release is pinned to source commit [`5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`](https://github.com/semihbugrasezer/sigsieve/commit/5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751), not the moving tip of `main`.
+The published **v0.1.0-alpha.4** release is pinned to source commit [`5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`](https://github.com/semihbugrasezer/sigsieve/commit/5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751), not the moving tip of `main`. The `v1.0.0-rc.1` release candidate is pinned to [`c4fa7a5eeba0283dc14d73a87ff996b876050394`](https://github.com/semihbugrasezer/sigsieve/commit/c4fa7a5eeba0283dc14d73a87ff996b876050394); stable candidate checks must be repeated on its own commit.
 
 | Evidence | What was verified |
 | --- | --- |

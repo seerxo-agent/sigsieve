@@ -6,8 +6,8 @@
 `Formula/sigsieve.rb` must be a reviewed copy of this file. It is **not** in
 homebrew-core.
 
-SigSieve stays an **experimental, not independently audited** pre-release
-whichever way it is installed. Packaging changes neither of those.
+The currently published formula installs an **experimental, not independently
+audited** pre-release. Packaging does not increase security assurance.
 
 ## What the formula does
 
@@ -107,8 +107,8 @@ release page without checking it.
 4. Update `url`, `sha256` and the commit comment in `sigsieve.rb`; run the test
    table above in a local tap; then update the published tap by a reviewed
    commit.
-5. Keep the experimental and not-independently-audited wording until the
-   stable-release criteria are met.
+5. Keep the not-independently-audited wording. Remove the experimental label
+   only when the stable-release criteria are met and the new formula is published.
 
 ## homebrew-core
 

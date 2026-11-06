@@ -1,6 +1,6 @@
 # Verify a release offline
 
-SigSieve is experimental, unaudited software. These checks show that an
+SigSieve is not independently audited. These checks show that an
 archive was built by this repository's `release.yml` for a given tag and
 commit on a GitHub-hosted runner. They do not show that the code is secure.
 
