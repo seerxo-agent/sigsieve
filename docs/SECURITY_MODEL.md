@@ -25,12 +25,14 @@ its CI, fuzzing, distribution and owner-assisted device checks. The historical
 `v0.1.0-alpha.3` release (`60c9b3777ce41cedc035c373836a8c0ea5c7e4cd`) has its own
 [release record](TESTING.md#release-evidence-v010-alpha3-2026-11-01); it did
 not change runtime code, and the device checks were not repeated for it.
-The current [`v0.1.0-alpha.4`](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4)
+The published [`v0.1.0-alpha.4`](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4)
 release (commit `5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`) does change
 runtime behavior. Its automated evidence is described in the
 [release notes](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4);
 Secretive was checked with alpha.4 on 2026-11-03 for one configuration
 only (see [SECRETIVE_INTEGRATION.md](SECRETIVE_INTEGRATION.md#recorded-real-device-results)).
+The `v1.0.0-rc.1` binary was tested on the same scoped device configuration
+on 2026-11-06; see [device results](SECRETIVE_INTEGRATION.md#recorded-real-device-results).
 These results do not validate later executable revisions or untested
 devices/services.
 

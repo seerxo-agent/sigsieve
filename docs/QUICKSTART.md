@@ -76,6 +76,6 @@ cd / && rm -rf "$demo"
   and preview a connection with `sigsieve connect … --dry-run` before
   using it.
 
-SigSieve is experimental and not independently audited. Read the
+SigSieve is not independently audited. Read the
 [security model](SECURITY_MODEL.md) and [limitations](LIMITATIONS.md)
 before relying on it.

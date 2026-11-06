@@ -1,10 +1,28 @@
-# Install SigSieve v0.1.0-alpha.4
+# Install SigSieve
 
-SigSieve is **experimental, unaudited security software**. Read the
+SigSieve has **not been independently audited**. Read the
 [security model](SECURITY_MODEL.md) and [known limitations](LIMITATIONS.md)
 before forwarding an SSH agent. Keep ordinary SSH access available.
 
-The current verified binary pre-release is
+## Homebrew (macOS Apple Silicon)
+
+```sh
+brew install semihbugrasezer/sigsieve/sigsieve
+sigsieve --version
+```
+
+Check `sigsieve --version` after installation; the formula can advance
+separately from GitHub release assets. To upgrade an existing installation,
+run `brew update && brew upgrade sigsieve`, then check the version again.
+Installation and upgrade need neither `sudo` nor changes to your SSH keys.
+The formula installs only the binary: no service, configuration file, change
+to `~/.ssh`, or change to your agent.
+The formula builds from source and does not verify the binary build
+provenance described below. See [Homebrew packaging](../packaging/homebrew/README.md).
+
+## Pinned prebuilt archive example: v0.1.0-alpha.4
+
+The verified binary example below is
 [**v0.1.0-alpha.4**](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4),
 built from immutable commit
 `5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`. Its release files cannot be
@@ -31,26 +49,6 @@ Windows are not validated. OpenSSH 8.4+ is required; proxy-jump/relay sessions
 require 8.7+.
 
 A crates.io package is **not available**.
-
-### Homebrew (builds from source)
-
-```sh
-brew install semihbugrasezer/sigsieve/sigsieve
-sigsieve --version   # sigsieve 0.1.0-alpha.4
-```
-
-The maintainer-owned tap
-[`semihbugrasezer/homebrew-sigsieve`](https://github.com/semihbugrasezer/homebrew-sigsieve)
-builds tag `v0.1.0-alpha.4` (commit `5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`)
-from GitHub's source archive with `cargo install --locked`. Homebrew verifies
-the archive's SHA-256, which was checked against the tag's `git archive`; it
-does **not** verify GitHub build provenance. If you need provenance, use the
-attested archives below. It installs only the binary (no service, no
-configuration, no change to `~/.ssh` or your agent). Tested on macOS Apple
-Silicon (install, `brew test`, uninstall, reinstall); Linux Homebrew and Intel
-macOS are not tested. Uninstall:
-`brew uninstall sigsieve && brew untap semihbugrasezer/sigsieve`. Details:
-[`packaging/homebrew`](../packaging/homebrew/README.md).
 
 ## Verify and install a published archive
 

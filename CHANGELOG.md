@@ -4,6 +4,14 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.0.0] - Unreleased
+
+First stable candidate. Runtime behavior is unchanged from `1.0.0-rc.1`.
+Prebuilt targets are macOS Apple Silicon and Linux x86_64; Intel macOS and
+Windows have not been validated. No independent external security review or
+audit has been performed: the maintainer waived the external technical review
+gate (S11). The F-22 replay bound and F-47 reconnect requirement below remain.
+
 ## [1.0.0-rc.1] - 2026-11-05 (release candidate, pre-release)
 
 First release candidate for 1.0.0. Runtime change since 0.1.0-alpha.4: the

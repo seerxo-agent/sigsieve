@@ -1,6 +1,6 @@
 # Security Policy
 
-SigSieve is experimental security software and has **not** been
+SigSieve is security software and has **not** been
 independently audited. Its reviews so far are internal AI-assisted reviews
 in separate contexts, alongside automated tests. See the
 [evidence and remaining gaps](docs/TESTING.md) and
@@ -11,11 +11,12 @@ appreciate responsible disclosure.
 
 | Version | Supported |
 |---|---|
+| 1.0.0 | security reports accepted |
 | 0.1.0-alpha.* (experimental preview) | security reports accepted |
 
-Fixes target `main` and the next alpha. Older prereleases have no promised
-backports; there is no stable or long-term support release yet. Include the
-exact commit when reporting an unreleased build.
+Fixes target `main` and the next release. Backports to older releases are not
+promised, and no long-term support window is promised. Include the exact
+commit when reporting an unreleased build.
 
 ## Reporting a vulnerability
 

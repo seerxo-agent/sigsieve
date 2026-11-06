@@ -1,6 +1,6 @@
 # Known limitations
 
-SigSieve is experimental and **not independently audited**. Each item below
+SigSieve is **not independently audited**. Each item below
 is either deliberate (fail closed) or not yet addressed. None is hidden
 behind wording that suggests otherwise.
 
@@ -153,7 +153,8 @@ behind wording that suggests otherwise.
   is not isolated from the maintainer's local credentials (release gate S12
   separates permissions, it does not claim credential isolation).
 - Real Secretive testing is limited to owner-assisted observations, including
-  signing and destination binding against two localhost test servers on
-  `fc7484b`. No interoperability assurance for other devices, services,
-  or Secretive versions; full Touch ID prompt counts were not recorded.
+  signing, destination binding, cancellation and reconnect against two
+  localhost test servers on the `v1.0.0-rc.1` binary. No interoperability
+  assurance for other devices, services, Secretive versions, Homebrew builds,
+  or the final stable binary; prompts were not timed per operation.
   See [device evidence](SECRETIVE_INTEGRATION.md#recorded-real-device-results).
