@@ -1,0 +1,58 @@
+docs/INSTALL.md
+  s_c816b95fc7650e::t_d968ed675f9155 1,3,7-13,17,20-25
+  s_c816b95fc7650e::t_368a870e89dd95 14-16
+  s_c816b95fc7650e::t_caa4918e9bedfe 18-19
+docs/LIMITATIONS.md
+  s_c816b95fc7650e::t_30538c855be027 156-159
+  s_c816b95fc7650e::t_951a9379330889 3
+docs/QUICKSTART.md
+  s_c816b95fc7650e::t_951a9379330889 79
+docs/RELEASE_CHECKLIST.md
+  s_c816b95fc7650e::t_caa4918e9bedfe 110-115,257-258
+  s_c816b95fc7650e::t_b2b633a080ab2c 81-83,87-88,90-93,98,119-122,130-144
+  s_c816b95fc7650e::t_5c02bf80590dbb 104-109,116
+  s_c816b95fc7650e::t_70cde85aa14a83 96
+docs/THREAT_MODEL.md
+  s_c816b95fc7650e::t_951a9379330889 5
+docs/FINDINGS.md
+  s_c816b95fc7650e::t_951a9379330889 65
+CHANGELOG.md
+  s_c816b95fc7650e::t_900200bc36d21f 7-14
+Cargo.toml
+  s_c816b95fc7650e::t_900200bc36d21f 3
+docs/RELEASE_NOTES_V1.0.0_DRAFT.md
+  s_c816b95fc7650e::t_5c02bf80590dbb 1-70
+docs/SECURITY_MODEL.md
+  s_c816b95fc7650e::t_951a9379330889 28,34-35
+packaging/homebrew/README.md
+  s_c816b95fc7650e::t_951a9379330889 9-10,110-111
+docs/SECRETIVE_INTEGRATION.md
+  s_c816b95fc7650e::t_30538c855be027 8-11,125-127
+SECURITY.md
+  s_c816b95fc7650e::t_900200bc36d21f 3,14,17-19
+docs/VERIFY_OFFLINE.md
+  s_c816b95fc7650e::t_951a9379330889 3
+README.md
+  s_c816b95fc7650e::t_4b10e07c1d09c0 6,16,51-58,62-63,150,176
+  s_c816b95fc7650e::t_368a870e89dd95 67
+Cargo.lock
+  s_c816b95fc7650e::t_c57a437d9b3c98 855
+fuzz/Cargo.lock
+  s_c816b95fc7650e::t_90e1b27cebc36c 695
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d4fea6bb9340e5cee7f0de87b50259b0610ffee7",
+  "prompts": {},
+  "sessions": {
+    "s_c816b95fc7650e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1b0ae-29db-7400-a58e-65f9baa667f5",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
