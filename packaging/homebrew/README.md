@@ -6,13 +6,13 @@
 `Formula/sigsieve.rb` must be a reviewed copy of this file. It is **not** in
 homebrew-core.
 
-The currently published formula installs an **experimental, not independently
-audited** pre-release. Packaging does not increase security assurance.
+The currently published formula installs the stable release `v1.0.0`, which
+is **not independently audited**. Packaging does not increase security assurance.
 
 ## What the formula does
 
-- Builds `v0.1.0-alpha.4` from the GitHub source archive of the immutable tag
-  (`refs/tags/v0.1.0-alpha.4`, commit `5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`)
+- Builds `v1.0.0` from the GitHub source archive of the immutable tag
+  (`refs/tags/v1.0.0`, commit `71ae5e95e666eeb3cb1b94b25ba6b0b8571eca35`)
   with `cargo install --locked` (via Homebrew's `std_cargo_args`). It installs
   only the `sigsieve` binary; no service, no configuration file, no changes to
   `~/.ssh` or the user's agent.
@@ -33,11 +33,13 @@ binaries. Homebrew checks only the archive's `sha256`; the GitHub-generated
 source archive has **no provenance attestation**. Its integrity was checked
 locally against the tag:
 
-| Check (2026-11-03) | Result |
+| Check (2026-11-09) | Result |
 |---|---|
-| Tag commit (`gh api repos/semihbugrasezer/sigsieve/commits/v0.1.0-alpha.4`) | `5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751` |
-| `sha256` of `archive/refs/tags/v0.1.0-alpha.4.tar.gz` (two downloads) | `dfea4d33371a7d429c1cbc7e293e5345db7b69c9ad2cbc225f7ebd9d354e8ae7` |
-| Extracted contents vs. `git archive --prefix=sigsieve-0.1.0-alpha.4/` of the tag commit | identical: 112 files by SHA-256, 1 symlink by target |
+| Tag commit (`v1.0.0`, annotated tag object `11597ef`) | `71ae5e95e666eeb3cb1b94b25ba6b0b8571eca35` |
+| `sha256` of `archive/refs/tags/v1.0.0.tar.gz` | `a2aabcaf89148179cc9aaf56270cbeae8c6d7acb9a617a7495c09e1367e6a04c` (equals the published tap formula, tap commit `7fd385e`) |
+| Extracted contents vs. `git archive --prefix=sigsieve-1.0.0/` of the tag commit | identical: 113 files by SHA-256, 1 symlink by target |
+
+The `v0.1.0-alpha.4` formula (2026-11-03) was checked the same way: 112 files and 1 symlink identical.
 
 Users who need build provenance should install the attested binaries
 (macOS arm64, Linux x86_64) as described in
@@ -73,15 +75,17 @@ Published tap, same day: the tap's formula equals this file at `main`
 `brew audit --strict --online`, uninstall, reinstall, `brew test` again, and
 `brew uninstall` + `brew untap` (clean afterwards) all passed.
 
-Not tested: Linux (Homebrew on Linux), Intel macOS, upgrade from an older
-formula version (no earlier published formula exists), a freshly installed
-macOS.
+1.0.0 published tap (tap commit `7fd385e`): install, upgrade from
+`v0.1.0-alpha.4`, `brew test` and uninstall on macOS arm64 passed
+(maintainer-reported; no independent log is published).
+
+Not tested: Linux (Homebrew on Linux), Intel macOS, a freshly installed macOS.
 
 ## The tap (maintainer)
 
 1. The public repository `semihbugrasezer/homebrew-sigsieve` holds
    `Formula/sigsieve.rb` (a copy of this directory's formula) and a README that
-   repeats the experimental status and links to
+   repeats the not-independently-audited status and links to
    [docs/INSTALL.md](../../docs/INSTALL.md).
 2. Users install with
    `brew install semihbugrasezer/sigsieve/sigsieve` (or `brew tap
@@ -107,11 +111,11 @@ release page without checking it.
 4. Update `url`, `sha256` and the commit comment in `sigsieve.rb`; run the test
    table above in a local tap; then update the published tap by a reviewed
    commit.
-5. Keep the not-independently-audited wording. Remove the experimental label
-   only when the stable-release criteria are met and the new formula is published.
+5. Keep the not-independently-audited wording.
 
 ## homebrew-core
 
 homebrew-core accepts stable versions only and has its own notability rules;
 see its [Acceptable Formulae](https://docs.brew.sh/Acceptable-Formulae)
-policy. It is out of scope until a stable SigSieve release exists.
+policy. A stable release (`v1.0.0`) now exists; a homebrew-core submission
+has not been made.

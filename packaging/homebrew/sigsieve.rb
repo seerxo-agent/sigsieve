@@ -4,9 +4,9 @@
 class Sigsieve < Formula
   desc "SSH agent filtering proxy that exposes only allowlisted identities"
   homepage "https://github.com/semihbugrasezer/sigsieve"
-  # Source archive of the immutable tag (commit 5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751).
-  url "https://github.com/semihbugrasezer/sigsieve/archive/refs/tags/v0.1.0-alpha.4.tar.gz"
-  sha256 "dfea4d33371a7d429c1cbc7e293e5345db7b69c9ad2cbc225f7ebd9d354e8ae7"
+  # Source archive of the immutable tag (commit 71ae5e95e666eeb3cb1b94b25ba6b0b8571eca35).
+  url "https://github.com/semihbugrasezer/sigsieve/archive/refs/tags/v1.0.0.tar.gz"
+  sha256 "a2aabcaf89148179cc9aaf56270cbeae8c6d7acb9a617a7495c09e1367e6a04c"
   license "MIT"
 
   # No `head` block on purpose: it would build untagged `main`.
