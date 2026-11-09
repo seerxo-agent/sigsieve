@@ -1,0 +1,20 @@
+macos-app/DESIGN.md
+  s_cbd94895c544bc::t_2e2d04610ddfe4 366-367,369
+  s_cbd94895c544bc::t_1af4759fa8b321 3-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b6516d05b88a740d63d2a5f8455c59040c97b812",
+  "prompts": {},
+  "sessions": {
+    "s_cbd94895c544bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f51af96a-b580-43e6-af8c-aeb5f5214ad1",
+        "model": "unknown"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
