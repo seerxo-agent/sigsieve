@@ -30,10 +30,10 @@ re-checked against the baseline commit.
 | Recommendation | Actual state at baseline | Required action |
 |---|---|---|
 | Independent external review | Not started; scope packet and provider options exist ([EXTERNAL_VALIDATION.md](EXTERNAL_VALIDATION.md), [EXTERNAL_REVIEW_OPTIONS.md](EXTERNAL_REVIEW_OPTIONS.md)) | Maintainer decision and funding: **BLOCKED_EXTERNAL** |
-| Broader compatibility evidence | OpenSSH 10.x macOS + Ubuntu 24.04 CI; one owner-assisted Secretive check; Git hosts not exercised ([SSH_COMPATIBILITY.md](SSH_COMPATIBILITY.md)) | Extend matrix where feasible (P0-03/P0-04); real devices/services **BLOCKED_EXTERNAL** |
+| Broader compatibility evidence | OpenSSH 10.x macOS + Ubuntu 24.04 CI; one owner-assisted Secretive check; Git hosts not exercised ([SSH_COMPATIBILITY.md](../SSH_COMPATIBILITY.md)) | Extend matrix where feasible (P0-03/P0-04); real devices/services **BLOCKED_EXTERNAL** |
 | CI secret scanning | GitHub-native scanning + push protection enabled; no CI-level scanner | Add pinned gitleaks job as defense in depth (P0-05) |
 | SBOM and attestations | Build provenance attested; no SBOM | CycloneDX sidecar per target + attestation + verification (P0-06) |
-| Release governance | Ruleset + release checklist exist; no governance document | [GOVERNANCE.md](../GOVERNANCE.md) (P0-08) |
+| Release governance | Ruleset + release checklist exist; no governance document | [GOVERNANCE.md](../../GOVERNANCE.md) (P0-08) |
 | Onboarding | README first safe check, INSTALL, USAGE, SUPPORT, issue forms exist | Verify accuracy; add only what is missing (P1-01, P1-07) |
 | Homebrew | None; README states so | Unpublished draft formula from verified artifacts (P1-05) |
 | Fingerprint selection UX | Manual `ssh-add -l` copy | Design review before any code (P1-03) |
@@ -91,7 +91,7 @@ explicit maintainer approval.
 
 No telemetry, analytics, tracking pixels or phone-home checks are added. Feedback comes only from channels where people choose to speak:
 
-- GitHub issue forms (bug, usage question, feature request) and private vulnerability reporting, as described in [SUPPORT.md](../SUPPORT.md) and [SECURITY.md](../SECURITY.md).
+- GitHub issue forms (bug, usage question, feature request) and private vulnerability reporting, as described in [SUPPORT.md](../../SUPPORT.md) and [SECURITY.md](../../SECURITY.md).
 - The three-user trial protocol in [EXTERNAL_VALIDATION.md](EXTERNAL_VALIDATION.md), with informed consent and redacted records.
-- Release notes ask users to report the platform, OpenSSH version and upstream agent that they actually ran. These reports are added to [SSH_COMPATIBILITY.md](SSH_COMPATIBILITY.md) as user-reported evidence, kept separate from CI-verified evidence.
+- Release notes ask users to report the platform, OpenSSH version and upstream agent that they actually ran. These reports are added to [SSH_COMPATIBILITY.md](../SSH_COMPATIBILITY.md) as user-reported evidence, kept separate from CI-verified evidence.
 - Download counts shown by GitHub are not treated as adoption evidence.

@@ -65,7 +65,7 @@ settled in review). Semantics:
 4. Policy parsing fails closed: a malformed user list stops startup. It
    never degrades to "any user".
 5. Refusals are logged with bounded, escaped output (existing log hygiene;
-   F-08 and F-19 in [FINDINGS.md](../FINDINGS.md)).
+   F-08 and F-19 in [FINDINGS.md](../../FINDINGS.md)).
 
 ### Required adversarial tests (before merge)
 
@@ -79,7 +79,7 @@ settled in review). Semantics:
   refused locally.
 - Fuzz: extend the `session_bind` and sign-request targets with
   user-constrained policies.
-- Threat model and [SECURITY_MODEL.md](../SECURITY_MODEL.md) updated with
+- Threat model and [SECURITY_MODEL.md](../../SECURITY_MODEL.md) updated with
   exactly what the constraint does and does not stop. It does not stop use
   of an allowed account, and server-side user mapping is out of scope.
 
@@ -129,6 +129,6 @@ Implement P2-03 first. It is a narrow, local check on data that is already
 parsed and verified. Keep P2-04 as research until questions 1–3 are answered
 with real OpenSSH traces (synthetic keys, local sshd instances), and until
 an independent reviewer has seen the design. Until then, document in
-[LIMITATIONS.md](../LIMITATIONS.md) that intermediate hops are not
+[LIMITATIONS.md](../../LIMITATIONS.md) that intermediate hops are not
 restricted (already stated) and point users to native OpenSSH constraints
 where applicable.
