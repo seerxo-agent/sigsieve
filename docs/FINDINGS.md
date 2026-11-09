@@ -61,7 +61,7 @@ fix (where one exists).
 | F-43 | MEDIUM (release, fails closed) | Release SBOMs had no CycloneDX `serialNumber`, which the pinned `actions/attest` requires; the first tag's SBOM attestation step would have failed | **Fixed; verified on the v0.1.0-alpha.3 tag run** (41327036746: both SBOM attestations created): deterministic `urn:uuid` serial added by `scripts/finalize-sbom.py`, checked against the action's acceptance rule; regression `scripts/test-finalize-sbom.py` |
 | F-45 | LOW–MEDIUM (supply chain) | A release tag was not bound to `main`: a tag on an unreviewed commit could get a release that verified | Fixed after v0.1.0-alpha.3: `verify-release.sh` gates on the tag commit being on `refs/heads/main`; `release.yml` checks it too (defense in depth); tag looked up as `refs/tags/` (RV-3); regression `scripts/test-verify-release-tag.sh` |
 | F-44 | LOW (supply chain) | The release SBOM job did not check dependency completeness, unlike the rehearsal | **Fixed; ran on the v0.1.0-alpha.3 tag run** (41327036746): both workflows run the same completeness check through `scripts/finalize-sbom.py`; a dropped dependency fails the release SBOM step |
-| F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, had no test that makes it refuse | **Closed: verified on Linux** (PR #44, workflow run 41455680046): two-user test 4/4 passed, foreign agent received no request; mutant without the check 1 passed / 3 failed on their own assertions; merged commit `e77632d` has the tested tree (`verify-f46-evidence.sh`). macOS cross-user not tested. Pathname checks before `connect` remain advisory |
+| F-46 | INFO (untested control) | The upstream peer-uid check, the only control that is not racy, had no test that makes it refuse | **Closed: verified on Linux** (PR #44, workflow run 41455680046): two-user test 4/4 passed, foreign agent received no request; mutant without the check 1 passed / 3 failed on their own assertions; merged commit `e77632d` has the tested tree (`verify-f46-evidence.sh`). **macOS verified 2026-11-09** (PR #65; run 42637250812 on `24c2706`, then run 42638071593 on merged `main` `dc05602`, `verify-f46-evidence.sh` OK): same 4/4 and mutant 1/3 on one GitHub-hosted runner image (`macos-latest`: macOS 26.7.2 arm64), not every macOS version or device. Pathname checks before `connect` remain advisory |
 | F-47 | LOW | Duplicate-attempt cache (F-22) is bypassed by varying the userauth username: each variant of a replayed request is a new digest | **Fixed on `main` (PR #57, `1e2523c`) and included in the `v1.0.0-rc.1` tag; not externally reviewed (S11 waived)** (found 2026-11-03, internal review; reproduced against a recorded OpenSSH session: 5 username variants, 5 upstream signatures). Now one attempt per (session id, key) and window, the F-22 bound; legitimate OpenSSH flows measured first; RFC 4252 compatibility restriction [documented](SSH_COMPATIBILITY.md#one-signature-per-session-and-key). The original alpha.4 release notes claimed "at most one upstream signature per recorded session"; that was corrected by a [security erratum](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4) on 2026-11-03 |
 
 
@@ -135,15 +135,16 @@ error, that requests served by the proxy never reach the agent, and that
 (socket owned by A, peer uid neither A nor root) and fails if they do not
 hold. The workflow then removes step 3 and requires each of the three tests
 to fail on its own assertion. In ordinary runs the three tests are reported
-as *ignored*, never as passed; a same-uid control runs everywhere. macOS
-(`getpeereid`) has no cross-user test.
+as *ignored*, never as passed; a same-uid control runs everywhere. Since
+PR #65 the same tests also run on a GitHub-hosted macOS VM (`getpeereid`);
+see "Verification record: macOS" below.
 
 How it runs: `cross-user.yml` triggers on pull requests that change the code
 under test or the test itself. GitHub runs a `pull_request` workflow from the
 pull request's own files, so it can verify F-46 before any merge. Its manual
 `workflow_dispatch` trigger only becomes available once the file is on the
 default branch; that is a separate dependency, not needed for the first
-run. The job runs on `ubuntu-24.04`, a full GitHub-hosted VM, never a
+run. The job runs on `ubuntu-24.04` and `macos-latest`, full GitHub-hosted VMs, never a
 container-based runner such as `ubuntu-slim`. The script refuses to run in a
 container and outside GitHub Actions. Those checks guard against mistakes;
 they do not prove the machine is disposable, and only the hosted VM label
@@ -241,9 +242,32 @@ PR #44, head `969cdae`, workflow "Cross-user peer credential (F-46)" run
 - merged as `e77632d` (merge commit, parents `a218021`, `969cdae`);
   `scripts/verify-f46-evidence.sh e77632d tested-commits.txt`: OK.
 
-Closed on that evidence. Limits: Linux only (macOS `getpeereid` has no
-cross-user test); a same-uid substitution remains out of scope (threat
-model scenario F); the evidence artifact is kept by the maintainer.
+Closed on that evidence. Limits: a same-uid substitution remains out of
+scope (threat model scenario F); the evidence artifact is kept by the
+maintainer.
+
+#### Verification record: macOS (2026-11-09)
+
+PR #65 made the privileged job a matrix over `ubuntu-24.04` and
+`macos-latest`; on macOS the script creates two temporary hidden `dscl`
+accounts (unused uids, no home, `/usr/bin/false` shell), runs them through
+`sudo -u` with Xcode's `python3`, and removes them on exit. Assertions and
+mutant expectations are the same as on Linux. Runtime source (`src/`,
+`Cargo.*`) is identical to `v1.0.0` (`71ae5e9`).
+
+- run 42637250812 (`workflow_dispatch` on `verify/f46-macos` = PR head
+  `24c2706`, tree `cd7fd72`), and run 42638071593 on the merged `main`
+  commit `dc05602` (merge commit, parents `d1ff5c6`, `24c2706`, same tree);
+- macOS 26.7.2 arm64, kernel 25.6.0, Xcode 26.6 `python3`, test uids 600 and
+  601: real run `4 passed; 0 failed; 0 ignored`, the foreign agent received
+  no request; mutant run `1 passed; 3 failed; 0 ignored`, each failure on its
+  own assertion, the foreign agent received 4 requests;
+- Linux in the same runs: identical results;
+- `F-46 status`: VERIFIED in both runs; `scripts/verify-f46-evidence.sh
+  dc05602 tested-commits.txt`: OK for the Linux and the macOS artifact.
+
+Limits: one GitHub-hosted runner image (`macos-latest`: macOS 26.7.2 arm64), not every macOS version or device; the binaries were built from source in CI, not the distributed `v1.0.0` release binary; this verifies the peer-credential refusal only, not the whole security model; the macOS evidence artifact
+(`f46-cross-user-evidence-macos`) is kept by the maintainer.
 
 ### F-45 — LOW–MEDIUM — release tag not bound to `main` (fixed after v0.1.0-alpha.3)
 

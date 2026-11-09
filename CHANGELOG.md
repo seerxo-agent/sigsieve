@@ -4,6 +4,14 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Testing
+
+- F-46 cross-user test now also runs on macOS (`getpeereid`): the
+  privileged job of `cross-user.yml` is a Linux + macOS matrix (PR #65).
+  Verified 2026-11-09 on a GitHub-hosted macOS 26.7.2 arm64 image (runs
+  42637250812, 42638071593): 4/4 real, mutant 1 passed / 3 failed. No
+  runtime change; one runner image, not every macOS version or device.
+
 ## [1.0.0] - 2026-11-09
 
 First stable release. Runtime behavior is unchanged from `1.0.0-rc.1`.
