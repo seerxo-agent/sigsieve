@@ -1,0 +1,58 @@
+name: Installation problem
+description: SigSieve fails to install, upgrade or start after installation. NOT for security vulnerabilities.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > [!WARNING]
+        > **Remove sensitive data before you submit.** This issue is public. Replace real key fingerprints, hostnames, IP addresses, user names, private paths (for example your home directory), tokens, credentials and anything else that identifies you or your systems with placeholders. Never paste private keys.
+
+        **Security vulnerabilities must not be reported here.** Use [private vulnerability reporting](https://github.com/semihbugrasezer/sigsieve/security/advisories/new) instead (see SECURITY.md).
+
+        Please check the [installation guide](https://github.com/semihbugrasezer/sigsieve/blob/main/docs/INSTALL.md) first. A failed checksum or `gh attestation verify` check is a reason to stop, not to skip the check.
+  - type: input
+    id: os
+    attributes:
+      label: OS and architecture
+      placeholder: "macOS 27.2 arm64 / Ubuntu 22.04 x86_64"
+    validations:
+      required: true
+  - type: dropdown
+    id: method
+    attributes:
+      label: Installation method
+      options:
+        - Homebrew (semihbugrasezer/sigsieve/sigsieve)
+        - Prebuilt archive from a GitHub Release
+        - Source build (cargo install from the tag)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: SigSieve version
+      description: The release or tag you tried to install, and `sigsieve --version` if it runs.
+      placeholder: "v1.0.0"
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error and steps to reproduce
+      description: The exact commands you ran and the error message (redacted).
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (redacted)
+      description: "For example `brew install --verbose` output, checksum or `gh attestation verify` output, or `cargo` errors. Toolchain versions help: `brew --version`, `gh --version`, `rustc --version`."
+      render: text
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed real fingerprints, hostnames, IP addresses, user names, private paths and credentials from this report.
+          required: true
