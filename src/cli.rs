@@ -43,7 +43,9 @@ const SECRETIVE_SOCKET: &str =
     long_about = "SigSieve sits between an SSH agent (e.g. Secretive) and its clients and \
                   exposes only explicitly allowlisted identities. Signature requests for any \
                   other key are rejected, and agent mutations and extensions are never \
-                  forwarded.\n\nEXPERIMENTAL: not independently audited."
+                  forwarded.\n\nNot independently audited. Read the security model and known \
+                  limitations before forwarding an agent: \
+                  https://github.com/semihbugrasezer/sigsieve#readme"
 )]
 struct Cli {
     #[command(subcommand)]
