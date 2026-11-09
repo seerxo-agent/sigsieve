@@ -99,10 +99,23 @@ Settings.
   concatenation **(owner)**.
 - The child environment is built from scratch: `HOME`, `PATH`
   (`/usr/bin:/bin:/usr/sbin:/sbin` plus the CLI's directory), `LANG`, and
-  `SSH_AUTH_SOCK` only when the OpenSSH agent is selected. `SIGSIEVE_UPSTREAM`,
+  `SSH_AUTH_SOCK` as described below. `SIGSIEVE_UPSTREAM`,
   `SIGSIEVE_ALLOW` and `SIGSIEVE_DESTINATIONS` are never passed, so a value in
   the user's shell cannot silently replace the profile **(builder call;
   found while writing: the CLI reads these variables)**.
+- **The same environment is used for the checks and for the Terminal
+  launcher**, so a passing check describes the connection that follows
+  **(builder call; found in review)**. The launcher starts the CLI with
+  `/usr/bin/env -i` and exactly these variables; the copyable command shows
+  the same `env -i …` prefix, so pasting it into any terminal reproduces it.
+- Login agent (what authenticates you to the selected server itself): the
+  CLI takes it from `SSH_AUTH_SOCK` and passes it to ssh as `IdentityAgent`.
+  The app sets `SSH_AUTH_SOCK` to the profile's upstream agent: the Secretive
+  socket for Secretive, the chosen socket for the OpenSSH agent. This matches
+  how a Secretive user's plain `ssh` already logs in; the filtered agent is
+  what gets forwarded. An `IdentityAgent` in the user's ssh_config still
+  wins, as in plain ssh, and `--dry-run` reports which one is used
+  **(builder call)**.
 - Every call runs off the main thread with a timeout; Touch ID can take up
   to the CLI's `--upstream-timeout` (120 s default), so `doctor` and
   `--dry-run` get a timeout above that and a visible "waiting for agent"
@@ -133,6 +146,13 @@ Settings.
   `port` and `user` for display **(owner: read only, Include and wildcards
   handled; builder call: use `ssh -G` instead of re-implementing ssh_config
   semantics)**.
+- The app never makes ssh run a command from the user's configuration. Like
+  the CLI, it first scans `~/.ssh/config` and every `Include`d file; if any
+  `Match` line mentions `exec`, or an `Include` cannot be resolved, it does
+  not run `ssh -G` at all and lists aliases without an effective hostname.
+  The CLI then refuses `connect` for that configuration, and the app shows
+  the CLI's own explanation **(builder call; found in review, follows the
+  CLI's rule in SSH_COMPATIBILITY.md)**.
 - Manual servers: the user can add an alias or `user@host` that discovery did
   not find **(owner)**. Input is validated: no leading `-`, no whitespace or
   control characters.
@@ -159,17 +179,26 @@ Settings.
 
 ### Destination binding (advanced)
 
-- Offered only when the server's host key is already in `known_hosts`
-  (trusted by OpenSSH before). The app reads candidate fingerprints with
-  `ssh-keygen -l -F <host>` (with the effective hostname and port from
-  `ssh -G`) and shows them; the user picks which ones to allow. It never
-  fetches a host key from the network to "verify" it **(builder call)**.
-- If no `known_hosts` entry exists, binding is unavailable for that server,
-  with the reason: connect once with identity filtering and verify the host
-  key, then come back.
+What it means (CLI semantics, see docs/USAGE.md and SSH_COMPATIBILITY.md):
+`--allow-destination` names the servers the **forwarded** key may log in to
+**onward from** the selected server, for example `github.com` when you run
+`git` on a build host. It does not protect the login to the selected server
+itself, which uses your own agent locally. The window says this in one line
+**(builder call; corrected after review: an earlier draft bound to the
+selected server's own key, which would have looked like protection without
+being useful)**.
+
+- The profile stores a list of allowed destinations: a name for display and
+  one or more host key fingerprints each. Default: none (binding off).
+- Picker source: entries the user already trusts in `~/.ssh/known_hosts`
+  (fingerprints via `ssh-keygen -l -f ~/.ssh/known_hosts`, names shown when
+  the file is not hashed), plus manual entry of a `SHA256:` host key
+  fingerprint with a name. Manual entry shows how to obtain a fingerprint
+  from a trusted source. The app never fetches host keys from the network.
 - The app shows the CLI's limits as facts in the profile: binding needs
-  OpenSSH hostbound authentication; with Secretive, a cancelled Touch ID
-  prompt means reconnecting.
+  OpenSSH hostbound authentication on the onward server; RSA host keys are
+  refused at authentication; with Secretive, a cancelled Touch ID prompt
+  means reconnecting.
 
 ### Check Connection
 
@@ -184,6 +213,14 @@ binding on or off) and keeps the raw output one click away. On failure it
 shows the CLI's own `hint:` line. Identity filtering shows, as a result line,
 that the shared key can sign for any server while connected (a fact about
 the chosen mode, not a banner).
+
+### From check to connect
+
+Connect in Terminal (and the copyable command) is enabled only after Check
+Connection passed for exactly the current inputs: profile contents, agent,
+CLI path and version. Any change clears the result and disables Connect
+until the next check **(answered by the owner's flow: "if the checks pass,
+I review the plan, then connect")**.
 
 ### Host key verification (owner)
 
