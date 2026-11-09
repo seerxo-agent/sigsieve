@@ -175,8 +175,8 @@ binary's provenance.
 
 ## First safe check and removal
 
-Start with [identity filtering and a dry run](../README.md#first-safe-check-with-openssh-linux-or-macos)
-or the [Secretive setup](../README.md#first-session-with-secretive-macos).
+Start with [identity filtering and a dry run](../README.md#quick-start)
+or the [Secretive setup](../README.md#quick-start).
 `doctor` does not request real-key signing; `connect --dry-run` does not
 start a remote SSH session. Verify the SSH destination's host key through
 a trusted channel before a real connection.
