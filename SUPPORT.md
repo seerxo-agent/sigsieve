@@ -1,6 +1,6 @@
 # Support and usage questions
 
-SigSieve is experimental security software. It has no guaranteed response time, no paid support, and no production assurance or independent audit.
+SigSieve is a stable (v1.0.0), single-maintainer open-source project. It has **not been independently audited**. There is no guaranteed response time, no paid support, and no production assurance.
 
 ## Before asking for help
 
