@@ -1,0 +1,21 @@
+.github/ISSUE_TEMPLATE/compatibility_report.yml
+  s_134925152e20d2::t_0997f5f9d3c894 1-82
+.github/ISSUE_TEMPLATE/installation_problem.yml
+  s_134925152e20d2::t_9a872ea29c6896 1-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "411ff1620f623822ec58495f1953ee8ce91aa429",
+  "prompts": {},
+  "sessions": {
+    "s_134925152e20d2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cbf9c202-f161-4ecb-b17d-f5ad5a969c37",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
