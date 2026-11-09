@@ -241,7 +241,7 @@ The device check used one real P-256 key and two localhost SSH servers.
 Secretive version and full per-operation prompt counts were not recorded;
 other devices, versions, 1Password, physical FIDO keys and external production
 services remain unverified. See the [device record](SECRETIVE_INTEGRATION.md#recorded-real-device-results).
-The [external validation protocol](EXTERNAL_VALIDATION.md) tracks the still
+The [external validation protocol](archive/EXTERNAL_VALIDATION.md) tracks the still
 outstanding expert review and three-user trial separately from these results.
 
 | Target | Executions | Final `cov / ft` | Final corpus | New units | Result |

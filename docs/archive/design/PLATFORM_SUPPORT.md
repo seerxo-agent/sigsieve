@@ -2,7 +2,7 @@
 
 Status: **evaluation, no behaviour change.** Roadmap items P2-01 (Linux
 aarch64 release), P2-02 (macOS Intel) and P2-06 (Windows). Current support is
-stated in [INSTALL.md](../INSTALL.md): prebuilt archives for macOS arm64 and
+stated in [INSTALL.md](../../INSTALL.md): prebuilt archives for macOS arm64 and
 Linux x86_64 only.
 
 A platform is "supported" only when its full CI, including the real `sshd`
