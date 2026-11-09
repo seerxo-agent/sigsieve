@@ -266,7 +266,7 @@ mutant expectations are the same as on Linux. Runtime source (`src/`,
 - `F-46 status`: VERIFIED in both runs; `scripts/verify-f46-evidence.sh
   dc05602 tested-commits.txt`: OK for the Linux and the macOS artifact.
 
-Limits: one GitHub-hosted runner image (`macos-latest`: macOS 26.7.2 arm64), not every macOS version or device; the macOS evidence artifact
+Limits: one GitHub-hosted runner image (`macos-latest`: macOS 26.7.2 arm64), not every macOS version or device; the binaries were built from source in CI, not the distributed `v1.0.0` release binary; this verifies the peer-credential refusal only, not the whole security model; the macOS evidence artifact
 (`f46-cross-user-evidence-macos`) is kept by the maintainer.
 
 ### F-45 — LOW–MEDIUM — release tag not bound to `main` (fixed after v0.1.0-alpha.3)
