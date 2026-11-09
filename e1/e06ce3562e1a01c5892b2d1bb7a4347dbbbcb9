@@ -1,0 +1,22 @@
+macos-app/PLAN.md
+  s_cbd94895c544bc::t_2a52c5490d152b 252
+  s_cbd94895c544bc::t_41085fcb85442d 1-239,242-251,253-718,725-868
+  s_cbd94895c544bc::t_ac2daad50f611f 719-724
+  s_cbd94895c544bc::t_a012fd6e4ae7d8 240-241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e1e06ce3562e1a01c5892b2d1bb7a4347dbbbcb9",
+  "prompts": {},
+  "sessions": {
+    "s_cbd94895c544bc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f51af96a-b580-43e6-af8c-aeb5f5214ad1",
+        "model": "unknown"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
