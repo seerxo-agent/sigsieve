@@ -1,0 +1,16 @@
+macos-app/DESIGN.md
+  h_8a6a8e7c9aeea2 61-63,335-337,350-351,381-384,386,404-406
+macos-app/PLAN.md
+  h_8a6a8e7c9aeea2 5-7,53-55,78-79,150,272-275,283-284,418-420,834-840,848-853,867-870,928-936,939-945,986-988,991-1009,1016,1027-1031,1042-1043,1076-1077,1082-1083
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ad5d9ad99355332119365d9d0041250370eb0ddc",
+  "prompts": {},
+  "humans": {
+    "h_8a6a8e7c9aeea2": {
+      "author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
