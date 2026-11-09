@@ -68,9 +68,18 @@ fp='SHA256:REPLACE_WITH_YOUR_KEY_FINGERPRINT'
 
 ### 2. Check the setup with `doctor`
 
+Run **one** of these, for the agent you chose in step 1.
+
+OpenSSH agent:
+
 ```bash
-sigsieve doctor --upstream "$upstream" --allow-fingerprint "$fp"   # OpenSSH agent
-sigsieve doctor --secretive --allow-fingerprint "$fp"              # Secretive
+sigsieve doctor --upstream "$upstream" --allow-fingerprint "$fp"
+```
+
+Secretive:
+
+```bash
+sigsieve doctor --secretive --allow-fingerprint "$fp"
 ```
 
 A working setup looks like this (shortened; output from a synthetic test key):
@@ -89,13 +98,20 @@ Result: all checks passed
 
 ### 3. Preview the connection
 
-Replace `build-host` with your SSH host alias:
+Replace `build-host` with your SSH host alias, and again run **one** command.
+
+OpenSSH agent:
 
 ```bash
 sigsieve connect build-host --upstream "$upstream" --allow-fingerprint "$fp" \
-  --dry-run -- -o StrictHostKeyChecking=yes       # OpenSSH agent
+  --dry-run -- -o StrictHostKeyChecking=yes
+```
+
+Secretive:
+
+```bash
 sigsieve connect build-host --secretive --allow-fingerprint "$fp" \
-  --dry-run -- -o StrictHostKeyChecking=yes       # Secretive
+  --dry-run -- -o StrictHostKeyChecking=yes
 ```
 
 `ssh` is not started. The plan should include:
@@ -111,14 +127,23 @@ Result: all checks passed
 
 ### 4. Connect
 
-First verify the destination's host key through a trusted channel and review the plan. Then run the same command **without** `--dry-run`:
+First verify the destination's host key through a trusted channel and review the plan. Then run the same command **without** `--dry-run`.
+
+OpenSSH agent:
+
+```bash
+sigsieve connect build-host --upstream "$upstream" --allow-fingerprint "$fp" \
+  -- -o StrictHostKeyChecking=yes
+```
+
+Secretive:
 
 ```bash
 sigsieve connect build-host --secretive --allow-fingerprint "$fp" \
   -- -o StrictHostKeyChecking=yes
 ```
 
-(With an OpenSSH agent, use `--upstream "$upstream"` instead of `--secretive`.) `connect` turns off connection sharing, port forwarding and X11 forwarding for the session. On the remote host, `ssh-add -l` should list only the identity you allowed. Disconnect when you no longer need forwarding, and keep an ordinary SSH access path.
+`connect` turns off connection sharing, port forwarding and X11 forwarding for the session. On the remote host, `ssh-add -l` should list only the identity you allowed. Disconnect when you no longer need forwarding, and keep an ordinary SSH access path.
 
 With Secretive, a passing automated OpenSSH test **does not establish Touch ID behavior**; see [Secretive integration](docs/SECRETIVE_INTEGRATION.md) for caveats and the tested scope. With destination binding, a cancelled Touch ID prompt cannot be retried on the same connection: connect again.
 
