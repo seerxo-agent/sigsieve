@@ -10,9 +10,9 @@ Maintainer decision 2026-11-05: no external technical review before v1.0.0
 Evaluate the published experimental `v0.1.0-alpha.2`, release source
 `fc7484be0371242f517b6628b0f7dcc3a9a12a29`. Record the documentation revision
 used separately: post-release documentation changes do not change the
-published binary. Use the [installation guide](INSTALL.md) to verify checksum
+published binary. Use the [installation guide](../INSTALL.md) to verify checksum
 and provenance before execution; record the resolved executable path and version.
-Existing evidence is in [TESTING.md](TESTING.md#release-candidate-evidence-2026-10-28).
+Existing evidence is in [TESTING.md](../TESTING.md#release-candidate-evidence-2026-10-28).
 
 ## Independent SSH/security review
 
@@ -21,10 +21,10 @@ independent of implementation. Record their role, independence, scope, source
 SHA, dates, methods and limitations. Separate-context AI-assisted review is
 internal evidence and does not satisfy this review.
 
-Give the reviewer the [threat model](THREAT_MODEL.md),
-[security model](SECURITY_MODEL.md), [findings register](FINDINGS.md),
-[compatibility matrix](SSH_COMPATIBILITY.md), [limits](LIMITATIONS.md) and
-[resource limits](RESOURCE_LIMITS.md), plus the exact source revision.
+Give the reviewer the [threat model](../THREAT_MODEL.md),
+[security model](../SECURITY_MODEL.md), [findings register](../FINDINGS.md),
+[compatibility matrix](../SSH_COMPATIBILITY.md), [limits](../LIMITATIONS.md) and
+[resource limits](../RESOURCE_LIMITS.md), plus the exact source revision.
 
 Suggested review boundaries:
 
@@ -37,13 +37,13 @@ Suggested review boundaries:
 | Distribution | `scripts/package-release.py`, `scripts/verify-release.sh`, `.github/workflows/release.yml`, `docs/INSTALL.md` | Does verification bind the executed binary to the approved repository, tag, source and artifact digest? |
 
 Use throwaway agents, keys and unprivileged test servers. Start from the
-[documented test commands](TESTING.md); retain failures and skipped checks.
+[documented test commands](../TESTING.md); retain failures and skipped checks.
 Do not use personal agents, production hosts or privileged credentials.
 
 For each finding record: identifier, severity, source SHA and file/line,
 reproduction, expected/observed result, impact, suggested minimum fix,
 regression evidence, fixed SHA and reviewer retest result. Report vulnerabilities
-through [SECURITY.md](../SECURITY.md), not public trial feedback. A finding is
+through [SECURITY.md](../../SECURITY.md), not public trial feedback. A finding is
 closed only with a documented resolution; green CI alone is not that resolution.
 
 Review outcome: **pending**. Reviewer, scope, findings, residual risks and
@@ -94,8 +94,8 @@ Keep the trial to existing `doctor`, `connect --dry-run` and `connect` commands.
 | Exit and recover | Session's proxy/socket cleaned up; ordinary SSH and the upstream test identity set unchanged | Cleanup and recovery observations |
 | Assess usefulness | Participant identifies a repeat-use case or explains why none exists | Would they use it again? What would they otherwise use? |
 
-Use the existing [usage guide](USAGE.md) and
-[controlled agent check](SECRETIVE_INTEGRATION.md#automated-controlled-check).
+Use the existing [usage guide](../USAGE.md) and
+[controlled agent check](../SECRETIVE_INTEGRATION.md#automated-controlled-check).
 Binding failure must never trigger an automatic retry in identity-only mode.
 A separately planned identity-only trial is a different task; record its mode
 explicitly. A denied operation is expected behaviour, not a reason to weaken
@@ -148,7 +148,7 @@ not recruit a reviewer or participant, authorize spending or publish an invitati
 > untrusted agent messages, binding authorization, SSH configuration and
 > proxy hops, local sockets/resources/cleanup, and release verification.
 > The [repository](https://github.com/semihbugrasezer/sigsieve) and
-> [release evidence](TESTING.md#release-candidate-evidence-2026-10-28) are public;
+> [release evidence](../TESTING.md#release-candidate-evidence-2026-10-28) are public;
 > the documentation corrections are recorded in
 > [PR #27](https://github.com/semihbugrasezer/sigsieve/pull/27).
 >
@@ -176,7 +176,7 @@ not recruit a reviewer or participant, authorize spending or publish an invitati
 > Please share your OS/architecture and SSH experience through the channel
 > where the maintainer posts this invitation. No private keys, credentials,
 > real hostnames or unredacted agent listings are needed. Security findings
-> go through the repository's [private reporting channel](../SECURITY.md).
+> go through the repository's [private reporting channel](../../SECURITY.md).
 
 Record the chosen channel, date and any replies only after the maintainer
 actually sends an enquiry or invitation. Leave U1–U3 and the expert outcome
