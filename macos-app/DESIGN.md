@@ -58,8 +58,9 @@ servers **(owner)**.
 - No changes to the Rust CLI or to the released v1.0.0 **(owner)**.
 - No `Disconnect` / session management unless the app can identify its own
   process reliably; otherwise it waits for a later phase **(owner)**.
-- No code signing, notarization or public distribution; local builds only
-  **(owner)**.
+- No Developer ID signing, notarization or public distribution. A local
+  build may be ad hoc signed so macOS will launch it; that signature has
+  no team identity **(owner)**.
 - No editing of `~/.ssh/config`, `known_hosts` or the agent **(owner)**.
 - No key creation, import or deletion; no private key ever enters the app
   **(owner)**.
@@ -331,8 +332,9 @@ SSH connections it did not start **(owner)**.
 
 One menu bar window, about 380 pt wide, fixed maximum height:
 
-1. Status row: agent, key count, CLI version; red or orange when something
-   blocks checks.
+1. Status row: agent, key count, CLI version; red or orange for a blocking
+   error. Blocking errors are: the CLI cannot be used, `TMPDIR` failed
+   verification, or the profiles file cannot be read or saved.
 2. Server picker: searchable list (or a "recent" section on top), plus
    "Add server…".
 3. Forwarded keys for the selected server, under the heading "Keys sessions
@@ -345,8 +347,8 @@ One menu bar window, about 380 pt wide, fixed maximum height:
    command.
 6. Footer: Settings (agent, CLI path, profiles file location) and Quit.
 
-The menu bar icon is a template image; it shows a small badge only for a
-blocking error.
+The menu bar icon is a template image. It shows a small badge for every
+blocking error, including a profiles-file error.
 
 ## Testing
 
@@ -376,8 +378,12 @@ blocking error.
 - Integration tests on macOS CI or locally, with a throwaway `ssh-agent`
   and synthetic keys: key listing, `doctor` pass and fail, `--dry-run` pass,
   CLI missing or wrong version.
+- A `connect` test that needs SSH configuration passes
+  `-- -F <temporary-config>` and shows that the CLI read that file. It does
+  not read the user's `~/.ssh/config`. The command the app builds for a
+  real check never adds `-F`.
 - A 500-key synthetic agent for list performance.
-- No test uses a real user key, host or the user's own agent.
+- No test uses a real user key, host, agent or `~/.ssh`.
 
 ## Left to the builder
 
@@ -395,5 +401,7 @@ blocking error.
   `Match exec` scan to stay in the CLI (for example a CLI subcommand that
   prints them), not a Swift copy.
 - Disconnect / session list.
-- Signing, notarization and distribution (Apple Developer account, cost).
+- Developer ID signing, notarization and distribution (Apple Developer
+  account, cost). Ad hoc signing of a local build is part of the first
+  version.
 - Intel macOS.

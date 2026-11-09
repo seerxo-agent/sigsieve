@@ -2,8 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Status: in review (2026-11-09). No code is written until the owner approves
-this plan.
+Status: in review (2026-11-10). No code is written until the owner approves
+this plan. The architecture is accepted; coding starts only when the owner
+approves a task.
 
 **Goal:** A SwiftUI menu bar app that builds, checks and launches
 `sigsieve connect` for a per-server key profile, without typing a command.
@@ -49,8 +50,9 @@ Check before Task 1: `xcodebuild -version` prints 16.0 or newer, and
 - Nothing outside `macos-app/` changes, except one new file
   `.github/workflows/macos-app.yml`. `src/`, `Cargo.toml`, the release
   workflows and v1.0.0 are untouched.
-- No push, PR, signing, notarization or distribution. Local commits on
-  `feat/macos-app-design`, authored as the branch's existing bot identity.
+- No push, PR, Developer ID signing, notarization or distribution. Local
+  commits on `feat/macos-app-design`, authored as the branch's existing bot
+  identity. A local build is ad hoc signed, with no team identity.
 - macOS 13 or newer (`platforms: [.macOS(.v13)]`), Apple Silicon first.
 - Supported CLI: `sigsieve --version` prints `sigsieve 1.<minor>.<patch>`.
   Anything else blocks checks and connections.
@@ -73,6 +75,8 @@ Check before Task 1: `xcodebuild -version` prints 16.0 or newer, and
 - Fingerprints match `^SHA256:[A-Za-z0-9+/]{43}$`. Host input: not empty, no
   leading `-`, no whitespace, no control characters.
 - `-- -o StrictHostKeyChecking=yes` is always appended to `connect`.
+  Production arguments never include `-F`. A test that must point the CLI
+  at a temporary config passes `-F` itself, after `--`.
 - UI wording: never "the server sees a key". The key list is headed "Keys
   sessions on this server may use (forwarded agent)". Known-hosts picker
   entries are labelled "from your known_hosts". The result screen ends with
@@ -143,7 +147,7 @@ sigsieve/
           Connection/Launcher.swift           launcher file, Terminal, cleanup
         Tests/SigSieveKitTests/   one test file per source file, plus:
           IntegrationTests.swift  throwaway ssh-agent + built CLI
-          SourceRulesTests.swift  source scan of the Kit and of App/
+          SourceRulesTests.swift  source scan of the Kit; App/ when it exists
           Support/ThrowawayAgent.swift
 ```
 
@@ -265,7 +269,10 @@ func unreadableFileIsNeverOverwritten(_ body: String) throws {
     // .unsupportedVersion(2); bytes unchanged
 }
 @Test func aServerWithoutProfileForwardsNothing() {
-    #expect(Profile.empty(for: HostInput("h")!, agent: .secretive).forwardedKeys.isEmpty)
+    let p = Profile.empty(for: HostInput("h")!, agent: .secretive)
+    #expect(p.forwardedKeys.isEmpty)
+    #expect(p.mode == .filtering)
+    #expect(p.destinations.isEmpty)
 }
 ```
 
@@ -273,7 +280,8 @@ func unreadableFileIsNeverOverwritten(_ body: String) throws {
 - [ ] **Step 3: Implement `Profile.swift`.** `save` writes a temporary file
   in the same directory with `open(O_CREAT|O_EXCL, 0o600)`, `fsync`, then
   `rename`; it calls `load()` first and rethrows, so an unreadable or newer
-  file blocks saving. Add `static func empty(for:agent:) -> Profile`.
+  file blocks saving. Add `static func empty(for:agent:) -> Profile` with
+  `mode: .filtering` and `destinations: []`.
 - [ ] **Step 4: Run** the tests. Expected: all pass.
 - [ ] **Step 5: Commit** `macos-app: profile model and atomic private store`.
 
@@ -407,8 +415,9 @@ func refusesAnyOtherExecutable(_ path: String) async {
 @Test func largeOutputDoesNotDeadlock() async throws {} // script prints 1 MB; completes
 
 // SourceRulesTests.swift
-// A second check, not the boundary. Scans Sources/ of the Kit and
-// macos-app/App/ (found relative to #filePath).
+// A second check, not the boundary. Scans Sources/ of the Kit.
+// Scans macos-app/App/ (found relative to #filePath) only when that
+// directory exists. At Task 4 it does not, so this task covers the Kit only.
 @Test func onlyProcessRunnerUsesProcess() throws {
     // "Process()" and "NSTask" appear only in ProcessRunner.swift;
     // "posix_spawn", "execv", "system(" and "NSAppleScript" appear nowhere
@@ -822,9 +831,13 @@ Rules that are not obvious from the design:
 - `canConnect` is `gate.canConnect(currentInputs)`. `currentInputs` is
   `nil`, and Check is disabled, when the CLI or `TMPDIR` is in error, no
   server is selected, or no key is forwarded.
-- `connect()` re-reads `SSHConfigAliases.currentStamps` first; if they
-  differ from the checked ones it clears the result and does not launch.
-  `refresh()` (window opens) does the same comparison.
+- Any change to the profile (server, forwarded keys, mode, destinations),
+  the agent, the CLI path or version, the verified `TMPDIR`, or a discovered
+  SSH configuration stamp sets `checkState` to `idle`. The previous result
+  and the copyable command are not shown. `canConnect` is false until the
+  next passing check. `connect()` and `refresh()` re-read
+  `SSHConfigAliases.currentStamps` first and apply this same reset when the
+  stamps differ; they do not launch.
 - Settings holds the default agent (Secretive or an OpenSSH socket, prefilled
   from the app's own `SSH_AUTH_SOCK`), an optional CLI path, and shows the
   resolved CLI path, its version and the profiles file location. A new
@@ -832,9 +845,12 @@ Rules that are not obvious from the design:
   two settings live in `UserDefaults`.
 - At launch the model calls `Launcher.removeStale(under:)` once.
 - Every profile edit saves through `ProfileStore` immediately. If
-  `storeError` is set, edits are disabled and the status row shows the error
-  with the file path.
-- The copyable command is shown only while `canConnect` is true.
+  `storeError` is set, edits are disabled. The status row shows the error
+  and the profiles file path.
+- A passed result and the copyable command are shown only while
+  `checkState` is `finished`, the check passed, and `canConnect` is true.
+  A failed check stays visible until an input change returns `checkState`
+  to `idle`.
 - Key and server lists are `List` with a fixed height (keys 180 pt, servers
   120 pt) so 500 rows are created lazily. Search fields bind to the queries.
 - Window width 380 pt. One window: status row, server picker, key list,
@@ -848,8 +864,10 @@ Rules that are not obvious from the design:
   for any server while connected".
 - For a failed check: the CLI's `hint` if any, then "Show output" with the
   raw text. While running: "Waiting for agent…" after 2 s.
-- Menu bar icon: SF Symbol `key.horizontal` as template; `key.horizontal.fill`
-  with a badge only when the CLI or `TMPDIR` is in error.
+- Blocking errors are a CLI error, a `TMPDIR` error, and a profile store
+  error. The status row shows each of them. Menu bar icon: SF Symbol
+  `key.horizontal` as template; `key.horizontal.fill` with a badge for any
+  blocking error, including a profiles-file error.
 
 - [ ] **Step 1: Write the project and scheme** with an `App/SigSieveApp.swift`
   that shows an empty `MenuBarExtra`.
@@ -907,13 +925,24 @@ SIGSIEVE_TEST_CLI=$PWD/target/release/sigsieve \
 @Test func doctorPassesForAnAllowedKey() async throws {}       // real CLI, exit 0, lines contain "Filtering"
 @Test func doctorFailsForAMissingKey() async throws {}         // fingerprint not in agent → .failed
 @Test func dryRunPassesAgainstAnIsolatedConfig() async throws {
-    // HOME = temp dir with .ssh/config "Host t\n  HostName 127.0.0.1\n";
-    // CheckResult.passed == true; no ssh session is opened by --dry-run
+    // Call ProcessRunner on the real CLI. Do not use CommandBuilder and do
+    // not set HOME: the CLI resolves ~/.ssh/config from the passwd home
+    // (src/socket.rs home_dir), so HOME does not isolate the test.
+    // Write only <temp>/good: "Host t\n  HostName 127.0.0.1\n".
+    // Argv: connect t <agent> --allow-fingerprint <fp> --dry-run --
+    //       -F <temp>/good -o StrictHostKeyChecking=yes
+    // Expect exit 0. Raw contains "ssh not started", "Would run:", "-F" and
+    // the path of <temp>/good. The passwd home's ~/.ssh/config path is not
+    // cited as the config that was read.
 }
 @Test func matchExecConfigIsRefusedByTheCLIAndNothingRuns() async throws {
-    // config: "Match exec \"touch <marker>\"\nHost t\n"; dry run → .failed;
-    // raw contains "Match exec"; <marker> does not exist;
-    // SSHConfigAliases.discover on the same file also leaves no marker
+    // Same argv shape, with <temp>/exec instead of <temp>/good:
+    // "Match exec \"touch <marker>\"\nHost t\n".
+    // Expect exit 1. Raw contains that temporary path and "Match exec", and
+    // does not cite the passwd home's ~/.ssh/config. <marker> does not exist.
+    // The two outcomes differ, so the CLI is reading the -F file and not the
+    // user's config. SSHConfigAliases.discover on <temp>/exec also leaves
+    // no marker. CommandBuilder.connectArguments contains no "-F".
 }
 @Test func sigsieveVariablesInTheTestEnvironmentAreIgnored() async throws {
     // setenv SIGSIEVE_ALLOW=<other fp>; doctor output reports 1 allowlisted fingerprint, ours
@@ -954,22 +983,37 @@ SIGSIEVE_TEST_CLI=$PWD/target/release/sigsieve \
 
 - [ ] **Step 1: Write the workflow.** Triggers: `pull_request` and `push`
   with `paths: ['macos-app/**', '.github/workflows/macos-app.yml']`.
-  `permissions: contents: read`. One job on `macos-15`, in this order:
+  `permissions: contents: read`. One job on `macos-15`, in this order.
+  Toolchains are selected by path and version. The runner's current
+  `xcode-select` default and its unqualified `cargo` are not used.
   1. checkout (the same pinned commit `ci.yml` uses,
      `3d3c42e5aac5ba805825da76410c181273ba90b1`);
-  2. `xcodebuild -version` (recorded in the log);
-  3. `cargo build --release --locked`, the CLI from the same checkout;
-  4. `SIGSIEVE_TEST_CLI=$PWD/target/release/sigsieve swift test --package-path macos-app/Packages/SigSieveKit`
-     (GitHub sets `CI`, so a missing CLI fails instead of skipping);
-  5. the `xcodebuild … build` command of Task 12, a real app build;
-  6. `test -d macos-app/build/Build/Products/Release/SigSieve.app` and
+  2. select Xcode 16.4, the Xcode 16 on the `macos-15` image
+     (image readme of 2026-11-04, path `/Applications/Xcode_16.4.app`):
+     `sudo xcode-select -s /Applications/Xcode_16.4.app`. Then
+     `xcodebuild -version` must print `Xcode 16.4`. A missing app or any
+     other version fails the job;
+  3. project compatibility under that Xcode: `project.pbxproj` contains
+     `objectVersion = 77;`, and
+     `xcodebuild -list -project macos-app/SigSieve.xcodeproj` prints the
+     target `SigSieve` and the scheme `SigSieve`;
+  4. install the channel named in `rust-toolchain.toml` (now `1.99.1`) with
+     `rustup toolchain install --profile minimal --component rustfmt --component clippy 1.99.1`.
+     `rustc +1.99.1 --version` must print `1.99.1`. Build with
+     `cargo +1.99.1 build --release --locked`, the CLI from the same checkout;
+  5. `SIGSIEVE_TEST_CLI=$PWD/target/release/sigsieve swift test --package-path macos-app/Packages/SigSieveKit`.
+     `swift` is the one from the selected Xcode. GitHub sets `CI`, so a
+     missing CLI fails instead of skipping;
+  6. the `xcodebuild … build` command of Task 12, a real app build, still
+     under the selected Xcode;
+  7. `test -d macos-app/build/Build/Products/Release/SigSieve.app` and
      `plutil -lint` on its `Info.plist`.
 
   It uploads nothing, publishes nothing, uses no secrets and shares no job
   with the Rust or release workflows.
 - [ ] **Step 2: Finish `README.md`**: what the app is (a convenience layer;
   the CLI enforces), requirements, build, run, test, the manual checklist,
-  and "not signed or notarized; local builds only".
+  and "ad hoc signed for local runs; no Developer ID and not notarized".
 - [ ] **Step 3: Run** `git diff --check` and
   `git diff --stat main -- . ':!macos-app' ':!.github/workflows/macos-app.yml'`.
   Expected: no whitespace errors; the second command prints nothing.
@@ -980,9 +1024,11 @@ SIGSIEVE_TEST_CLI=$PWD/target/release/sigsieve \
 ### Task 15: Integrated security review
 
 Run by a fresh agent that has not implemented any task, on the whole branch.
-It changes no code; it writes `macos-app/SECURITY_REVIEW.md` with one row
-per item: what was checked, the evidence (file and line, or command and
-output), and pass or finding. Findings go back as new tasks.
+It changes no code and no tests. It writes `macos-app/SECURITY_REVIEW.md`
+with one row per item: what was checked, the evidence (file and line, or
+command and output), and pass or finding. Findings, including any extra
+test the reviewer wishes existed, go back as new tasks. The review commit
+adds only that report.
 
 - [ ] **Step 1: Process execution.** Every place a process or another
   program can be started (`Process`, `NSWorkspace`, anything else) is listed
@@ -993,8 +1039,8 @@ output), and pass or finding. Findings go back as new tasks.
   variable; the only difference is `TERM`. `TMPDIR` has no path to `/tmp`.
 - [ ] **Step 3: Arguments and quoting.** Every value that reaches the
   launcher text is traced back to a validated type or to `ShellQuote`.
-  The reviewer adds hostile cases of their own to the Task 9 tests and
-  records the result.
+  Extra hostile cases are listed in `SECURITY_REVIEW.md` only. The reviewer
+  does not edit the Task 9 tests.
 - [ ] **Step 4: Terminal launch.** Launcher directory and file modes,
   self-deletion, stale cleanup that cannot be pointed at another directory,
   no AppleScript or Automation entitlement.
@@ -1027,10 +1073,12 @@ The first version is done when all of these hold, each with its evidence:
 5. The process runner's refusal tests and `SourceRulesTests` pass.
 6. `SECURITY_REVIEW.md` (Task 15) has no open finding.
 7. After the owner authorizes a push: the `macos-app` workflow is green,
-   with the app build step and zero skipped tests.
+   on the pinned Rust `1.99.1` and Xcode 16.4, with the app build step and
+   zero skipped tests.
 
 ## Not in this plan
 
 Disconnect and session management, the CLI `--profile` option, effective
-hostname display, signing, notarization, distribution and Intel builds. See
+hostname display, Developer ID signing, notarization, distribution and
+Intel builds. Ad hoc signing of a local build is in Task 12. See
 "Open for later phases" in `DESIGN.md`.
