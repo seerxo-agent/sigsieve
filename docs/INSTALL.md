@@ -19,6 +19,8 @@ The formula installs only the binary: no service, configuration file, change
 to `~/.ssh`, or change to your agent.
 The formula builds from source and does not verify the binary build
 provenance described below. See [Homebrew packaging](../packaging/homebrew/README.md).
+The formula is tested on macOS Apple Silicon only; Homebrew on Linux is not
+tested. Uninstall with `brew uninstall sigsieve && brew untap semihbugrasezer/sigsieve`.
 
 ## Pinned prebuilt archive: v1.0.0
 
@@ -151,8 +153,8 @@ release has no SBOM, because it was published before SBOM sidecars existed.
 ## Install the tagged version from source
 
 Use this path for Linux arm64, older glibc distributions, or to avoid
-prebuilt downloads. Requires a working Rust toolchain (the checkout pins
-Rust 1.99.1) and OpenSSH. This installs **the release tag**, not the newer
+prebuilt downloads. Requires a working Rust toolchain (Rust 1.88 or newer;
+the checkout pins 1.99.1) and OpenSSH. This installs **the release tag**, not the newer
 `main` branch. It stops before building if the checked-out commit is not the
 release commit:
 

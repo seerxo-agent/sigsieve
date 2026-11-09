@@ -4,6 +4,16 @@
 identity filtering; add destination binding only after checking the
 [destination's compatibility](SSH_COMPATIBILITY.md).
 
+## Do you need SigSieve?
+
+| Your goal | Consider first |
+| --- | --- |
+| Access a host through a bastion without forwarding agent credentials | OpenSSH [`ProxyJump`](https://man.openbsd.org/ssh_config#ProxyJump) |
+| Choose a key for your own local SSH login | `IdentityFile`, `IdentityAgent`, and `IdentitiesOnly` |
+| Forward only a few exportable keys | A dedicated `ssh-agent` loaded with only those keys |
+| Restrict keys in OpenSSH's own agent | OpenSSH [`ssh-add -h` destination constraints](https://www.openssh.org/agent-restrict.html) |
+| Forward one non-exportable identity from an existing agent | Evaluate SigSieve's filtering and its limitations |
+
 ## Choose your upstream agent
 
 Run one of the following in the terminal you will use for SigSieve.
@@ -24,7 +34,7 @@ If no agent is running, start one with `eval "$(ssh-agent -s)"`, load a
 key you intend to use with `ssh-add /path/to/your/key`, then set `upstream`.
 This loads the key into OpenSSH, not SigSieve. A separate agent containing
 only that key may already solve your problem; see the
-[alternatives](../README.md#do-you-need-it).
+[alternatives](#do-you-need-sigsieve).
 
 List the available public fingerprints locally and choose the one the
 remote host may use:
