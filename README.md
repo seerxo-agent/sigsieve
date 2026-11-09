@@ -13,7 +13,7 @@ Your existing agent—such as [Secretive](https://github.com/maxgoedjen/secretiv
 **Free and MIT-licensed. No account, telemetry, hosted service, or mandatory cloud dependency.**
 
 > [!WARNING]
-> **Not independently audited.** Automated security tests do not establish production-grade security assurance. Real Secretive filtering, signing and destination binding were checked with the `v1.0.0-rc.1` binary for **one** configuration only (one P-256 test key, Secretive 4.0.0, macOS 27.2 arm64, localhost test servers); other devices, Secretive versions and real services are not covered ([details](docs/SECRETIVE_INTEGRATION.md#recorded-real-device-results)). Read the [security model](docs/SECURITY_MODEL.md) and [known limitations](docs/LIMITATIONS.md) before using agent forwarding, and retain an ordinary SSH access path.
+> **Not independently audited.** Automated security tests do not establish production-grade security assurance. Real Secretive filtering, signing and destination binding were checked with the `v1.0.0-rc.1` binary (and, maintainer-reported, the `1.0.0` binary) for **one** configuration only (one P-256 test key, Secretive 4.0.0, macOS 27.2 arm64, localhost test servers); other devices, Secretive versions and real services are not covered ([details](docs/SECRETIVE_INTEGRATION.md#recorded-real-device-results)). Read the [security model](docs/SECURITY_MODEL.md) and [known limitations](docs/LIMITATIONS.md) before using agent forwarding, and retain an ordinary SSH access path.
 
 ## Why SigSieve?
 
@@ -147,16 +147,17 @@ For the full boundary and evidence, see the [security model](docs/SECURITY_MODEL
 
 ## Verification and release integrity
 
-The published **v0.1.0-alpha.4** release is pinned to source commit [`5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`](https://github.com/semihbugrasezer/sigsieve/commit/5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751), not the moving tip of `main`. The `v1.0.0-rc.1` release candidate is pinned to [`c4fa7a5eeba0283dc14d73a87ff996b876050394`](https://github.com/semihbugrasezer/sigsieve/commit/c4fa7a5eeba0283dc14d73a87ff996b876050394); stable candidate checks must be repeated on its own commit.
+The stable **[v1.0.0](https://github.com/semihbugrasezer/sigsieve/releases/tag/v1.0.0)** release (published 2026-11-09, immutable) is pinned to source commit [`71ae5e95e666eeb3cb1b94b25ba6b0b8571eca35`](https://github.com/semihbugrasezer/sigsieve/commit/71ae5e95e666eeb3cb1b94b25ba6b0b8571eca35), not the moving tip of `main`.
 
 | Evidence | What was verified |
 | --- | --- |
-| [Candidate CI](https://github.com/semihbugrasezer/sigsieve/actions/runs/41519403249) | Rust tests and real OpenSSH integration, including platform-specific checks |
-| [F-46 Linux cross-user run](https://github.com/semihbugrasezer/sigsieve/actions/runs/41519403122) | Peer-credential restriction and its negative test; **not** a macOS cross-user test |
-| [Release rehearsal](https://github.com/semihbugrasezer/sigsieve/actions/runs/41527758832) | Build, reproducible packaging, smoke checks, SBOM generation, artifact-binding checks |
-| [Fuzz campaign](https://github.com/semihbugrasezer/sigsieve/actions/runs/41527783557) | Four targets, 3,600 seconds each; 287,516,615 executions with no reported crash |
-| [Release build](https://github.com/semihbugrasezer/sigsieve/actions/runs/41538765784) | Published artifacts, SHA-256 checksums, CycloneDX SBOMs, and provenance attestations |
-| [Linux release verification](https://github.com/semihbugrasezer/sigsieve/actions/runs/41540423408) | Native archive and verification checks |
+| [CI](https://github.com/semihbugrasezer/sigsieve/actions/runs/42227739778) | Rust tests and real OpenSSH integration on macOS arm64, Linux x86_64 and arm64, MSRV 1.88 |
+| [F-46 Linux cross-user run](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231058235) | Peer-credential restriction and its negative test; **not** a macOS cross-user test |
+| [Release rehearsal](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231048170) | Build, reproducible packaging, smoke checks, SBOM generation, artifact-binding checks |
+| [Fuzz campaign](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231052710) | Four targets, 3,600 seconds each; 392,384,646 executions with no reported crash |
+| [Release build](https://github.com/semihbugrasezer/sigsieve/actions/runs/42286504497) | Published artifacts, SHA-256 checksums, CycloneDX SBOMs, and provenance attestations |
+| [Linux release verification](https://github.com/semihbugrasezer/sigsieve/actions/runs/42291132708) | Native archive and verification checks |
+| macOS arm64 release verification, Homebrew upgrade, Secretive device test with the 1.0.0 binary | Maintainer-reported; see the [release notes](https://github.com/semihbugrasezer/sigsieve/releases/tag/v1.0.0) |
 
 Evidence is **specific to the tested revision** and is not a security certification. Full test descriptions and historical results are in [TESTING.md](docs/TESTING.md); remaining findings are in [FINDINGS.md](docs/FINDINGS.md).
 

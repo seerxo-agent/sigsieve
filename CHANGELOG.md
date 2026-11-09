@@ -4,9 +4,9 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [1.0.0] - Unreleased
+## [1.0.0] - 2026-11-09
 
-First stable candidate. Runtime behavior is unchanged from `1.0.0-rc.1`.
+First stable release. Runtime behavior is unchanged from `1.0.0-rc.1`.
 Prebuilt targets are macOS Apple Silicon and Linux x86_64; Intel macOS and
 Windows have not been validated. No independent external security review or
 audit has been performed: the maintainer waived the external technical review

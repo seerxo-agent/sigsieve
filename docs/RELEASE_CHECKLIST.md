@@ -78,41 +78,51 @@ audited" statement stays in the README, INSTALL and release notes, stable
 or not, until a genuine independent security audit has been completed and
 published.
 
-Status as of 2026-11-06. RC1 evidence below belongs to commit
-`c4fa7a5eeba0283dc14d73a87ff996b876050394`; checks that depend on the
-final stable source or binary must be repeated on that candidate:
+Status for the published `v1.0.0` (2026-11-09), commit
+`71ae5e95e666eeb3cb1b94b25ba6b0b8571eca35`. **Maintainer-reported** marks
+evidence the maintainer ran and reported but that has no independently
+checkable log in this repository or in Actions:
 
 | # | Gate | Waivable | Status | Evidence / missing |
 |---|---|---|---|---|
-| S1 | No unresolved confirmed CRITICAL or HIGH finding in the supported threat model | No | Met on RC1; recheck stable candidate | [FINDINGS.md](FINDINGS.md); no open CRITICAL/HIGH on RC1, internal reviews only |
-| S2 | Every MEDIUM finding fixed, or accepted individually with user impact documented | Yes | Met on RC1; recheck stable candidate | [FINDINGS.md](FINDINGS.md); none open on RC1 |
+| S1 | No unresolved confirmed CRITICAL or HIGH finding in the supported threat model | No | Met (v1.0.0) | [FINDINGS.md](FINDINGS.md); no open CRITICAL/HIGH; internal reviews only |
+| S2 | Every MEDIUM finding fixed, or accepted individually with user impact documented | Yes | Met (v1.0.0) | [FINDINGS.md](FINDINGS.md); none open |
 | S3 | A written stable decision for F-22 and F-47: a fix, or an accepted limitation with its bound; no claim of protocol-level replay prevention | Yes (explicit risk acceptance) | Met (decision; recheck on the candidate) | Legitimate-flow measurement done 2026-11-03 (synthetic keys, localhost, OpenSSH 10.5p1 on macOS 27.2 arm64): at most one signature per (session id, key) and one user name per session; the F-47 replay yielded one signature per user-name variant. Maintainer decision: fix. One attempt per (session id, key) merged in PR #57 (`1e2523c`, 2026-11-04), F-46 verified; F-22 stays an accepted bound: at most one signature per recorded session and key while remembered (300 s, 256 entries; expiry, eviction, new sessions and a new instance allow more); no protocol-level replay prevention. Compatibility restriction: a cancelled or failed Touch ID prompt cannot be retried with the same key on the same connection (reconnect; [SSH_COMPATIBILITY.md](SSH_COMPATIBILITY.md#one-signature-per-session-and-key)). Not externally reviewed (see S11); non-OpenSSH clients and servers not measured |
-| S4 | Platform evidence matches the support matrix claimed in the README and INSTALL | Yes (narrow the claimed matrix) | Met on RC1; recheck stable candidate | macOS arm64 and Linux x86_64 release binaries verified; macOS cross-user (F-46) **not verified**; Linux arm64 source-only |
-| S5 | Every Secretive configuration advertised as supported is validated on a real device for the candidate | Yes (do not advertise it) | Met for the one advertised RC1 configuration; repeat stable binary | RC1: one P-256 test key, Secretive 4.0.0, macOS 27.2 arm64, localhost SSH servers, 2026-11-06: 13/13 positive checks, expected cancellation refusal, reconnect 13/13 ([SECRETIVE_INTEGRATION.md](SECRETIVE_INTEGRATION.md#recorded-real-device-results)); other configurations unverified |
-| S6 | CI and required security tests pass on the exact candidate (incl. MSRV, real OpenSSH, `F-46 status`) | No | Met on RC1; pending on stable candidate | CI run 42023039963, F-46 run 42023334020, fuzz run 42023341824; repeat on stable candidate |
-| S7 | Release checksums, SBOMs, build provenance and SBOM attestations verified on macOS and Linux | No | Met on RC1; pending on stable candidate | Release run 42090685138, macOS native verification PASS, Linux [Verify release](https://github.com/semihbugrasezer/sigsieve/actions/runs/42187936220) PASS; repeat on stable candidate |
-| S8 | Homebrew install, upgrade and uninstall tested against the **published** tap | Yes (do not advertise Homebrew) | Partial | alpha.4 (historical): install, `brew test`, uninstall, reinstall against the published tap on macOS arm64 passed; **upgrade not tested** (needs a second published version); Linux Homebrew not tested ([packaging/homebrew](../packaging/homebrew/README.md)) |
-| S9 | Known limitations and recovery procedures documented for end users | No | Met (review for the candidate) | [LIMITATIONS.md](LIMITATIONS.md), [USAGE.md](USAGE.md) |
+| S4 | Platform evidence matches the support matrix claimed in the README and INSTALL | Yes (narrow the claimed matrix) | Met (v1.0.0, narrowed matrix) | macOS arm64 and Linux x86_64 release binaries verified (Linux by Actions, macOS maintainer-reported); macOS cross-user (F-46) **not verified**; Linux arm64 source-only; Intel macOS and Windows not validated |
+| S5 | Every Secretive configuration advertised as supported is validated on a real device for the candidate | Yes (do not advertise it) | Met for one configuration (maintainer-reported for the 1.0.0 binary) | RC1: one P-256 test key, Secretive 4.0.0, macOS 27.2 arm64, localhost SSH servers, 2026-11-06: 13/13 positive checks, expected cancellation refusal, reconnect 13/13 ([SECRETIVE_INTEGRATION.md](SECRETIVE_INTEGRATION.md#recorded-real-device-results)). 1.0.0 binary: 13/13, maintainer-reported (the maintainer saw the terminal output; no published log). Other configurations unverified |
+| S6 | CI and required security tests pass on the exact candidate (incl. MSRV, real OpenSSH, `F-46 status`) | No | Met (v1.0.0) | On `71ae5e9`: [CI](https://github.com/semihbugrasezer/sigsieve/actions/runs/42227739778), [F-46](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231058235) VERIFIED (Linux), [fuzz](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231052710) 4 × 3,600 s, 0 crashes, [rehearsal](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231048170) |
+| S7 | Release checksums, SBOMs, build provenance and SBOM attestations verified on macOS and Linux | No | Met (v1.0.0; macOS part maintainer-reported) | [Release run 42286504497](https://github.com/semihbugrasezer/sigsieve/actions/runs/42286504497); Linux [Verify release](https://github.com/semihbugrasezer/sigsieve/actions/runs/42291132708) PASS; macOS native `verify-release.sh` PASS maintainer-reported; checksums and `gh attestation verify` of both archives and SBOMs independently re-checked on macOS 2026-11-09 (no native smoke test) |
+| S8 | Homebrew install, upgrade and uninstall tested against the **published** tap | Yes (do not advertise Homebrew) | Met for macOS arm64 (maintainer-reported) | Published tap 1.0.0 formula (tap `7fd385e`, source `sha256` `a2aabca…`): install, upgrade from `v0.1.0-alpha.4`, `brew test`, uninstall on macOS arm64, maintainer-reported, no independent log. Linux Homebrew not tested ([packaging/homebrew](../packaging/homebrew/README.md)) |
+| S9 | Known limitations and recovery procedures documented for end users | No | Met (v1.0.0) | [LIMITATIONS.md](LIMITATIONS.md), [USAGE.md](USAGE.md) |
 | S10 | Vulnerability reporting works and security maintenance has an owner | No | Met (2026-11-06) | A harmless TEST ONLY advisory was submitted privately by `seerxo-agent`, received and closed by owner; never published. The owner retains the private advisory evidence; [SECURITY.md](../SECURITY.md) |
 | S11 | An external technical review completed, its findings fixed or individually assessed | Yes (state that none happened) | **Waived** (written maintainer decision 2026-11-05) | Decision: no external technical review before v1.0.0. Residual risk: design and implementation errors that internal (AI-assisted) review and automated tests missed, including in the F-47 fix and destination binding. User impact: users rely on the published tests, findings register and limitations only. Must be stated in the release notes of every v1 release. [EXTERNAL_VALIDATION.md](EXTERNAL_VALIDATION.md) |
-| S12 | Release permissions separated: automation acts only through an account with no write, maintain or admin role on the repository (pull requests from its own fork); merges, `v*` tags and releases are made by the maintainer; `v*` tags are owner-created only and immutable; published releases are immutable. Local credential isolation is **not** claimed; this residual risk is stated in [LIMITATIONS.md](LIMITATIONS.md#verification-gaps-see-release_checklistmd) and the release notes | No | GitHub settings met (owner check 2026-11-06); final publication check pending | Owner confirmed release immutability enabled for future releases, only repository admin bypass on tag creation, no bypass on tag immutability, and no direct `seerxo-agent` write/maintain/admin access. Vercel App removed from this repository's selected access. Local owner credentials remain reachable to automation under the same macOS user; do not claim isolation. Confirm the actual published release is immutable after publication |
+| S12 | Release permissions separated: automation acts only through an account with no write, maintain or admin role on the repository (pull requests from its own fork); merges, `v*` tags and releases are made by the maintainer; `v*` tags are owner-created only and immutable; published releases are immutable. Local credential isolation is **not** claimed; this residual risk is stated in [LIMITATIONS.md](LIMITATIONS.md#verification-gaps-see-release_checklistmd) and the release notes | No | Closed by owner risk acceptance (2026-11-09); process deviation recorded | GitHub settings confirmed by the owner 2026-11-06 (tag ruleset admin-only creation bypass, no bypass on tag immutability, no `seerxo-agent` write/maintain/admin). Published release `v1.0.0` verified immutable token-free on 2026-11-09. **Deviation:** the `v1.0.0` tag was pushed with the owner's credentials during an agent-mediated workflow, not by a separate owner action; the creating tool is unconfirmed. Owner credentials remain reachable to automation under the same macOS user (no isolation claimed). The repository owner personally accepted this residual risk and approved publication on 2026-11-09; the private record stays with the owner |
 
 A stable release candidate (`v1.0.0-rc.N`) may be tagged once S1, S3, S6,
 S7 and S9 are met on that commit; it remains a pre-release. `v1.0.0`
 itself needs every gate met or, for waivable gates only, a written decision.
 
-## Stable preparation branch: release/v1.0.0
+## Release record: v1.0.0
 
-This branch changes the package version and release documentation. It is not
-a validated stable candidate until its final commit has exact-head CI,
-security tests, fuzzing, release rehearsal, reviewed findings and S9 limits
-review. Its [release notes draft](RELEASE_NOTES_V1.0.0_DRAFT.md) has explicit
-publication placeholders. After pre-tag gates pass, the owner may create the
-final tag solely to build release artifacts. S7 requires verifying those
-artifacts on macOS and Linux; S8 requires a real upgrade against the
-published 1.0.0 formula. **Do not publish the GitHub Release until both are
-complete.** No final tag or GitHub Release has been created by this
-preparation.
+Published 2026-11-09T13:02:38Z by the owner as a stable, immutable release
+marked Latest: [v1.0.0](https://github.com/semihbugrasezer/sigsieve/releases/tag/v1.0.0).
+Annotated, unsigned tag object `11597ef257faeddfdebc94cdc3e71194911bcfe3`
+points to `71ae5e95e666eeb3cb1b94b25ba6b0b8571eca35` (merge of PR #62, on
+`main`). The release notes are the record of evidence and limitations; the
+former draft `RELEASE_NOTES_V1.0.0_DRAFT.md` is superseded and removed.
+
+| Gate | Status |
+|---|---|
+| Version 1.0.0 in `Cargo.toml` and both lockfiles | Done |
+| CI, F-46, rehearsal, fuzz on the exact commit | Done: runs 42227739778, 42231058235, 42231048170, 42231052710 |
+| F-42 / F-45: attest binding by artifact ID; tag commit on `main` | Done: release run 42286504497 (Linux verify confirms the tag commit is on `main`) |
+| S7: release verification | Linux run 42291132708 PASS; macOS native PASS maintainer-reported |
+| S5: Secretive device test with the 1.0.0 binary | 13/13, maintainer-reported |
+| S8: Homebrew upgrade from `v0.1.0-alpha.4` against the published tap | Maintainer-reported PASS (tap `7fd385e`) |
+| Draft review | Owner-run draft check: exactly one draft, notes byte-identical to the reviewed file, 8 assets matching the verified manifest, attestation and `sigsieve 1.0.0`: PASS. An earlier unreviewed draft for the same tag was archived and deleted before publication |
+| Release notes state no independent external review or audit (S11) and the local-credential limitation (S12) | Done |
+| Post-publication, token-free | Done: not draft, not prerelease, immutable, Latest, tag → `71ae5e9`, 8 anonymous downloads and API digests match; notes identical except CRLF line endings added by the web UI |
+| README / INSTALL / Homebrew packaging point at v1.0.0 | This documentation update |
 
 ## Candidate record: v1.0.0-rc.1
 
