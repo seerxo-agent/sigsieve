@@ -4,6 +4,12 @@ The project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `sigsieve --help` no longer says "EXPERIMENTAL" (v1.0.0 is a stable
+  release). It still says the tool is not independently audited and points
+  to the security model and limitations. Text only; no behaviour change.
+
 ### Testing
 
 - F-46 cross-user test now also runs on macOS (`getpeereid`): the
