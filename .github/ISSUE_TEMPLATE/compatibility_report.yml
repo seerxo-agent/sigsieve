@@ -1,0 +1,82 @@
+name: Compatibility report
+description: Report how SigSieve works (or does not) with your OS, OpenSSH and agent. NOT for security vulnerabilities.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > [!WARNING]
+        > **Remove sensitive data before you submit.** This issue is public. Replace real key fingerprints, hostnames, IP addresses, user names, private paths (for example agent socket paths under your home directory), tokens, credentials and anything else that identifies you or your systems with placeholders such as `SHA256:<redacted>` or `host.example`. Never paste private keys.
+
+        **Security vulnerabilities must not be reported here.** Use [private vulnerability reporting](https://github.com/semihbugrasezer/sigsieve/security/advisories/new) instead (see SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: SigSieve version
+      description: Output of `sigsieve --version`.
+      placeholder: "sigsieve 1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS, architecture and version
+      placeholder: "macOS 27.2 arm64 / Ubuntu 24.04 x86_64"
+    validations:
+      required: true
+  - type: input
+    id: glibc
+    attributes:
+      label: glibc version (Linux only)
+      description: Output of `ldd --version | head -1`. Leave empty on macOS.
+      placeholder: "ldd (Ubuntu GLIBC 2.39-0ubuntu8) 2.39"
+  - type: input
+    id: openssh
+    attributes:
+      label: OpenSSH version (client, and server if known)
+      description: Output of `ssh -V`; for the server, the version if you know it.
+      placeholder: "OpenSSH_10.0p2 client; server OpenSSH 9.6"
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Upstream SSH agent and version
+      placeholder: "Secretive 4.0.0 / OpenSSH ssh-agent / other"
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - Identity filtering only
+        - Destination binding (--allow-destination)
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include redacted error messages and the commands you ran.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `sigsieve doctor` with the same options (optional, redacted)
+      description: "`doctor` does not sign with a real key. Redact fingerprints, socket paths and host keys before pasting."
+      render: text
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed real fingerprints, hostnames, IP addresses, user names, private paths and credentials from this report.
+          required: true
