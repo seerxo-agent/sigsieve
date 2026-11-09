@@ -131,7 +131,7 @@ SigSieve has two modes. Identity filtering is the default; destination binding m
 - A compromised remote host may still use an **allowed** identity while forwarding is active. Filtering alone does not constrain which servers trust that key.
 - Destination binding restricts **final destination host keys**, not remote usernames or every intermediate hop; it requires compatible OpenSSH hostbound authentication. Generic signing (for example, `git commit -S`) is intentionally refused in this mode.
 - SigSieve cannot secure a compromised local user account or upstream agent, replace host-key verification, or guarantee a separate Touch ID prompt for each signature.
-- A recorded-session replay limitation remains documented; macOS cross-user testing and independent external auditing are not complete.
+- A recorded-session replay limitation remains documented, and independent external auditing has not been done. The cross-user check is tested on Linux and on one GitHub-hosted macOS image.
 
 For the full boundary and evidence, see the [security model](docs/SECURITY_MODEL.md), [threat model](docs/THREAT_MODEL.md), [SSH compatibility matrix](docs/SSH_COMPATIBILITY.md), and [known limitations](docs/LIMITATIONS.md).
 
@@ -152,7 +152,8 @@ The stable **[v1.0.0](https://github.com/semihbugrasezer/sigsieve/releases/tag/v
 | Evidence | What was verified |
 | --- | --- |
 | [CI](https://github.com/semihbugrasezer/sigsieve/actions/runs/42227739778) | Rust tests and real OpenSSH integration on macOS arm64, Linux x86_64 and arm64, MSRV 1.88 |
-| [F-46 Linux cross-user run](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231058235) | Peer-credential restriction and its negative test; **not** a macOS cross-user test |
+| [F-46 Linux cross-user run](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231058235) | Peer-credential restriction and its negative test on Linux, for the release commit |
+| [F-46 Linux + macOS cross-user run](https://github.com/semihbugrasezer/sigsieve/actions/runs/42638071593) | Same test on Linux and on a GitHub-hosted macOS 26.7.2 arm64 VM (2026-11-09, `main` `dc05602`; runtime source identical to v1.0.0) |
 | [Release rehearsal](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231048170) | Build, reproducible packaging, smoke checks, SBOM generation, artifact-binding checks |
 | [Fuzz campaign](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231052710) | Four targets, 3,600 seconds each; 392,384,646 executions with no reported crash |
 | [Release build](https://github.com/semihbugrasezer/sigsieve/actions/runs/42286504497) | Published artifacts, SHA-256 checksums, CycloneDX SBOMs, and provenance attestations |

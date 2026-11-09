@@ -145,8 +145,8 @@ behind wording that suggests otherwise.
 - No independent external security review or audit (release gate S11
   waived by the maintainer on 2026-11-05).
 - The upstream peer-uid check (F-46) is verified by a cross-user test on
-  Linux only. **No macOS cross-user test** has been run; Linux results are
-  not macOS evidence.
+  Linux and, since 2026-11-09, on macOS: one GitHub-hosted runner image (`macos-latest`: macOS 26.7.2 arm64), not every macOS version or device. Other macOS
+  versions and real multi-user Macs are not tested.
 - Development automation (AI coding agents) runs under the maintainer's own
   macOS user. It acts on GitHub only through an account without write
   access, and merges, tags and releases are done by the maintainer, but it
