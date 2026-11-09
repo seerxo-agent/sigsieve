@@ -2,7 +2,8 @@ name: Cross-user peer credential (F-46)
 
 # Proves that an upstream agent run by another user is refused by the peer
 # credential even when its socket file is owned by the user running
-# SigSieve, then proves the test fails when that check is removed.
+# SigSieve, then proves the test fails when that check is removed. Runs on
+# Linux (SO_PEERCRED) and macOS (getpeereid).
 #
 # Triggers:
 # - pull_request, on every pull request. A pull_request run uses the
@@ -18,6 +19,8 @@ name: Cross-user peer credential (F-46)
 # never for forks. `F-46 status` always runs and reports NOT_APPLICABLE
 # (pass), VERIFIED (pass) or NOT_VERIFIED (fail); it is the job to make a
 # required check, never `cross-user`, which is skipped when not applicable.
+# `cross-user` is a matrix over Linux and macOS; its result is success only
+# when every platform passed, so VERIFIED means both.
 on:
   pull_request:
   workflow_dispatch:
@@ -83,7 +86,11 @@ jobs:
     # A full, disposable GitHub-hosted VM with passwordless sudo. Never a
     # container-based or self-hosted runner (e.g. ubuntu-slim): the script
     # creates users and refuses to run in a container.
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       # actions/checkout v7.0.1
@@ -119,10 +126,16 @@ jobs:
         run: rustup show active-toolchain || rustup toolchain install
       - name: Require tools
         run: |
-          for t in python3 useradd userdel runuser pkill stat sudo systemd-detect-virt; do
+          if [ "$RUNNER_OS" = Linux ]; then
+            tools="python3 useradd userdel runuser pkill stat sudo systemd-detect-virt"
+          else
+            tools="python3 dscl dscacheutil xcrun pkill stat sudo"
+          fi
+          for t in $tools; do
             command -v "$t" || { echo "::error::missing $t"; exit 1; }
           done
-          echo "virt: $(systemd-detect-virt || true)"
+          if [ "$RUNNER_OS" = Linux ]; then echo "virt: $(systemd-detect-virt || true)"
+          else echo "macOS $(sw_vers -productVersion) $(uname -m); python3 for test users: $(xcrun -f python3)"; fi
       - name: Build
         run: |
           cargo build --locked
@@ -151,7 +164,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "## F-46 cross-user evidence"
+            echo "## F-46 cross-user evidence ($RUNNER_OS)"
             echo '```'; cat xu-evidence/tested-commits.txt 2>/dev/null || echo "tested commits: NOT RECORDED"; echo '```'
             for m in pass fail; do
               f="xu-evidence/$m-test-output.txt"
@@ -167,7 +180,8 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
-          name: f46-cross-user-evidence
+          # The Linux name is unchanged (FINDINGS F-46 refers to it).
+          name: f46-cross-user-evidence${{ runner.os == 'macOS' && '-macos' || '' }}
           path: xu-evidence
           if-no-files-found: warn
 
