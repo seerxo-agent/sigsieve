@@ -154,6 +154,23 @@ coverage needs new targets or richer seeds rather than longer runs. One hour
 per target is a modest campaign for one revision, not proof of the absence
 of vulnerabilities.
 
+## Release evidence: v1.0.0 (2026-11-09)
+
+The stable **[v1.0.0](https://github.com/semihbugrasezer/sigsieve/releases/tag/v1.0.0)** release (published 2026-11-09, immutable) is pinned to source commit [`71ae5e95e666eeb3cb1b94b25ba6b0b8571eca35`](https://github.com/semihbugrasezer/sigsieve/commit/71ae5e95e666eeb3cb1b94b25ba6b0b8571eca35), not the moving tip of `main`.
+
+| Evidence | What was verified |
+| --- | --- |
+| [CI](https://github.com/semihbugrasezer/sigsieve/actions/runs/42227739778) | Rust tests and real OpenSSH integration on macOS arm64, Linux x86_64 and arm64, MSRV 1.88 |
+| [F-46 Linux cross-user run](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231058235) | Peer-credential restriction and its negative test on Linux, for the release commit |
+| [F-46 Linux + macOS cross-user run](https://github.com/semihbugrasezer/sigsieve/actions/runs/42638071593) | Same test on Linux and on a GitHub-hosted macOS 26.7.2 arm64 VM (2026-11-09, `main` `dc05602`; runtime source identical to v1.0.0, built in CI, not the released binary; this test covers only the peer-credential check) |
+| [Release rehearsal](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231048170) | Build, reproducible packaging, smoke checks, SBOM generation, artifact-binding checks |
+| [Fuzz campaign](https://github.com/semihbugrasezer/sigsieve/actions/runs/42231052710) | Four targets, 3,600 seconds each; 392,384,646 executions with no reported crash |
+| [Release build](https://github.com/semihbugrasezer/sigsieve/actions/runs/42286504497) | Published artifacts, SHA-256 checksums, CycloneDX SBOMs, and provenance attestations |
+| [Linux release verification](https://github.com/semihbugrasezer/sigsieve/actions/runs/42291132708) | Native archive and verification checks |
+| macOS arm64 release verification, Homebrew upgrade, Secretive device test with the 1.0.0 binary | Maintainer-reported; see the [release notes](https://github.com/semihbugrasezer/sigsieve/releases/tag/v1.0.0) |
+
+Evidence is **specific to the tested revision** and is not a security certification. Full test descriptions and historical results are in [TESTING.md](TESTING.md); remaining findings are in [FINDINGS.md](FINDINGS.md).
+
 ## Release evidence: v0.1.0-alpha.3 (2026-11-01)
 
 The experimental [v0.1.0-alpha.3 pre-release](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.3)
