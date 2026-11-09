@@ -1,6 +1,6 @@
 # Formula for the maintainer-owned tap semihbugrasezer/homebrew-sigsieve.
-# Not in homebrew-core. SigSieve is experimental and not independently
-# audited. See packaging/homebrew/README.md before changing url/sha256.
+# Not in homebrew-core. SigSieve is not independently audited.
+# See packaging/homebrew/README.md before changing url/sha256.
 class Sigsieve < Formula
   desc "SSH agent filtering proxy that exposes only allowlisted identities"
   homepage "https://github.com/semihbugrasezer/sigsieve"

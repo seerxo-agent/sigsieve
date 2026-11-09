@@ -1,6 +1,7 @@
 # Governance
 
-SigSieve is a single-maintainer, experimental open-source project. This
+SigSieve is a single-maintainer open-source project. The current release is
+the stable `v1.0.0`; it is **not independently audited**. This
 document states who decides what, which controls protect `main` and releases,
 and what those controls do **not** provide. It describes the current state;
 it is not a promise of future staffing.
@@ -68,10 +69,14 @@ Pull-request workflows run with read-only `contents` permission and cannot
 publish anything. Public tags and history are never rewritten; a broken
 release is corrected by a new version.
 
-Version status: all `0.1.0-alpha.*` releases are experimental pre-releases.
-Promotion beyond alpha requires, at minimum, the independent review and user
-trials in [docs/EXTERNAL_VALIDATION.md](docs/EXTERNAL_VALIDATION.md) with
-their findings resolved. Green automated tests alone never justify promotion.
+Version status: `v1.0.0` (2026-11-09) is the current stable release. It was
+published under the stable gates S1–S12 in
+[docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md); the external review
+gate (S11) was waived in a written maintainer decision, and every v1 release
+note says so. Stable means published and supported within the documented
+scope, not a security guarantee. The `0.1.0-alpha.*` and `1.0.0-rc.1`
+releases are historical pre-releases. Green automated tests alone never
+justify a release.
 
 ## Security reports
 

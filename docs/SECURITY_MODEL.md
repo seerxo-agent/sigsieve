@@ -18,6 +18,13 @@ evidence categories. See [TESTING.md](TESTING.md) for run provenance and
 [SECRETIVE_INTEGRATION.md](SECRETIVE_INTEGRATION.md#recorded-real-device-results)
 for the limited device record.
 
+The current stable release is
+[`v1.0.0`](https://github.com/semihbugrasezer/sigsieve/releases/tag/v1.0.0)
+(commit `71ae5e95e666eeb3cb1b94b25ba6b0b8571eca35`). Its exact-commit
+evidence and its maintainer-reported items are listed in the release notes
+and the [v1.0.0 release record](RELEASE_CHECKLIST.md#release-record-v100).
+The paragraph below is the historical record of the pre-releases.
+
 The released `v0.1.0-alpha.2` evidence is pinned to
 `fc7484be0371242f517b6628b0f7dcc3a9a12a29`. The
 [release record](TESTING.md#release-candidate-evidence-2026-10-28) identifies
@@ -33,6 +40,7 @@ Secretive was checked with alpha.4 on 2026-11-03 for one configuration
 only (see [SECRETIVE_INTEGRATION.md](SECRETIVE_INTEGRATION.md#recorded-real-device-results)).
 The `v1.0.0-rc.1` binary was tested on the same scoped device configuration
 on 2026-11-06; see [device results](SECRETIVE_INTEGRATION.md#recorded-real-device-results).
+For the `1.0.0` binary the same configuration passed 13/13, maintainer-reported.
 These results do not validate later executable revisions or untested
 devices/services.
 

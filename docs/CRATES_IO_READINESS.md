@@ -1,5 +1,7 @@
 # crates.io readiness assessment
 
+> **Historical.** This assessment describes `0.1.0-alpha.2` (2026-10-29). No crates.io package has been published for any version. It is kept as a record and superseded by the stable release [v1.0.0](https://github.com/semihbugrasezer/sigsieve/releases/tag/v1.0.0) (2026-11-09). SigSieve is still **not independently audited**.
+
 Status on 2026-10-29: **not published, and not ready to publish.** Nothing in
 this assessment uploaded a crate, reserved a name or used a registry token.
 SigSieve remains an experimental, unaudited alpha. A crates.io release would
