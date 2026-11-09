@@ -1,7 +1,8 @@
 # SigSieve for macOS: design
 
-Status: in review (2026-11-09). Not yet approved for planning; nothing is
-built yet.
+Status: approved for implementation planning (2026-11-09), on the basis of
+the reported change summary. Not yet approved for coding; nothing is built
+yet.
 Owner decisions are marked **(owner)**; choices left to the builder or made
 while writing this document are marked **(builder call)**.
 
@@ -362,9 +363,10 @@ blocking error.
   or other access, a relative path, a symlink to an unsafe directory and a
   path with unsupported characters are each refused, with no fallback to
   `/tmp`.
-- No process named `ssh` is ever started by the app (the test fails if the
+- The Swift app never runs `ssh` or `ssh -G` directly. In a real connection
+  ssh is started only by `sigsieve connect`. The test fails if the app's
   process runner is asked to run anything but the CLI, `ssh-add` and
-  `ssh-keygen`).
+  `ssh-keygen`.
 - Check validity: changing the profile, agent, CLI path or version, `TMPDIR`
   or a discovered SSH configuration file (size or modification time) clears
   a passed result and disables Connect.
