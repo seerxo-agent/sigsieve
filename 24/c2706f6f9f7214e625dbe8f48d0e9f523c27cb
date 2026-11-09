@@ -1,0 +1,24 @@
+.github/workflows/cross-user.yml
+  s_134925152e20d2::t_8132f606ddbaf2 5-6,22-23,89-93,129-134,137-138,167,183-184
+docs/TESTING.md
+  s_134925152e20d2::t_3992567a6a5909 21
+scripts/cross-user-test.sh
+  s_134925152e20d2::t_04f51c974410a2 94,98
+  s_134925152e20d2::t_c29f8419877cf7 3-4,33-34,38-87,99,109-110,115-116,126,133,137-138,152-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "24c2706f6f9f7214e625dbe8f48d0e9f523c27cb",
+  "prompts": {},
+  "sessions": {
+    "s_134925152e20d2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cbf9c202-f161-4ecb-b17d-f5ad5a969c37",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
