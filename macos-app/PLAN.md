@@ -8,19 +8,41 @@ this plan.
 **Goal:** A SwiftUI menu bar app that builds, checks and launches
 `sigsieve connect` for a per-server key profile, without typing a command.
 
-**Architecture:** One Swift package in `macos-app/` with two targets. All
-logic (validation, profiles, environment, process running, command building,
-check gate) lives in the `SigSieveKit` library and is unit tested. The
-`SigSieveApp` executable holds only SwiftUI views and one observable model.
-Every check and every connection is the Rust CLI; the app never runs `ssh`.
+**Architecture:** An Xcode macOS app target plus a local Swift package
+**(owner)**. All logic (validation, profiles, environment, process running,
+command building, check gate) lives in the `SigSieveKit` package at
+`macos-app/Packages/SigSieveKit/` and is unit tested. The app target, in
+`macos-app/App/`, holds only SwiftUI views and one observable model, and is
+built by `macos-app/SigSieve.xcodeproj`. Every check and every connection is
+the Rust CLI; the app never runs `ssh`.
 
 **Tech Stack:** Swift 6, SwiftUI `MenuBarExtra` (`.window` style), AppKit
 `NSWorkspace`, Foundation `Process`, Swift Testing (`import Testing`). No
-third-party dependencies. SwiftPM only: this machine has the Command Line
-Tools, not Xcode, so there is no `.xcodeproj` and no XCTest/XCUITest.
+third-party dependencies and no project generator: the checked-in
+`SigSieve.xcodeproj` is the only project definition **(owner: one source of
+truth)**.
 
 **Spec:** [`macos-app/DESIGN.md`](DESIGN.md). Read it first; this plan does
 not repeat its reasoning.
+
+**Execution:** subagent-driven, one task per fresh agent, a fresh reviewer
+after each task, and an integrated security review at the end (Task 15)
+**(owner)**.
+
+## Prerequisite: Xcode
+
+No task can start until Xcode 16 or newer is installed on the build machine
+and selected (`sudo xcode-select -s /Applications/Xcode.app`). This is an
+owner action.
+
+Measured on this machine on 2026-11-09, with the Command Line Tools only
+(Swift 6.4.2): `swift test` on a one-file package fails before compiling
+("Could not initialize build system"); with `--build-system native` it
+fails with "no such module 'Testing'"; `xcodebuild` refuses to run. So
+neither the package tests nor the app build can be verified here today.
+
+Check before Task 1: `xcodebuild -version` prints 16.0 or newer, and
+`swift test` passes on a scratch package with one Swift Testing test.
 
 ## Global Constraints
 
@@ -34,6 +56,16 @@ not repeat its reasoning.
   Anything else blocks checks and connections.
 - The app starts only these programs through `Process`: the resolved CLI,
   `/usr/bin/ssh-add`, `/usr/bin/ssh-keygen`. Never `ssh`, never a shell.
+  This is enforced at run time by `ProcessRunner`, which refuses anything
+  else, and tested with real refusals. The source scan is a second check,
+  not the boundary **(owner)**.
+- The CLI binary must be named `sigsieve` after symlinks are resolved.
+- Unless a task says otherwise, paths in Tasks 1 to 11 and 13 are relative
+  to `macos-app/Packages/SigSieveKit/`, and `swift test` runs there.
+- In CI no test may be skipped: the workflow builds the Rust CLI from the
+  same checkout and passes it as `SIGSIEVE_TEST_CLI` **(owner)**.
+- The app is not sandboxed (it must run the CLI and read `~/.ssh/config`)
+  and is signed ad hoc for local runs only.
 - Child environment, exactly: `HOME`, `PATH`
   (`/usr/bin:/bin:/usr/sbin:/sbin:<cli directory>`), `LANG`, `TMPDIR`
   (verified), `SSH_AUTH_SOCK` (the profile's agent socket). The launcher and
@@ -73,48 +105,66 @@ the task named.
 ## File Structure
 
 ```text
-macos-app/
-  Package.swift
-  README.md                      build, run, test; what the app does not do
-  scripts/build-app.sh           swift build -c release → build/SigSieve.app
-  Sources/SigSieveKit/
-    Validation.swift             Fingerprint, HostInput
-    Profile.swift                Profile model, ProfileStore (load/save)
-    ChildEnvironment.swift       environment + TMPDIR verification
-    ProcessRunner.swift          the only file that uses Process
-    CLILocator.swift             find the CLI, read its version
-    AgentKeys.swift              ssh-add output → [AgentKey], KeyFilter
-    SSHConfigAliases.swift       Host aliases + file stamps
-    KnownHosts.swift             destination picker source
-    CommandBuilder.swift         CLI arguments, ShellQuote, launcher text
-    ConnectionCheck.swift        doctor + dry-run, CheckInputs, CheckGate
-    Launcher.swift               write launcher, open in Terminal, cleanup
-  Sources/SigSieveApp/
-    SigSieveApp.swift            @main, MenuBarExtra
-    AppModel.swift               @MainActor ObservableObject, all state
-    Views/StatusRow.swift
-    Views/ServerPicker.swift
-    Views/KeyList.swift
-    Views/AdvancedSection.swift
-    Views/CheckSection.swift
-    Views/SettingsView.swift
-  Tests/SigSieveKitTests/        one test file per Kit source file
-    IntegrationTests.swift       throwaway ssh-agent + built CLI
-    SourceRulesTests.swift       source scan (no ssh, one Process user)
+sigsieve/
+  src/ tests/ Cargo.toml …        Rust CLI, unchanged
+  .github/workflows/
+    macos-app.yml                 new; independent of the Rust and release jobs
+  macos-app/
+    README.md                     build, run, test; what the app does not do
+    DESIGN.md  PLAN.md
+    .gitignore                    build/, .build/, xcuserdata/
+    SigSieve.xcodeproj/           app target "SigSieve", shared scheme
+    App/
+      SigSieveApp.swift           @main, MenuBarExtra
+      AppModel.swift              @MainActor ObservableObject, all state
+      Views/
+        MenuBarView.swift         the window: status row, sections, footer
+        HostsView.swift           server picker, "Add server…"
+        KeysView.swift            forwarded keys for the selected server
+        AdvancedView.swift        protection mode, allowed destinations
+        ConnectionView.swift      Check, results, Connect, copyable command
+        SettingsView.swift
+      Resources/
+        Assets.xcassets/          AppIcon set (empty for now), AccentColor
+    Packages/
+      SigSieveKit/
+        Package.swift
+        Sources/SigSieveKit/
+          Models/Validation.swift             Fingerprint, HostInput
+          Profiles/Profile.swift              Profile model, ProfileStore
+          ProcessExecution/ChildEnvironment.swift   environment, TMPDIR check
+          ProcessExecution/ProcessRunner.swift      the only user of Process
+          ProcessExecution/CLILocator.swift         find the CLI, its version
+          Agents/AgentKeys.swift              ssh-add output, KeyFilter
+          SSH/SSHConfigAliases.swift          Host aliases, file stamps
+          SSH/KnownHosts.swift                destination picker source
+          Connection/CommandBuilder.swift     CLI arguments, ShellQuote
+          Connection/ConnectionCheck.swift    doctor + dry-run, CheckGate
+          Connection/Launcher.swift           launcher file, Terminal, cleanup
+        Tests/SigSieveKitTests/   one test file per source file, plus:
+          IntegrationTests.swift  throwaway ssh-agent + built CLI
+          SourceRulesTests.swift  source scan of the Kit and of App/
+          Support/ThrowawayAgent.swift
 ```
 
-`SigSieveApp` has no tests of its own: views read `AppModel`, and `AppModel`
-only calls `SigSieveKit`. Anything worth testing belongs in the Kit.
+The Rust CLI and the app share nothing but the repository: no Cargo
+workspace member, no build script, no common CI job. Secretive's layout
+(app sources next to local packages, one Xcode project) is the model for
+the split, not for the number of modules: one package is enough here.
+
+The app target has no tests of its own: views read `AppModel`, and
+`AppModel` only calls `SigSieveKit`. Anything worth testing belongs in the
+Kit. The app target is verified by building it in CI and by the manual
+checklist.
 
 ---
 
 ### Task 1: Package and input validation
 
 **Files:**
-- Create: `macos-app/Package.swift`, `Sources/SigSieveKit/Validation.swift`,
-  `Sources/SigSieveApp/SigSieveApp.swift` (an empty `MenuBarExtra`),
+- Create: `Package.swift`, `Sources/SigSieveKit/Models/Validation.swift`,
   `Tests/SigSieveKitTests/ValidationTests.swift`, `macos-app/.gitignore`
-  (`.build/`, `build/`)
+  (`build/`, `.build/`, `xcuserdata/`)
 
 **Interfaces:**
 - Produces:
@@ -122,8 +172,9 @@ only calls `SigSieveKit`. Anything worth testing belongs in the Kit.
   - `struct HostInput: Hashable, Codable, Sendable { init?(_ s: String); let value: String }`
 
 - [ ] **Step 1: Write `Package.swift`**: tools version 6.0, platform
-  `.macOS(.v13)`, library target `SigSieveKit`, executable target
-  `SigSieveApp` depending on it, test target `SigSieveKitTests`.
+  `.macOS(.v13)`, one library product and target `SigSieveKit`, one test
+  target `SigSieveKitTests`. No executable target: the app is the Xcode
+  target of Task 12.
 - [ ] **Step 2: Write the failing tests**
 
 ```swift
@@ -143,7 +194,7 @@ func hostInputRejects(_ s: String) { #expect(HostInput(s) == nil) }
 func hostInputAccepts(_ s: String) { #expect(HostInput(s)?.value == s) }
 ```
 
-- [ ] **Step 3: Run** `cd macos-app && swift test --filter ValidationTests`.
+- [ ] **Step 3: Run** `cd macos-app/Packages/SigSieveKit && swift test --filter ValidationTests`.
   Expected: fails to compile (types missing).
 - [ ] **Step 4: Implement `Validation.swift`.** Check characters by scalar,
   not with `NSRegularExpression` (`$` there matches before a final newline).
@@ -153,7 +204,7 @@ func hostInputAccepts(_ s: String) { #expect(HostInput(s)?.value == s) }
 ### Task 2: Profiles and their file
 
 **Files:**
-- Create: `Sources/SigSieveKit/Profile.swift`,
+- Create: `Sources/SigSieveKit/Profiles/Profile.swift`,
   `Tests/SigSieveKitTests/ProfileTests.swift`
 
 **Interfaces:**
@@ -229,7 +280,7 @@ func unreadableFileIsNeverOverwritten(_ body: String) throws {
 ### Task 3: Child environment and TMPDIR verification
 
 **Files:**
-- Create: `Sources/SigSieveKit/ChildEnvironment.swift`,
+- Create: `Sources/SigSieveKit/ProcessExecution/ChildEnvironment.swift`,
   `Tests/SigSieveKitTests/ChildEnvironmentTests.swift`
 
 **Interfaces:**
@@ -280,7 +331,7 @@ func unreadableFileIsNeverOverwritten(_ body: String) throws {
 ### Task 4: Process runner
 
 **Files:**
-- Create: `Sources/SigSieveKit/ProcessRunner.swift`,
+- Create: `Sources/SigSieveKit/ProcessExecution/ProcessRunner.swift`,
   `Tests/SigSieveKitTests/ProcessRunnerTests.swift`,
   `Tests/SigSieveKitTests/SourceRulesTests.swift`
 
@@ -289,17 +340,46 @@ func unreadableFileIsNeverOverwritten(_ body: String) throws {
 - Produces:
   - `enum Tool: Sendable { case cli(URL); case sshAdd; case sshKeygen }` with `var url: URL` (`/usr/bin/ssh-add`, `/usr/bin/ssh-keygen`)
   - `struct RunResult: Sendable { let exitCode: Int32; let stdout: String; let stderr: String }`
-  - `enum RunError: Error, Equatable { case timedOut; case cannotStart(String) }`
+  - `enum RunError: Error, Equatable { case timedOut; case cannotStart(String); case notAllowed(String) }`
   - `protocol Running: Sendable { func run(_ tool: Tool, _ arguments: [String], environment: ChildEnvironment, stdin: Data?, timeout: Duration) async throws -> RunResult }`
   - `struct ProcessRunner: Running`
 
-`Tool` has no case that takes an arbitrary program other than the CLI URL;
-that is how "never runs ssh" is enforced in the type.
+This is the one controlled interface for starting a process. Two layers:
 
-- [ ] **Step 1: Write the failing tests** (use `/usr/bin/ssh-keygen` as a
-  harmless real program, and a script in a temp dir as a fake CLI)
+- Type: `Tool` has fixed paths for `ssh-add` and `ssh-keygen` and no case
+  for an arbitrary program other than the CLI URL.
+- Run time: before starting `.cli(url)`, `ProcessRunner` resolves symlinks
+  and throws `RunError.notAllowed(resolvedPath)` unless the resolved file
+  is a regular executable file whose name is exactly `sigsieve`. Nothing is
+  started on refusal.
+
+- [ ] **Step 1: Write the failing tests** (`script(_:)` writes an executable
+  file named `sigsieve` in a fresh temp dir and returns its URL)
 
 ```swift
+@Test(arguments: ["/usr/bin/ssh", "/bin/sh", "/usr/bin/env", "/usr/bin/osascript"])
+func refusesAnyOtherExecutable(_ path: String) async {
+    await #expect(throws: RunError.notAllowed(path)) {
+        try await ProcessRunner().run(.cli(URL(filePath: path)), ["-V"], environment: env, stdin: nil, timeout: .seconds(5))
+    }
+}
+@Test func refusesASymlinkNamedSigsieveThatPointsAtSsh() async throws {
+    let link = tmp().appending(path: "sigsieve")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: URL(filePath: "/usr/bin/ssh"))
+    await #expect(throws: RunError.notAllowed("/usr/bin/ssh")) {
+        try await ProcessRunner().run(.cli(link), ["-V"], environment: env, stdin: nil, timeout: .seconds(5))
+    }
+}
+@Test func refusalStartsNothing() async throws {
+    // a script named "other" that creates a marker file; run(.cli(other)) throws
+    // .notAllowed and the marker does not exist
+}
+@Test func refusesADirectoryNamedSigsieve() async throws {}
+@Test func acceptsASymlinkWhoseTargetIsNamedSigsieve() async throws {}   // "sg" → ".../sigsieve" runs
+@Test func fixedToolsPointAtSystemBinaries() {
+    #expect(Tool.sshAdd.url.path == "/usr/bin/ssh-add")
+    #expect(Tool.sshKeygen.url.path == "/usr/bin/ssh-keygen")
+}
 @Test func returnsExitCodeAndOutput() async throws {
     let cli = try script("#!/bin/sh\necho out; echo err >&2; exit 2\n")
     let r = try await ProcessRunner().run(.cli(cli), [], environment: env, stdin: nil, timeout: .seconds(5))
@@ -327,11 +407,14 @@ that is how "never runs ssh" is enforced in the type.
 @Test func largeOutputDoesNotDeadlock() async throws {} // script prints 1 MB; completes
 
 // SourceRulesTests.swift
+// A second check, not the boundary. Scans Sources/ of the Kit and
+// macos-app/App/ (found relative to #filePath).
 @Test func onlyProcessRunnerUsesProcess() throws {
-    // every *.swift under Sources/: "Process()" appears only in ProcessRunner.swift
+    // "Process()" and "NSTask" appear only in ProcessRunner.swift;
+    // "posix_spawn", "execv", "system(" and "NSAppleScript" appear nowhere
 }
 @Test func noSourceNamesTheSshBinary() throws {
-    // no file under Sources/ contains "/usr/bin/ssh\"" or "\"ssh\"" or "-G"
+    // no file contains "/usr/bin/ssh\"" or "\"ssh\"" or "\"-G\""
 }
 ```
 
@@ -345,7 +428,7 @@ that is how "never runs ssh" is enforced in the type.
 ### Task 5: CLI discovery
 
 **Files:**
-- Create: `Sources/SigSieveKit/CLILocator.swift`,
+- Create: `Sources/SigSieveKit/ProcessExecution/CLILocator.swift`,
   `Tests/SigSieveKitTests/CLILocatorTests.swift`
 
 **Interfaces:**
@@ -380,7 +463,7 @@ func refusesOtherVersions(_ out: String) async throws {}       // .unsupportedVe
 ### Task 6: Agent keys
 
 **Files:**
-- Create: `Sources/SigSieveKit/AgentKeys.swift`,
+- Create: `Sources/SigSieveKit/Agents/AgentKeys.swift`,
   `Tests/SigSieveKitTests/AgentKeysTests.swift`
 
 **Interfaces:**
@@ -430,7 +513,7 @@ the agent.
 ### Task 7: Server aliases from SSH configuration
 
 **Files:**
-- Create: `Sources/SigSieveKit/SSHConfigAliases.swift`,
+- Create: `Sources/SigSieveKit/SSH/SSHConfigAliases.swift`,
   `Tests/SigSieveKitTests/SSHConfigAliasesTests.swift`
 
 **Interfaces:**
@@ -474,7 +557,7 @@ copy of `src/sshconfig.rs`. It reads files; it runs nothing.
 ### Task 8: Destination picker source
 
 **Files:**
-- Create: `Sources/SigSieveKit/KnownHosts.swift`,
+- Create: `Sources/SigSieveKit/SSH/KnownHosts.swift`,
   `Tests/SigSieveKitTests/KnownHostsTests.swift`
 
 **Interfaces:**
@@ -526,7 +609,7 @@ copy of `src/sshconfig.rs`. It reads files; it runs nothing.
 ### Task 9: Command building and quoting
 
 **Files:**
-- Create: `Sources/SigSieveKit/CommandBuilder.swift`,
+- Create: `Sources/SigSieveKit/Connection/CommandBuilder.swift`,
   `Tests/SigSieveKitTests/CommandBuilderTests.swift`
 
 **Interfaces:**
@@ -596,7 +679,7 @@ func quotedWordRoundTripsThroughSh(_ s: String) async throws {
 ### Task 10: Check Connection and the check gate
 
 **Files:**
-- Create: `Sources/SigSieveKit/ConnectionCheck.swift`,
+- Create: `Sources/SigSieveKit/Connection/ConnectionCheck.swift`,
   `Tests/SigSieveKitTests/ConnectionCheckTests.swift`
 
 **Interfaces:**
@@ -653,7 +736,7 @@ func anyChangeClosesTheGate(_ c: Change) {
 ### Task 11: Terminal launcher
 
 **Files:**
-- Create: `Sources/SigSieveKit/Launcher.swift`,
+- Create: `Sources/SigSieveKit/Connection/Launcher.swift`,
   `Tests/SigSieveKitTests/LauncherTests.swift`
 
 **Interfaces:**
@@ -688,12 +771,38 @@ AppleScript, no `osascript`, no `Process`.
 - [ ] **Step 4: Run** the tests. Expected: all pass.
 - [ ] **Step 5: Commit** `macos-app: Terminal launcher without AppleScript`.
 
-### Task 12: Window and model
+### Task 12: Xcode app target, window and model
 
-**Files:**
-- Create: `Sources/SigSieveApp/AppModel.swift`, the six files in
-  `Sources/SigSieveApp/Views/`, `scripts/build-app.sh`
-- Modify: `Sources/SigSieveApp/SigSieveApp.swift`
+**Files** (relative to `macos-app/`):
+- Create: `SigSieve.xcodeproj/project.pbxproj`,
+  `SigSieve.xcodeproj/xcshareddata/xcschemes/SigSieve.xcscheme`,
+  `App/SigSieveApp.swift`, `App/AppModel.swift`, the six files in
+  `App/Views/`, `App/Resources/Assets.xcassets/`
+
+Project definition (written by hand, since no agent can drive the Xcode
+window; verified only by `xcodebuild`):
+
+- One native target `SigSieve`, product type application, platform macOS.
+- `App/` is a file-system-synchronized group (project object version 77,
+  Xcode 16), so new files under `App/` need no project edit.
+- `Packages/SigSieveKit` is a local Swift package reference; the target
+  links the `SigSieveKit` product.
+- Build settings: `PRODUCT_BUNDLE_IDENTIFIER = dev.sigsieve.macos`,
+  `PRODUCT_NAME = SigSieve`, `MACOSX_DEPLOYMENT_TARGET = 13.0`,
+  `SWIFT_VERSION = 6.0`, `GENERATE_INFOPLIST_FILE = YES`,
+  `INFOPLIST_KEY_LSUIElement = YES`, `ENABLE_APP_SANDBOX = NO`,
+  `CODE_SIGN_STYLE = Manual`, `CODE_SIGN_IDENTITY = -` (ad hoc),
+  `DEVELOPMENT_TEAM` empty, `MARKETING_VERSION = 0.1.0`.
+- One shared scheme `SigSieve` (Debug for Run, Release for Archive). No
+  user-specific files are committed.
+
+Build command, the same locally and in CI:
+
+```bash
+xcodebuild -project macos-app/SigSieve.xcodeproj -scheme SigSieve \
+  -configuration Release -derivedDataPath macos-app/build build
+# → macos-app/build/Build/Products/Release/SigSieve.app
+```
 
 **Interfaces:**
 - Consumes: everything in `SigSieveKit`
@@ -741,19 +850,26 @@ Rules that are not obvious from the design:
   raw text. While running: "Waiting for agent…" after 2 s.
 - Menu bar icon: SF Symbol `key.horizontal` as template; `key.horizontal.fill`
   with a badge only when the CLI or `TMPDIR` is in error.
-- `scripts/build-app.sh`: `swift build -c release`, then assemble
-  `build/SigSieve.app/Contents/{MacOS/SigSieve,Info.plist}` with
-  `LSUIElement = true`, `CFBundleIdentifier = dev.sigsieve.macos`,
-  `LSMinimumSystemVersion = 13.0`. No signing step.
 
-- [ ] **Step 1: Implement `AppModel`** against the Kit interfaces.
-- [ ] **Step 2: Implement the views**, one file per window section.
-- [ ] **Step 3: Write `scripts/build-app.sh`.**
-- [ ] **Step 4: Run** `swift build && swift test`. Expected: builds, all
-  earlier tests pass, `SourceRulesTests` still pass with the app sources.
-- [ ] **Step 5: Run** `scripts/build-app.sh && open build/SigSieve.app`.
+- [ ] **Step 1: Write the project and scheme** with an `App/SigSieveApp.swift`
+  that shows an empty `MenuBarExtra`.
+- [ ] **Step 2: Run** `xcodebuild -list -project macos-app/SigSieve.xcodeproj`.
+  Expected: target `SigSieve`, scheme `SigSieve`. Then the build command
+  above. Expected: `** BUILD SUCCEEDED **` and the `.app` exists.
+- [ ] **Step 3: Run** `plutil -p <app>/Contents/Info.plist`. Expected:
+  `LSUIElement` true, `CFBundleIdentifier` `dev.sigsieve.macos`,
+  `LSMinimumSystemVersion` `13.0`. Run `codesign -dv <app>`. Expected:
+  `Signature=adhoc`, no `TeamIdentifier`.
+- [ ] **Step 4: Commit** `macos-app: Xcode app target`.
+- [ ] **Step 5: Implement `AppModel`** against the Kit interfaces.
+- [ ] **Step 6: Implement the views**, one file per window section.
+- [ ] **Step 7: Run** the build command and
+  `swift test --package-path macos-app/Packages/SigSieveKit`. Expected:
+  build succeeds, all earlier tests pass, `SourceRulesTests` pass with the
+  `App/` sources included.
+- [ ] **Step 8: Run** `open macos-app/build/Build/Products/Release/SigSieve.app`.
   Expected: a key icon in the menu bar, no Dock icon, the window opens.
-- [ ] **Step 6: Commit** `macos-app: menu bar window`.
+- [ ] **Step 9: Commit** `macos-app: menu bar window`.
 
 ### Task 13: Integration tests, 500 keys, manual checklist
 
@@ -767,13 +883,24 @@ Rules that are not obvious from the design:
 - Produces: `final class ThrowawayAgent { init(keys: Int) throws; let socket: String; let fingerprints: [Fingerprint]; deinit kills the agent and removes its directory }`. It starts `/usr/bin/ssh-agent -a <socket>` in a temp dir and adds freshly generated Ed25519 keys with `ssh-add`.
 
 Integration tests need the built CLI. They read its path from the
-`SIGSIEVE_TEST_CLI` environment variable and are skipped
-(`.enabled(if:)`) when it is unset, so `swift test` alone still passes.
-Locally: `cargo build --release && SIGSIEVE_TEST_CLI=$PWD/target/release/sigsieve swift test --package-path macos-app`.
+`SIGSIEVE_TEST_CLI` environment variable. On a developer machine without
+it they are skipped (`.enabled(if:)`). In CI skipping is a failure: the
+first test below fails when `CI` is set and the variable is missing or does
+not point at an executable. From the repository root:
+
+```bash
+cargo build --release --locked
+SIGSIEVE_TEST_CLI=$PWD/target/release/sigsieve \
+  swift test --package-path macos-app/Packages/SigSieveKit
+```
 
 - [ ] **Step 1: Write the tests**
 
 ```swift
+@Test func ciAlwaysProvidesTheBuiltCLI() {
+    // not conditional: if ProcessInfo.environment["CI"] != nil, then
+    // SIGSIEVE_TEST_CLI is set, is an executable file, and is named "sigsieve"
+}
 @Test func listsTheThrowawayAgentsKeys() async throws {}       // 3 keys → 3 AgentKeys, same fingerprints
 @Test func emptyAgentIsTheEmptyState() async throws {}         // 0 keys → .empty
 @Test func stoppedAgentIsUnreachable() async throws {}
@@ -800,8 +927,10 @@ Locally: `cargo build --release && SIGSIEVE_TEST_CLI=$PWD/target/release/sigsiev
 }
 ```
 
-- [ ] **Step 2: Run** with `SIGSIEVE_TEST_CLI` set. Expected: all pass.
-  Run without it. Expected: integration tests reported as skipped, the rest pass.
+- [ ] **Step 2: Run** with `SIGSIEVE_TEST_CLI` set. Expected: all pass,
+  none skipped. Run without it. Expected: integration tests skipped, the
+  rest pass. Run with `CI=1` and without it. Expected:
+  `ciAlwaysProvidesTheBuiltCLI` fails.
 - [ ] **Step 3: Write the manual checklist in `README.md`** (things no
   automated test here can see):
   1. With 500 keys in a throwaway agent selected in Settings, scrolling and
@@ -825,12 +954,19 @@ Locally: `cargo build --release && SIGSIEVE_TEST_CLI=$PWD/target/release/sigsiev
 
 - [ ] **Step 1: Write the workflow.** Triggers: `pull_request` and `push`
   with `paths: ['macos-app/**', '.github/workflows/macos-app.yml']`.
-  `permissions: contents: read`. One job on `macos-15`: checkout (the same
-  pinned commit `ci.yml` uses, `3d3c42e5aac5ba805825da76410c181273ba90b1`),
-  `cargo build --release --locked`, then
-  `SIGSIEVE_TEST_CLI=$PWD/target/release/sigsieve swift test --package-path macos-app`,
-  then `macos-app/scripts/build-app.sh`. It uploads nothing, publishes
-  nothing and shares no job with the release workflows.
+  `permissions: contents: read`. One job on `macos-15`, in this order:
+  1. checkout (the same pinned commit `ci.yml` uses,
+     `3d3c42e5aac5ba805825da76410c181273ba90b1`);
+  2. `xcodebuild -version` (recorded in the log);
+  3. `cargo build --release --locked`, the CLI from the same checkout;
+  4. `SIGSIEVE_TEST_CLI=$PWD/target/release/sigsieve swift test --package-path macos-app/Packages/SigSieveKit`
+     (GitHub sets `CI`, so a missing CLI fails instead of skipping);
+  5. the `xcodebuild … build` command of Task 12, a real app build;
+  6. `test -d macos-app/build/Build/Products/Release/SigSieve.app` and
+     `plutil -lint` on its `Info.plist`.
+
+  It uploads nothing, publishes nothing, uses no secrets and shares no job
+  with the Rust or release workflows.
 - [ ] **Step 2: Finish `README.md`**: what the app is (a convenience layer;
   the CLI enforces), requirements, build, run, test, the manual checklist,
   and "not signed or notarized; local builds only".
@@ -841,6 +977,38 @@ Locally: `cargo build --release && SIGSIEVE_TEST_CLI=$PWD/target/release/sigsiev
   for the first time when the owner decides to push; that run is part of
   the completion criteria, not of this task.
 
+### Task 15: Integrated security review
+
+Run by a fresh agent that has not implemented any task, on the whole branch.
+It changes no code; it writes `macos-app/SECURITY_REVIEW.md` with one row
+per item: what was checked, the evidence (file and line, or command and
+output), and pass or finding. Findings go back as new tasks.
+
+- [ ] **Step 1: Process execution.** Every place a process or another
+  program can be started (`Process`, `NSWorkspace`, anything else) is listed
+  and traced to `ProcessRunner` or `Launcher.open`. The refusal tests of
+  Task 4 are run and their output recorded.
+- [ ] **Step 2: Environment.** The environment given to the CLI in checks,
+  in the launcher and in the copyable command is compared variable by
+  variable; the only difference is `TERM`. `TMPDIR` has no path to `/tmp`.
+- [ ] **Step 3: Arguments and quoting.** Every value that reaches the
+  launcher text is traced back to a validated type or to `ShellQuote`.
+  The reviewer adds hostile cases of their own to the Task 9 tests and
+  records the result.
+- [ ] **Step 4: Terminal launch.** Launcher directory and file modes,
+  self-deletion, stale cleanup that cannot be pointed at another directory,
+  no AppleScript or Automation entitlement.
+- [ ] **Step 5: Check and connect.** No path enables Connect or shows the
+  copyable command without a passed check for the current inputs; the CLI's
+  exit code, never its text, decides.
+- [ ] **Step 6: Design anti-goals and wording.** Each anti-goal in
+  `DESIGN.md` is checked against the code, and every user-visible string is
+  read for "sees", "verified" and similar claims.
+- [ ] **Step 7: Scope.** `git diff main --stat` touches only `macos-app/`
+  and `.github/workflows/macos-app.yml`; no key material, socket or real
+  host name is committed.
+- [ ] **Step 8: Commit** `macos-app: integrated security review`.
+
 ---
 
 ## Completion criteria
@@ -848,18 +1016,18 @@ Locally: `cargo build --release && SIGSIEVE_TEST_CLI=$PWD/target/release/sigsiev
 The first version is done when all of these hold, each with its evidence:
 
 1. `swift test` passes with `SIGSIEVE_TEST_CLI` set, with zero skipped
-   tests, on this machine.
-2. `scripts/build-app.sh` produces `build/SigSieve.app` and it launches as a
-   menu bar item.
+   tests, on the build machine.
+2. The `xcodebuild` command of Task 12 succeeds and the resulting
+   `SigSieve.app` launches as a menu bar item.
 3. The seven manual checklist items are done and recorded with date and
    macOS version in `README.md`. Item 3 and a real Secretive connection
    need the owner's device; until then they are recorded as "not run".
 4. `git diff main` touches only `macos-app/` and
    `.github/workflows/macos-app.yml`.
-5. `SourceRulesTests` pass: no `ssh` invocation, one `Process` user.
-6. A fresh-context review of the whole branch against `DESIGN.md` finds no
-   unaddressed anti-goal.
-7. After the owner authorizes a push: the `macos-app` workflow is green.
+5. The process runner's refusal tests and `SourceRulesTests` pass.
+6. `SECURITY_REVIEW.md` (Task 15) has no open finding.
+7. After the owner authorizes a push: the `macos-app` workflow is green,
+   with the app build step and zero skipped tests.
 
 ## Not in this plan
 

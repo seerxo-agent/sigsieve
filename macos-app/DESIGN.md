@@ -97,9 +97,12 @@ SwiftUI app (MenuBarExtra window)
              Secretive / OpenSSH agent (private keys stay here)
 ```
 
-Location: `macos-app/` in the sigsieve repository, its own Swift package /
-Xcode project, build and tests **(owner)**. The Rust crate and release
-pipeline are untouched.
+Location: `macos-app/` in the sigsieve repository, with its own build and
+tests **(owner)**. Layout: an Xcode app target (`SigSieve.xcodeproj`, app
+sources in `App/`) and a local Swift package `Packages/SigSieveKit` holding
+all testable logic **(owner)**. The checked-in Xcode project is the only
+project definition; no generator. The Rust crate and release pipeline are
+untouched.
 
 ## Components and their rules
 
@@ -378,8 +381,8 @@ blocking error.
 
 ## Left to the builder
 
-- Swift package vs. Xcode project, module layout, and how the app bundle and
-  `Info.plist` (`LSUIElement`) are produced for local runs.
+- Folder layout inside `SigSieveKit` and the exact Xcode build settings,
+  within the layout above.
 - Exact visual details within the mockup's structure and macOS conventions.
 - How results are parsed for display (exit codes stay the source of truth).
 - CI job for building and testing `macos-app/` (a separate workflow is fine;
