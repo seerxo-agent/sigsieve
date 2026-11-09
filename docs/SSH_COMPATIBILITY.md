@@ -4,10 +4,11 @@ Two parts: how SigSieve speaks the **agent protocol**, and how
 `sigsieve connect` interprets **ssh client configuration**. Every rule below
 is enforced in code; "tested" refers to tests in this repository.
 
-Release evidence is pinned to `v0.1.0-alpha.3`, source commit
-`60c9b3777ce41cedc035c373836a8c0ea5c7e4cd` (runtime code unchanged from `v0.1.0-alpha.2`). See the
-[alpha.3 record](TESTING.md#release-evidence-v010-alpha3-2026-11-01) and the
-[alpha.2 record](TESTING.md#release-candidate-evidence-2026-10-28);
+Current release: [`v1.0.0`](https://github.com/semihbugrasezer/sigsieve/releases/tag/v1.0.0),
+source commit `71ae5e95e666eeb3cb1b94b25ba6b0b8571eca35`; its exact-commit CI
+(run 42227739778) includes the real OpenSSH end-to-end tests. Earlier
+per-release records: [alpha.3](TESTING.md#release-evidence-v010-alpha3-2026-11-01)
+and [alpha.2](TESTING.md#release-candidate-evidence-2026-10-28);
 automated protocol tests and owner-assisted device observations have different
 scopes and do not establish compatibility with other agents or services.
 

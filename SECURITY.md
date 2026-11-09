@@ -12,7 +12,7 @@ appreciate responsible disclosure.
 | Version | Supported |
 |---|---|
 | 1.0.0 | security reports accepted |
-| 0.1.0-alpha.* (experimental preview) | security reports accepted |
+| 0.1.0-alpha.*, 1.0.0-rc.1 (historical pre-releases) | security reports accepted; fixes go into the next 1.x release |
 
 Fixes target `main` and the next release. Backports to older releases are not
 promised, and no long-term support window is promised. Include the exact

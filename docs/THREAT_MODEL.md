@@ -1,12 +1,12 @@
 # Threat model
 
-Status: this threat model describes the project security boundaries; it was
-originally maintained for `v0.1.0-alpha.2` (source
-`fc7484be0371242f517b6628b0f7dcc3a9a12a29`). The published alpha.4 release is
-[`v0.1.0-alpha.4`](https://github.com/semihbugrasezer/sigsieve/releases/tag/v0.1.0-alpha.4)
-(source `5ea37b73ce7ed5dd33f3ac405c3ae4ad4da68751`). This revision of
-the document is an editorial update, **not** a new independent validation of
-the release. **No independent external security review.** Guarantees and their evidence are in
+Status: this threat model describes the project security boundaries. The
+current stable release is
+[`v1.0.0`](https://github.com/semihbugrasezer/sigsieve/releases/tag/v1.0.0)
+(source `71ae5e95e666eeb3cb1b94b25ba6b0b8571eca35`). The document was
+originally written for `v0.1.0-alpha.2` (source
+`fc7484be0371242f517b6628b0f7dcc3a9a12a29`) and has since been updated
+editorially; it is **not** a new independent validation of any release. **No independent external security review.** Guarantees and their evidence are in
 [SECURITY_MODEL.md](SECURITY_MODEL.md); residual limits in
 [LIMITATIONS.md](LIMITATIONS.md); the findings register in
 [FINDINGS.md](FINDINGS.md).
@@ -106,6 +106,12 @@ after a valid one does not discard previously verified state.
   which the attacker does not control unless they made that session.
 - Binding a session identifier with a different host key on the same
   connection is refused; binding after an authentication bind is refused.
+- Replaying a recorded session (F-22) is bounded, not prevented: since F-47,
+  at most one destination-bound signing attempt is allowed per verified
+  session identifier and key, across connections, within the 300 s,
+  256-entry window. Expiry, eviction, a new session or a new instance allow
+  another attempt. See [SECURITY_MODEL.md](SECURITY_MODEL.md) and
+  [FINDINGS.md](FINDINGS.md) (F-22, F-47).
 - An attacker holding a permitted host key (e.g. the VPS key) can create
   valid-looking bindings for other sessions, but forwarded requests must
   embed the host key (hostbound), which the real destination checks.

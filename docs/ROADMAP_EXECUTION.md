@@ -1,5 +1,7 @@
 # Roadmap execution plan
 
+> **Historical.** This plan was written during the alpha series. It is kept as a record and superseded by the stable release [v1.0.0](https://github.com/semihbugrasezer/sigsieve/releases/tag/v1.0.0) (2026-11-09). SigSieve is still **not independently audited**.
+
 Working plan for moving SigSieve from an experimental alpha toward a
 well-tested, verifiable and easy-to-install tool **without** overstating its
 assurance. Task status lives in [IMPLEMENTATION_CHECKLIST.md](IMPLEMENTATION_CHECKLIST.md);
