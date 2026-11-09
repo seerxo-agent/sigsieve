@@ -1,10 +1,10 @@
 # Support and usage questions
 
-SigSieve is experimental security software. It has no guaranteed response time, no paid support, and no production assurance or independent audit.
+SigSieve is a stable (v1.0.0), single-maintainer open-source project. It has **not been independently audited**. There is no guaranteed response time, no paid support, and no production assurance.
 
 ## Before asking for help
 
-1. Follow the [README quick checks](README.md#first-safe-check-with-openssh-linux-or-macos) or the [Secretive walkthrough](README.md#first-session-with-secretive-macos).
+1. Follow the [README quick start](README.md#quick-start) (OpenSSH agent or Secretive).
 2. Read [usage and troubleshooting](docs/USAGE.md#troubleshooting), [known limitations](docs/LIMITATIONS.md), and [SSH compatibility](docs/SSH_COMPATIBILITY.md).
 3. Check whether the problem is reproducible with a throwaway OpenSSH agent and synthetic keys. You do **not** need to disclose a real key or host.
 

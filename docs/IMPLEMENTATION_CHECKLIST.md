@@ -1,5 +1,7 @@
 # Implementation checklist
 
+> **Historical.** This tracker was used during the alpha series. It is kept as a record and superseded by the stable release [v1.0.0](https://github.com/semihbugrasezer/sigsieve/releases/tag/v1.0.0) (2026-11-09). SigSieve is still **not independently audited**.
+
 Source of truth for roadmap task status. Plan and ownership:
 [ROADMAP_EXECUTION.md](ROADMAP_EXECUTION.md).
 

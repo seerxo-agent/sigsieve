@@ -82,8 +82,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Versions and dependencies
 
-Alpha releases are experimental; fixes target `main` and the next alpha.
-Older prereleases have no promised backports or stable support window; see
+Fixes target `main` and the next `1.x` release (a patch release for fixes).
+Older releases, including the `0.1.0-alpha.*` and `1.0.0-rc.1` pre-releases,
+have no promised backports or long-term support window; see
 [SECURITY.md](SECURITY.md). Record user-visible changes under `Unreleased`,
 and move them into the candidate's notes when preparing a release. A source
 tag or a prepared workflow is not a verified binary release. Publication

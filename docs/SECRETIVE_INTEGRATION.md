@@ -8,7 +8,8 @@ policy remain in control. Owner-assisted allowed-key signing and
 destination-binding tests passed on `v0.1.0-alpha.2` (`fc7484b`, 2026-10-28),
 the attested `v0.1.0-alpha.4` macOS arm64 binary (2026-11-03), and the
 verified `v1.0.0-rc.1` macOS arm64 binary (2026-11-06, Secretive 4.0.0).
-This does not guarantee every Secretive configuration or the final stable binary.
+With the `1.0.0` binary, the same configuration passed 13/13
+(maintainer-reported). This does not guarantee every Secretive configuration.
 See the [recorded results](#recorded-real-device-results).
 
 The released `v0.1.0-alpha.2` source is

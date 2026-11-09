@@ -71,8 +71,8 @@ cd / && rm -rf "$demo"
 - **Destination binding.** It needs real SSH sessions; it is covered by the
   real-`sshd` tests (`tests/e2e_sshd.rs`) and described in [USAGE.md](USAGE.md).
 - **Your agent.** Next, follow the README's
-  [first safe check with OpenSSH](../README.md#first-safe-check-with-openssh-linux-or-macos)
-  or [first session with Secretive](../README.md#first-session-with-secretive-macos),
+  [first safe check with OpenSSH](../README.md#quick-start)
+  or [first session with Secretive](../README.md#quick-start),
   and preview a connection with `sigsieve connect … --dry-run` before
   using it.
 

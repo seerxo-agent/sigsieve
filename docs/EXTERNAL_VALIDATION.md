@@ -1,5 +1,7 @@
 # External review and user trials
 
+> **Historical.** This template was written for `v0.1.0-alpha.2`; if it is used later, evaluate the current release instead. It is kept as a record and superseded by the stable release [v1.0.0](https://github.com/semihbugrasezer/sigsieve/releases/tag/v1.0.0) (2026-11-09). SigSieve is still **not independently audited**.
+
 Status: **not started**. No external expert or trial participants have been
 selected. This is a protocol and reporting template, not completed validation.
 Maintainer decision 2026-11-05: no external technical review before v1.0.0
