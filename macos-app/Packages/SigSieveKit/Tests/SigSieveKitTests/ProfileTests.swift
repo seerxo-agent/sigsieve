@@ -393,3 +393,20 @@ func socketPathMustBeAbsoluteAndVisible(_ socket: String) throws {
         #expect(!FileManager.default.fileExists(atPath: store.file.path))
     }
 }
+
+@Test(arguments: [".", ".."])
+func dotComponentCannotBypassTheSymlinkRule(_ dot: String) throws {
+    // "link/." would resolve through the link even with O_NOFOLLOW.
+    let root = tmp()
+    let target = root.appending(path: "elsewhere")
+    try FileManager.default.createDirectory(at: target.appending(path: "inner"), withIntermediateDirectories: true)
+    chmod(target.path, 0o755)
+    let link = root.appending(path: "SigSieve")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+    let dir = URL(filePath: link.path + "/" + (dot == "." ? "." : "inner/.."))
+    let store = ProfileStore(directory: dir)
+    #expect(performing: { try store.load() }, throws: isUnreadable)
+    #expect(performing: { try store.save([sample]) }, throws: isUnreadable)
+    #expect(mode(target) == 0o755)
+    #expect(try FileManager.default.contentsOfDirectory(atPath: target.path) == ["inner"])
+}

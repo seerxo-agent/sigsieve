@@ -259,7 +259,8 @@ dropped on save, so any new field needs a new `schemaVersion`. `profiles.json`
 must be a regular file of at most 1 MB; a symbolic link, directory or other
 special file is refused like an unreadable file. The profile directory (the last path
 component) must be a real directory owned by the user, not a symbolic link
-**(owner)**. It is opened once with `O_SEARCH | O_NOFOLLOW`; reading, the
+**(owner)**; a last component of `.` or `..` is refused. It is opened
+once with `O_SEARCH | O_NOFOLLOW`; reading, the
 temporary file, the rename and the mode change all work relative to that
 descriptor (`openat`, `renameat`, `fchmod`), so a link swapped in later is
 not followed. Parent directories are resolved normally.
@@ -272,11 +273,10 @@ Known limits of version 1 **(owner)**:
 - A normal error removes the temporary file. A crash between creating it and
   the rename leaves `.profiles.json.<uuid>.tmp`, which is never read and is
   safe to delete.
-- Power loss: on APFS, `F_FULLFSYNC` flushes the new contents before the
-  rename. Afterwards the file may be the old version, the new one, or missing
+- Power loss: where the volume supports `F_FULLFSYNC` (APFS, HFS+), the new
+  contents are flushed before the rename. Afterwards the file may be the old version, the new one, or missing
   (first save); the rename and directory sync are not a durability guarantee.
-  On a volume without `F_FULLFSYNC` (some network and FAT volumes) plain
-  `fsync` is used and the file may be damaged; `load` then reports it
+  On a volume that rejects `F_FULLFSYNC`, plain `fsync` is used and the file may be damaged; `load` then reports it
   unreadable and leaves it alone. A real I/O error from `F_FULLFSYNC` is a
   failed write, not a reason to fall back.
 
@@ -314,11 +314,14 @@ func unreadableFileIsNeverOverwritten(_ body: String) throws {
 ```
 
 - [ ] **Step 2: Run** `swift test --filter ProfileTests`. Expected: compile failure.
-- [ ] **Step 3: Implement `Profile.swift`.** `save` writes a temporary file
-  in the same directory with `open(O_CREAT|O_EXCL, 0o600)`, `fsync`, then
-  `rename`; it calls `load()` first and rethrows, so an unreadable or newer
-  file blocks saving. Add `static func empty(for:agent:) -> Profile` with
-  `mode: .filtering` and `destinations: []`.
+- [ ] **Step 3: Implement `Profile.swift`.** `save` opens the directory once
+  (`O_SEARCH|O_NOFOLLOW`), reads the existing file through that descriptor
+  and rethrows, so an unreadable or newer file blocks saving (again after
+  creating a missing directory). It then validates the list
+  (`invalidProfiles`), writes a temporary file with
+  `openat(O_CREAT|O_EXCL|O_NOFOLLOW, 0o600)`, `F_FULLFSYNC`, `renameat`, and
+  a best-effort directory sync. Add `static func empty(for:agent:) -> Profile`
+  with `mode: .filtering` and `destinations: []`.
 - [ ] **Step 4: Run** the tests. Expected: all pass.
 - [ ] **Step 5: Commit** `macos-app: profile model and atomic private store`.
 

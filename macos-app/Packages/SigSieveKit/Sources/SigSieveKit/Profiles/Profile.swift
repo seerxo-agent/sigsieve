@@ -103,7 +103,10 @@ public enum ProfileStoreError: Error, Equatable {
 /// file may not be symbolic links. The directory is opened once with
 /// `O_NOFOLLOW` and every later step works relative to that descriptor, so a
 /// link swapped in afterwards is not followed either. Parent directories are
-/// resolved normally.
+/// resolved normally; a last component of `.` or `..` is refused, since
+/// `O_NOFOLLOW` would not apply to it. A directory the owner can search is
+/// tightened to 0700 on save; one without owner search permission is
+/// reported unreadable.
 ///
 /// Known limits (v1):
 /// - One writer, no lock. `save` replaces the whole file with the list it is
@@ -113,12 +116,12 @@ public enum ProfileStoreError: Error, Equatable {
 /// - On a normal error the temporary file is removed. If the process dies
 ///   between creating it and the rename, a `.profiles.json.<uuid>.tmp` stays
 ///   in the directory; it is never read and is safe to delete.
-/// - Power loss: on APFS, `F_FULLFSYNC` flushes the new contents before the
-///   rename. Afterwards the file may be the old version, the new one, or
-///   missing (first save); the rename and directory sync are not a durability
-///   guarantee. On a volume without `F_FULLFSYNC` (some network and FAT
-///   volumes) plain `fsync` is used and the file may be damaged; `load` then
-///   reports it unreadable and leaves it alone.
+/// - Power loss: where the volume supports `F_FULLFSYNC` (APFS, HFS+), the new
+///   contents are flushed before the rename. Afterwards the file may be the
+///   old version, the new one, or missing (first save); the rename and
+///   directory sync are not a durability guarantee. On a volume that rejects
+///   `F_FULLFSYNC`, plain `fsync` is used and the file may be damaged; `load`
+///   then reports it unreadable and leaves it alone.
 public struct ProfileStore: Sendable {
     public static let schemaVersion = 1
     /// Far above any real profile list; refuses to read a stray huge file.
@@ -170,7 +173,13 @@ public struct ProfileStore: Sendable {
             throw ProfileStoreError.invalidProfiles(m)
         }
 
-        if dir == nil { dir = try createDirectory() }
+        if dir == nil {
+            let created = try createDirectory()
+            dir = created
+            // Another writer may have created the directory and a file in the
+            // meantime; a file this save has not read is never replaced.
+            _ = try readFile(in: created)
+        }
         let d = dir!
         var st = stat()
         guard fstat(d, &st) == 0 else { throw Self.writeFailed(errno, "fstat", directory.path) }
@@ -184,6 +193,11 @@ public struct ProfileStore: Sendable {
     /// a non-directory, or one owned by another user. `nil` when it does not
     /// exist yet. The caller closes the descriptor.
     private func openDirectory() throws -> Int32? {
+        // O_NOFOLLOW only guards the last component; "x/." or "x/.." would
+        // resolve through a symbolic link x.
+        guard let last = directory.path.split(separator: "/").last, last != ".", last != ".." else {
+            throw ProfileStoreError.unreadable("\(directory.path): the profile directory must be named, not . or ..")
+        }
         let fd = open(directory.path, O_SEARCH | O_NOFOLLOW | O_CLOEXEC)
         guard fd >= 0 else {
             let e = errno
@@ -239,6 +253,7 @@ public struct ProfileStore: Sendable {
         guard fstat(fd, &st) == 0 else { throw ProfileStoreError.unreadable(Self.posix(errno, "fstat", file.path)) }
         guard st.st_mode & S_IFMT == S_IFREG else { throw Self.notRegular(file.path) }
         guard st.st_size <= Self.maxFileSize else { throw Self.tooLarge(file.path) }
+        _ = fcntl(fd, F_SETFL, 0) // O_NONBLOCK was only for the open; read a regular file normally
 
         var data = Data()
         var buf = [UInt8](repeating: 0, count: 64 * 1024)
