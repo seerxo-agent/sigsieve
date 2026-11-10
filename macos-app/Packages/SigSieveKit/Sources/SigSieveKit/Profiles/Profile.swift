@@ -82,8 +82,13 @@ extension AgentChoice: Codable {
 public enum ProfileStoreError: Error, Equatable {
     /// The file has a `schemaVersion` this app does not write. Left untouched.
     case unsupportedVersion(Int)
-    /// The file exists but cannot be read as version 1. Left untouched.
+    /// The existing file, or the directory holding it, cannot be read as
+    /// version 1. Left untouched.
     case unreadable(String)
+    /// Saving failed after the existing file was read: disk full, read-only
+    /// volume, a failed write, sync or rename, or a profile list that would
+    /// not read back. The existing file is left as it was.
+    case writeFailed(String)
 }
 
 /// `profiles.json`: directory 0700, file 0600, replaced atomically. A file
@@ -91,7 +96,21 @@ public enum ProfileStoreError: Error, Equatable {
 ///
 /// Version 1 has exactly the fields of `Profile`. Unknown keys are ignored on
 /// load and dropped on save, so adding a field means a new `schemaVersion`.
-/// One writer is assumed (the app); concurrent writers would need a lock.
+///
+/// Neither the directory nor the file may be a symbolic link: the store would
+/// otherwise read one place and change the permissions or contents of another.
+///
+/// Known limits (v1):
+/// - One writer. There is no lock: if two app instances save at nearly the
+///   same time, the last rename wins and the other's edit is lost. The file
+///   is never left half written.
+/// - On a normal error the temporary file is removed. If the process dies
+///   between creating it and the rename, a `.profiles.json.<uuid>.tmp` stays
+///   in the directory; it is never read and is safe to delete.
+/// - `F_FULLFSYNC` makes the new file's contents durable before the rename.
+///   The rename itself and the directory sync after it are not a guarantee
+///   against power loss: afterwards either the old or the new file may be
+///   found, but not a mix of the two.
 public struct ProfileStore: Sendable {
     public static let schemaVersion = 1
     /// Far above any real profile list; refuses to read a stray huge file.
@@ -115,6 +134,7 @@ public struct ProfileStore: Sendable {
     private struct VersionOnly: Decodable { var schemaVersion: Int }
 
     public func load() throws -> [Profile] {
+        try checkDirectory()
         // lstat, not stat: a symlink would be read here but replaced by
         // save()'s rename, silently splitting the two. Refuse it, and any
         // directory, FIFO or other non-regular file.
@@ -122,7 +142,7 @@ public struct ProfileStore: Sendable {
         guard lstat(file.path, &st) == 0 else {
             let e = errno
             if e == ENOENT { return [] }
-            throw posixError(e, "lstat", file.path)
+            throw ProfileStoreError.unreadable(Self.posix(e, "lstat", file.path))
         }
         guard st.st_mode & S_IFMT == S_IFREG else {
             throw ProfileStoreError.unreadable("\(file.path): not a regular file (symbolic links and special files are refused)")
@@ -148,11 +168,16 @@ public struct ProfileStore: Sendable {
         do {
             data = try encoder.encode(Envelope(schemaVersion: Self.schemaVersion, profiles: profiles))
         } catch {
-            throw ProfileStoreError.unreadable("cannot encode profiles: \(error)")
+            throw ProfileStoreError.writeFailed("cannot encode profiles: \(error)")
         }
         // Never write a file that load() would refuse (for example a duplicate
-        // server): it would block every later save.
-        _ = try decode(data, source: "profiles to save")
+        // server): it would block every later save. The existing file is fine,
+        // so this is a failed write, not an unreadable file.
+        do {
+            _ = try decode(data, source: "profiles to save")
+        } catch ProfileStoreError.unreadable(let m) {
+            throw ProfileStoreError.writeFailed(m)
+        }
 
         try makePrivateDirectory()
         try writeAtomically(data)
@@ -181,47 +206,74 @@ public struct ProfileStore: Sendable {
         return profiles
     }
 
+    /// A missing directory is fine (nothing saved yet). An existing one must be
+    /// a real directory, not a symbolic link, owned by this user.
+    private func checkDirectory() throws {
+        var st = stat()
+        guard lstat(directory.path, &st) == 0 else {
+            let e = errno
+            if e == ENOENT { return }
+            throw ProfileStoreError.unreadable(Self.posix(e, "lstat", directory.path))
+        }
+        guard st.st_mode & S_IFMT == S_IFDIR else {
+            throw ProfileStoreError.unreadable("\(directory.path): not a directory (symbolic links are refused)")
+        }
+        guard st.st_uid == getuid() else {
+            throw ProfileStoreError.unreadable("\(directory.path): owned by another user")
+        }
+    }
+
     private func makePrivateDirectory() throws {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                     attributes: [.posixPermissions: 0o700])
         } catch {
-            throw ProfileStoreError.unreadable("\(directory.path): \(Self.underlying(error))")
+            throw ProfileStoreError.writeFailed("\(directory.path): \(Self.underlying(error))")
+        }
+        // Tighten through a descriptor opened with O_NOFOLLOW, so a symbolic
+        // link put in place after checkDirectory() is refused, not followed.
+        let fd = open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard fd >= 0 else { throw ProfileStoreError.writeFailed(Self.posix(errno, "open", directory.path)) }
+        defer { close(fd) }
+        var st = stat()
+        guard fstat(fd, &st) == 0 else { throw ProfileStoreError.writeFailed(Self.posix(errno, "fstat", directory.path)) }
+        guard st.st_uid == getuid() else {
+            throw ProfileStoreError.writeFailed("\(directory.path): owned by another user")
         }
         // An existing directory keeps its mode on create; tighten it.
-        guard chmod(directory.path, 0o700) == 0 else { throw posixError(errno, "chmod", directory.path) }
+        guard fchmod(fd, 0o700) == 0 else { throw ProfileStoreError.writeFailed(Self.posix(errno, "fchmod", directory.path)) }
     }
 
     /// Temporary file in the same directory (O_EXCL, 0600), full sync, rename,
-    /// then sync the directory so the rename itself is durable.
+    /// then a best-effort sync of the directory (see the limits above).
     private func writeAtomically(_ data: Data) throws {
         let temp = directory.appending(path: ".profiles.json.\(UUID().uuidString).tmp")
         let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0o600)
-        guard fd >= 0 else { throw posixError(errno, "open", temp.path) }
+        guard fd >= 0 else { throw Self.writeFailed(errno, "open", temp.path) }
         var renamed = false
         defer { if !renamed { unlink(temp.path) } }
 
         do {
             defer { close(fd) }
             // umask can only narrow 0600; set it exactly so the file stays readable and writable by us.
-            guard fchmod(fd, 0o600) == 0 else { throw posixError(errno, "fchmod", temp.path) }
+            guard fchmod(fd, 0o600) == 0 else { throw Self.writeFailed(errno, "fchmod", temp.path) }
             try data.withUnsafeBytes { buf in
                 var offset = 0
                 while offset < buf.count {
                     let n = write(fd, buf.baseAddress! + offset, buf.count - offset)
                     if n < 0 {
                         if errno == EINTR { continue }
-                        throw posixError(errno, "write", temp.path)
+                        throw Self.writeFailed(errno, "write", temp.path)
                     }
                     offset += n
                 }
             }
             // fsync on macOS does not reach stable storage; F_FULLFSYNC does.
             // Some file systems refuse it, so fall back to fsync.
-            if fcntl(fd, F_FULLFSYNC) != 0 && fsync(fd) != 0 { throw posixError(errno, "fsync", temp.path) }
+            if fcntl(fd, F_FULLFSYNC) != 0 && fsync(fd) != 0 { throw Self.writeFailed(errno, "fsync", temp.path) }
         }
 
-        guard rename(temp.path, file.path) == 0 else { throw posixError(errno, "rename", file.path) }
+        guard rename(temp.path, file.path) == 0 else { throw Self.writeFailed(errno, "rename", file.path) }
         renamed = true
 
         let dirFD = open(directory.path, O_RDONLY | O_CLOEXEC)
@@ -233,8 +285,12 @@ public struct ProfileStore: Sendable {
 
     /// Callers pass `errno` as the first argument so it is read before anything
     /// else can allocate and change it.
-    private func posixError(_ e: Int32, _ call: String, _ path: String) -> ProfileStoreError {
-        .unreadable("\(path): \(call) failed: \(String(cString: strerror(e)))")
+    private static func posix(_ e: Int32, _ call: String, _ path: String) -> String {
+        "\(path): \(call) failed: \(String(cString: strerror(e)))"
+    }
+
+    private static func writeFailed(_ e: Int32, _ call: String, _ path: String) -> ProfileStoreError {
+        .writeFailed(posix(e, call, path))
     }
 
     /// Foundation's message hides errno ("couldn't be opened"); prefer the POSIX cause.

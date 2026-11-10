@@ -225,7 +225,11 @@ func hostInputAccepts(_ s: String) { #expect(HostInput(s)?.value == s) }
   - `struct Destination: Hashable, Codable, Sendable { var name: String; var hostKeys: [Fingerprint] }`
   - `struct Profile: Hashable, Codable, Sendable { var server: HostInput; var agent: AgentChoice; var forwardedKeys: [Fingerprint]; var mode: ProtectionMode; var destinations: [Destination] }`
   - `struct ProfileStore { init(directory: URL); func load() throws -> [Profile]; func save(_ profiles: [Profile]) throws }`
-  - `enum ProfileStoreError: Error, Equatable { case unsupportedVersion(Int); case unreadable(String) }`
+  - `enum ProfileStoreError: Error, Equatable { case unsupportedVersion(Int); case unreadable(String); case writeFailed(String) }`
+    **(owner)**: `unreadable` is an existing file or directory that cannot be
+    read; `writeFailed` is a save that failed after reading (disk full,
+    read-only volume, failed write, sync or rename, or a list that would not
+    read back). The UI shows the message; it does not guess the cause.
   - `ProfileStore.defaultDirectory` = `~/Library/Application Support/SigSieve`
 
 File format (the documented format a later CLI `--profile` may read):
@@ -252,7 +256,19 @@ re-validate on decode (Task 1); do not add a second conformance.
 Version 1 has exactly these fields: unknown keys are ignored on load and
 dropped on save, so any new field needs a new `schemaVersion`. `profiles.json`
 must be a regular file of at most 1 MB; a symbolic link, directory or other
-special file is refused like an unreadable file.
+special file is refused like an unreadable file. The profile directory must be a real
+directory owned by the user, not a symbolic link **(owner)**; its mode is
+tightened through a descriptor opened with `O_NOFOLLOW`.
+
+Known limits of version 1 **(owner)**:
+- One writer, no lock. If two app instances save at nearly the same time,
+  the last rename wins and the other's edit is lost; the file is never left
+  half written.
+- A normal error removes the temporary file. A crash between creating it and
+  the rename leaves `.profiles.json.<uuid>.tmp`, which is never read.
+- `F_FULLFSYNC` makes the new contents durable before the rename. The rename
+  and the directory sync after it do not guarantee, after power loss, which
+  of the old or new file is found, only that it is one of them whole.
 
 - [ ] **Step 1: Write the failing tests**
 

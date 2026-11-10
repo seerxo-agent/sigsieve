@@ -28,6 +28,11 @@ private func isUnreadable(_ e: any Error) -> Bool {
     return false
 }
 
+private func isWriteFailed(_ e: any Error) -> Bool {
+    if case .writeFailed = e as? ProfileStoreError { return true }
+    return false
+}
+
 private func file(_ dir: URL) -> URL { dir.appending(path: "profiles.json") }
 
 /// Writes `body`, then checks that load and save both refuse with `check` and the bytes stay the same.
@@ -180,7 +185,7 @@ func otherSchemaVersionIsNeverOverwritten(_ v: Int) throws {
     let store = ProfileStore(directory: dir)
     try store.save([sample])
     let before = try Data(contentsOf: file(dir))
-    #expect(performing: { try store.save([sample, sample]) }, throws: isUnreadable)
+    #expect(performing: { try store.save([sample, sample]) }, throws: isWriteFailed)
     #expect(try Data(contentsOf: file(dir)) == before)
     #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path) == ["profiles.json"])
 }
@@ -264,13 +269,95 @@ private func message(_ e: any Error) -> String? {
 @Test func badInMemoryListBlamesTheListNotTheFile() throws {
     let dir = tmp()
     #expect(performing: { try ProfileStore(directory: dir).save([sample, sample]) },
-            throws: { message($0)?.hasPrefix("profiles to save: more than one profile for build-host") == true })
+            throws: { $0 as? ProfileStoreError == .writeFailed("profiles to save: more than one profile for build-host") })
 }
 
 @Test(arguments: ["/tmp/\u{202E}kcos", "/tmp/a\u{200B}b", "/tmp/a\nb", "relative", "/"])
 func socketPathMustBeAbsoluteAndVisible(_ socket: String) throws {
     let dir = tmp()
     let p = Profile.empty(for: HostInput("h")!, agent: .openssh(socket: socket))
-    #expect(performing: { try ProfileStore(directory: dir).save([p]) }, throws: isUnreadable)
+    #expect(performing: { try ProfileStore(directory: dir).save([p]) }, throws: isWriteFailed)
     #expect(!FileManager.default.fileExists(atPath: file(dir).path))
+}
+
+// MARK: - writeFailed and the profile directory
+
+@Test func unwritableParentIsAWriteFailureNotAnUnreadableFile() throws {
+    let parent = tmp()
+    chmod(parent.path, 0o500)
+    defer { chmod(parent.path, 0o700) }
+    let dir = parent.appending(path: "SigSieve")
+    #expect(try ProfileStore(directory: dir).load() == [])
+    #expect(performing: { try ProfileStore(directory: dir).save([sample]) },
+            throws: { e in isWriteFailed(e) && "\(e)".contains("ermission denied") })
+    #expect(!FileManager.default.fileExists(atPath: dir.path))
+}
+
+@Test func failedWriteKeepsTheExistingFile() throws {
+    // An immutable directory: the existing file reads fine, but nothing can be
+    // created or renamed in it, and its mode cannot change.
+    let dir = tmp()
+    let store = ProfileStore(directory: dir)
+    try store.save([sample])
+    let before = try Data(contentsOf: file(dir))
+    #expect(chflags(dir.path, UInt32(UF_IMMUTABLE)) == 0)
+    defer { chflags(dir.path, 0) }
+    #expect(performing: { try store.save([binding]) }, throws: isWriteFailed)
+    chflags(dir.path, 0)
+    #expect(try Data(contentsOf: file(dir)) == before)
+    #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path) == ["profiles.json"])
+}
+
+@Test func symlinkedDirectoryIsRefusedAndItsTargetIsUntouched() throws {
+    let root = tmp()
+    let target = root.appending(path: "elsewhere")
+    try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+    let body = Data("{\"schemaVersion\":1,\"profiles\":[]}".utf8)
+    try body.write(to: file(target))
+    chmod(target.path, 0o755)
+    chmod(file(target).path, 0o644)
+    let link = root.appending(path: "SigSieve")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+    let store = ProfileStore(directory: link)
+    #expect(performing: { try store.load() }, throws: { message($0)?.contains("not a directory") == true })
+    #expect(performing: { try store.save([sample]) }, throws: isUnreadable)
+
+    #expect(mode(target) == 0o755)
+    #expect(mode(file(target)) == 0o644)
+    #expect(try Data(contentsOf: file(target)) == body)
+    #expect(try FileManager.default.contentsOfDirectory(atPath: target.path) == ["profiles.json"])
+    #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == target.path)
+}
+
+@Test func danglingDirectorySymlinkIsRefusedAndNothingIsCreated() throws {
+    let root = tmp()
+    let missing = root.appending(path: "not-yet")
+    let link = root.appending(path: "SigSieve")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: missing)
+    #expect(performing: { try ProfileStore(directory: link).save([sample]) }, throws: isUnreadable)
+    #expect(!FileManager.default.fileExists(atPath: missing.path))
+}
+
+@Test func directoryThatIsAFileIsRefused() throws {
+    let root = tmp()
+    let notDir = root.appending(path: "SigSieve")
+    try Data("x".utf8).write(to: notDir)
+    #expect(performing: { try ProfileStore(directory: notDir).save([sample]) }, throws: isUnreadable)
+    #expect(try Data(contentsOf: notDir) == Data("x".utf8))
+}
+
+@Test func failedRenameIsAWriteFailureAndRemovesTheTemporaryFile() throws {
+    // An immutable profiles.json reads fine and the temp file is written, but
+    // the rename over it fails: the late error path and its cleanup.
+    let dir = tmp()
+    let store = ProfileStore(directory: dir)
+    try store.save([sample])
+    let before = try Data(contentsOf: file(dir))
+    #expect(chflags(file(dir).path, UInt32(UF_IMMUTABLE)) == 0)
+    defer { chflags(file(dir).path, 0) }
+    #expect(performing: { try store.save([binding]) },
+            throws: { e in isWriteFailed(e) && "\(e)".contains("rename failed") })
+    #expect(try Data(contentsOf: file(dir)) == before)
+    #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path) == ["profiles.json"])
 }
