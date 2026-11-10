@@ -72,8 +72,11 @@ Check before Task 1: `xcodebuild -version` prints 16.0 or newer, and
   (`/usr/bin:/bin:/usr/sbin:/sbin:<cli directory>`), `LANG`, `TMPDIR`
   (verified), `SSH_AUTH_SOCK` (the profile's agent socket). The launcher and
   the copyable command add `TERM="$TERM"` and nothing else.
-- Fingerprints match `^SHA256:[A-Za-z0-9+/]{43}$`. Host input: not empty, no
-  leading `-`, no whitespace, no control characters.
+- Fingerprints match `^SHA256:[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]$`, the
+  same strictness as the CLI's decoder (the 2 spare bits of the last
+  character are zero) **(owner)**. Host input: not empty, no leading `-`, no
+  whitespace, no control or format characters (bidi overrides, zero-width,
+  BOM); hosts compare byte-for-byte, not by Unicode equivalence **(owner)**.
 - `-- -o StrictHostKeyChecking=yes` is always appended to `connect`.
   Production arguments never include `-F`. A test that must point the CLI
   at a temporary config passes `-F` itself, after `--`.
@@ -174,6 +177,9 @@ checklist.
 - Produces:
   - `struct Fingerprint: Hashable, Codable, Sendable { init?(_ s: String); let value: String; var short: String }` (`short` is `SHA256:` plus the first 8 characters and `…`)
   - `struct HostInput: Hashable, Codable, Sendable { init?(_ s: String); let value: String }`
+  - `Codable` for both is written by hand here **(owner)**: each encodes as a
+    plain string and decoding re-validates through `init?`. The synthesized
+    conformance would write `{"value":…}` and skip validation.
 
 - [ ] **Step 1: Write `Package.swift`**: tools version 6.0, platform
   `.macOS(.v13)`, one library product and target `SigSieveKit`, one test
@@ -240,8 +246,9 @@ File format (the documented format a later CLI `--profile` may read):
 ```
 
 `agent` is `{ "kind": "openssh", "socket": "/path" }` for the OpenSSH agent.
-Write custom `Codable` for `AgentChoice`, `Fingerprint` and `HostInput` so
-the file has these plain shapes and decoding re-validates every value.
+Write custom `Codable` for `AgentChoice` so the file has this plain shape.
+`Fingerprint` and `HostInput` already encode as plain strings and
+re-validate on decode (Task 1); do not add a second conformance.
 
 - [ ] **Step 1: Write the failing tests**
 

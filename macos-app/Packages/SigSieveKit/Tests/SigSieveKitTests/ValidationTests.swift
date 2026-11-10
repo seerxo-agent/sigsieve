@@ -21,7 +21,7 @@ import Testing
 }
 
 @Test func fingerprintShortForm() {
-    let fp = Fingerprint("SHA256:abcdefgh" + String(repeating: "Z", count: 35))!
+    let fp = Fingerprint("SHA256:abcdefgh" + String(repeating: "Z", count: 34) + "w")!
     #expect(fp.short == "SHA256:abcdefgh…")
 }
 
@@ -67,4 +67,25 @@ func hostInputRejectsFormatCharacters(_ s: String) { #expect(HostInput(s) == nil
 @Test func fingerprintRejectsCombiningMarks() {
     #expect(Fingerprint("SHA256:\u{301}" + String(repeating: "A", count: 43)) == nil)
     #expect(Fingerprint("SHA256:" + String(repeating: "A", count: 43) + "\u{301}") == nil)
+}
+
+// Same strictness as the CLI: the last of 43 characters must leave the 2 spare
+// bits zero, so only 16 characters are allowed there.
+@Test func fingerprintLastCharacterMatchesTheCLI() {
+    let allowed = Set("AEIMQUYcgkosw048")
+    let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    for c in alphabet {
+        let fp = Fingerprint("SHA256:" + String(repeating: "A", count: 42) + String(c))
+        #expect((fp != nil) == allowed.contains(c), "last character \(c)")
+    }
+}
+
+@Test(arguments: ["B", "Z", "z", "/", "+", "1"])
+func fingerprintRejectsNonzeroSpareBits(_ last: String) {
+    #expect(Fingerprint("SHA256:" + String(repeating: "A", count: 42) + last) == nil)
+}
+
+// SHA-256 of empty input, base64 without padding: a real 256-bit hash.
+@Test func fingerprintAcceptsARealOpenSSHValue() {
+    #expect(Fingerprint("SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU") != nil)
 }

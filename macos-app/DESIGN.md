@@ -309,7 +309,8 @@ line: "SigSieve checks again when it connects" **(owner)**.
 - The launcher is generated so that no profile value is ever interpreted by
   the shell: each argument is written with single-quote POSIX quoting
   (`'` → `'\''`), and values are validated first (fingerprints match
-  `^SHA256:[A-Za-z0-9+/]{43}$`, host input rules above). Unit tests cover
+  `^SHA256:[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]$`, as strict as the CLI;
+  host input rules above). Unit tests cover
   quotes, spaces, `$()`, backticks, newlines and leading dashes.
 - The launcher runs `exec /usr/bin/env -i <variables…> TERM="$TERM"
   <cli-path> connect <args…>` (see "Running the CLI") and deletes its own

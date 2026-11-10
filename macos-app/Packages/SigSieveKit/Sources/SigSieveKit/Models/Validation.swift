@@ -3,7 +3,8 @@ import Foundation
 // Checks run on Unicode scalars, not NSRegularExpression: there `$` also
 // matches before a final newline, which would let "SHA256:<43>\n" through.
 
-/// An OpenSSH SHA-256 key fingerprint: `SHA256:` plus 43 unpadded base64 characters.
+/// An OpenSSH SHA-256 key fingerprint, exactly as strict as the CLI:
+/// `^SHA256:[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]$`.
 public struct Fingerprint: Hashable, Sendable {
     public let value: String
 
@@ -12,6 +13,9 @@ public struct Fingerprint: Hashable, Sendable {
         guard s.unicodeScalars.starts(with: prefix) else { return nil }
         let body = s.unicodeScalars.dropFirst(prefix.count)
         guard body.count == 43, body.allSatisfy(Self.isBase64) else { return nil }
+        // 43 unpadded characters carry 258 bits for a 256-bit hash; the 2 spare
+        // bits must be zero, as the CLI's decoder (base64 STANDARD_NO_PAD) requires.
+        guard let last = body.last, "AEIMQUYcgkosw048".unicodeScalars.contains(last) else { return nil }
         value = s
     }
 
