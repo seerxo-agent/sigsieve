@@ -334,11 +334,21 @@ func unreadableFileIsNeverOverwritten(_ body: String) throws {
 **Interfaces:**
 - Consumes: `AgentChoice`
 - Produces:
-  - `enum TempDirError: Error, Equatable { case notAbsolute, notADirectory, wrongOwner, notPrivate, unsupportedCharacters }` (each carries the path in its description)
-  - `enum TempDir { static func system() -> String; static func verified(_ path: String, uid: uid_t = getuid()) throws -> String }`
+  - `enum TempDirError: Error, Equatable, CustomStringConvertible { case unavailable; case notAbsolute(String), missing(String), unresolvable(String), unsupportedCharacters(String), notADirectory(String), wrongOwner(String), notPrivate(String), unsafeAncestor(String) }` (each names the path and the rule)
+  - `struct VerifiedTempDir: Hashable, Sendable { let path: String }`, created only by `TempDir.verified`, so an unverified path cannot reach a child environment
+  - `enum TempDir { static func system() throws -> String; static func verified(_ path: String, uid: uid_t = getuid()) throws -> VerifiedTempDir }` (`system()` throws `.unavailable` when `confstr` reports nothing; there is no fallback)
   - `struct EnvVar: Hashable, Sendable { let name: String; let value: String }`
   - `struct ChildEnvironment: Hashable, Sendable { let variables: [EnvVar]; var dictionary: [String: String] }` (`variables` keeps the documented order)
-  - `ChildEnvironment.make(home: String, cliDirectory: String, tmpdir: String, agent: AgentChoice) -> ChildEnvironment`
+  - `enum ChildEnvironmentError: Error, Equatable { case unsafeCLIDirectory(String) }` (not absolute, or holds `:` or a control character)
+  - `ChildEnvironment.make(home: String, cliDirectory: String, tmpdir: VerifiedTempDir, agent: AgentChoice) throws -> ChildEnvironment`
+
+  Verification also requires every ancestor of the resolved directory to be
+  owned by root or the user and not writable by group or others unless
+  sticky, the CLI's own `check_ancestors` rule **(owner: verification-to-use
+  race)**. With that, only root or the same user can replace the directory
+  between the app's check and the CLI's use, and the CLI checks again when it
+  creates its socket directory there. The app re-verifies before each check
+  and connect (Task 12); the verified path is part of `CheckInputs`.
   - `AgentChoice.socketPath(home: String) -> String` (Secretive:
     `<home>/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh`)
 
