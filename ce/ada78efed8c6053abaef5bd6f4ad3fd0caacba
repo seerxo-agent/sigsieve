@@ -1,0 +1,24 @@
+macos-app/Packages/SigSieveKit/Tests/SigSieveKitTests/ProfileTests.swift
+  s_6a2c8da4016fcd::t_445862b3ba64bb 348-363
+  s_6a2c8da4016fcd::t_32e6cca322a88a 31-35,188,272,279,282-347
+macos-app/PLAN.md
+  s_6a2c8da4016fcd::t_154934ff7ba091 228-232,259-271
+macos-app/Packages/SigSieveKit/Sources/SigSieveKit/Profiles/Profile.swift
+  s_6a2c8da4016fcd::t_b1bd9c80b3d36c 85-86,88-91,99-113,137,145,171,174-180,209-225,231-241,244,248,252,259,266,273,276,288-293
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ceada78efed8c6053abaef5bd6f4ad3fd0caacba",
+  "prompts": {},
+  "sessions": {
+    "s_6a2c8da4016fcd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "877805a4-2459-4da7-a24e-39ba8ca18fe5",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
