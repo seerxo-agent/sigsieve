@@ -249,6 +249,10 @@ File format (the documented format a later CLI `--profile` may read):
 Write custom `Codable` for `AgentChoice` so the file has this plain shape.
 `Fingerprint` and `HostInput` already encode as plain strings and
 re-validate on decode (Task 1); do not add a second conformance.
+Version 1 has exactly these fields: unknown keys are ignored on load and
+dropped on save, so any new field needs a new `schemaVersion`. `profiles.json`
+must be a regular file of at most 1 MB; a symbolic link, directory or other
+special file is refused like an unreadable file.
 
 - [ ] **Step 1: Write the failing tests**
 
