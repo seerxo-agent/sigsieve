@@ -225,11 +225,12 @@ func hostInputAccepts(_ s: String) { #expect(HostInput(s)?.value == s) }
   - `struct Destination: Hashable, Codable, Sendable { var name: String; var hostKeys: [Fingerprint] }`
   - `struct Profile: Hashable, Codable, Sendable { var server: HostInput; var agent: AgentChoice; var forwardedKeys: [Fingerprint]; var mode: ProtectionMode; var destinations: [Destination] }`
   - `struct ProfileStore { init(directory: URL); func load() throws -> [Profile]; func save(_ profiles: [Profile]) throws }`
-  - `enum ProfileStoreError: Error, Equatable { case unsupportedVersion(Int); case unreadable(String); case writeFailed(String) }`
-    **(owner)**: `unreadable` is an existing file or directory that cannot be
-    read; `writeFailed` is a save that failed after reading (disk full,
-    read-only volume, failed write, sync or rename, or a list that would not
-    read back). The UI shows the message; it does not guess the cause.
+  - `enum ProfileStoreError: Error, Equatable { case unsupportedVersion(Int); case unreadable(String); case writeFailed(String); case invalidProfiles(String) }`
+    **(owner)**: `unreadable` is existing data on disk that cannot be read;
+    `writeFailed` is a file system failure while saving (disk full, read-only
+    volume, failed create, write, sync or rename); `invalidProfiles` is a list
+    given to `save` that fails validation (for example the same server twice).
+    The UI shows the message; it does not guess the cause.
   - `ProfileStore.defaultDirectory` = `~/Library/Application Support/SigSieve`
 
 File format (the documented format a later CLI `--profile` may read):
@@ -256,19 +257,28 @@ re-validate on decode (Task 1); do not add a second conformance.
 Version 1 has exactly these fields: unknown keys are ignored on load and
 dropped on save, so any new field needs a new `schemaVersion`. `profiles.json`
 must be a regular file of at most 1 MB; a symbolic link, directory or other
-special file is refused like an unreadable file. The profile directory must be a real
-directory owned by the user, not a symbolic link **(owner)**; its mode is
-tightened through a descriptor opened with `O_NOFOLLOW`.
+special file is refused like an unreadable file. The profile directory (the last path
+component) must be a real directory owned by the user, not a symbolic link
+**(owner)**. It is opened once with `O_SEARCH | O_NOFOLLOW`; reading, the
+temporary file, the rename and the mode change all work relative to that
+descriptor (`openat`, `renameat`, `fchmod`), so a link swapped in later is
+not followed. Parent directories are resolved normally.
 
 Known limits of version 1 **(owner)**:
-- One writer, no lock. If two app instances save at nearly the same time,
-  the last rename wins and the other's edit is lost; the file is never left
-  half written.
+- One writer, no lock. `save` replaces the whole file with the list it is
+  given. If two app instances are open, whichever saves last wins: profiles
+  the other instance saved after this one loaded are lost, however long ago
+  that was. A save never leaves the file half written.
 - A normal error removes the temporary file. A crash between creating it and
-  the rename leaves `.profiles.json.<uuid>.tmp`, which is never read.
-- `F_FULLFSYNC` makes the new contents durable before the rename. The rename
-  and the directory sync after it do not guarantee, after power loss, which
-  of the old or new file is found, only that it is one of them whole.
+  the rename leaves `.profiles.json.<uuid>.tmp`, which is never read and is
+  safe to delete.
+- Power loss: on APFS, `F_FULLFSYNC` flushes the new contents before the
+  rename. Afterwards the file may be the old version, the new one, or missing
+  (first save); the rename and directory sync are not a durability guarantee.
+  On a volume without `F_FULLFSYNC` (some network and FAT volumes) plain
+  `fsync` is used and the file may be damaged; `load` then reports it
+  unreadable and leaves it alone. A real I/O error from `F_FULLFSYNC` is a
+  failed write, not a reason to fall back.
 
 - [ ] **Step 1: Write the failing tests**
 

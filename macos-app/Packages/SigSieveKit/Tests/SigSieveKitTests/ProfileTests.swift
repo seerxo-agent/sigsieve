@@ -33,6 +33,11 @@ private func isWriteFailed(_ e: any Error) -> Bool {
     return false
 }
 
+private func isInvalidProfiles(_ e: any Error) -> Bool {
+    if case .invalidProfiles = e as? ProfileStoreError { return true }
+    return false
+}
+
 private func file(_ dir: URL) -> URL { dir.appending(path: "profiles.json") }
 
 /// Writes `body`, then checks that load and save both refuse with `check` and the bytes stay the same.
@@ -185,7 +190,7 @@ func otherSchemaVersionIsNeverOverwritten(_ v: Int) throws {
     let store = ProfileStore(directory: dir)
     try store.save([sample])
     let before = try Data(contentsOf: file(dir))
-    #expect(performing: { try store.save([sample, sample]) }, throws: isWriteFailed)
+    #expect(performing: { try store.save([sample, sample]) }, throws: isInvalidProfiles)
     #expect(try Data(contentsOf: file(dir)) == before)
     #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path) == ["profiles.json"])
 }
@@ -269,14 +274,14 @@ private func message(_ e: any Error) -> String? {
 @Test func badInMemoryListBlamesTheListNotTheFile() throws {
     let dir = tmp()
     #expect(performing: { try ProfileStore(directory: dir).save([sample, sample]) },
-            throws: { $0 as? ProfileStoreError == .writeFailed("profiles to save: more than one profile for build-host") })
+            throws: { $0 as? ProfileStoreError == .invalidProfiles("profiles to save: more than one profile for build-host") })
 }
 
 @Test(arguments: ["/tmp/\u{202E}kcos", "/tmp/a\u{200B}b", "/tmp/a\nb", "relative", "/"])
 func socketPathMustBeAbsoluteAndVisible(_ socket: String) throws {
     let dir = tmp()
     let p = Profile.empty(for: HostInput("h")!, agent: .openssh(socket: socket))
-    #expect(performing: { try ProfileStore(directory: dir).save([p]) }, throws: isWriteFailed)
+    #expect(performing: { try ProfileStore(directory: dir).save([p]) }, throws: isInvalidProfiles)
     #expect(!FileManager.default.fileExists(atPath: file(dir).path))
 }
 
@@ -293,16 +298,17 @@ func socketPathMustBeAbsoluteAndVisible(_ socket: String) throws {
     #expect(!FileManager.default.fileExists(atPath: dir.path))
 }
 
-@Test func failedWriteKeepsTheExistingFile() throws {
-    // An immutable directory: the existing file reads fine, but nothing can be
-    // created or renamed in it, and its mode cannot change.
+@Test func failedTemporaryFileCreationKeepsTheExistingFile() throws {
+    // An immutable 0700 directory: the existing file reads fine and the mode
+    // needs no change, but the temporary file cannot be created.
     let dir = tmp()
     let store = ProfileStore(directory: dir)
     try store.save([sample])
     let before = try Data(contentsOf: file(dir))
     #expect(chflags(dir.path, UInt32(UF_IMMUTABLE)) == 0)
     defer { chflags(dir.path, 0) }
-    #expect(performing: { try store.save([binding]) }, throws: isWriteFailed)
+    #expect(performing: { try store.save([binding]) },
+            throws: { e in isWriteFailed(e) && "\(e)".contains(".tmp: open failed") })
     chflags(dir.path, 0)
     #expect(try Data(contentsOf: file(dir)) == before)
     #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path) == ["profiles.json"])
@@ -360,4 +366,30 @@ func socketPathMustBeAbsoluteAndVisible(_ socket: String) throws {
             throws: { e in isWriteFailed(e) && "\(e)".contains("rename failed") })
     #expect(try Data(contentsOf: file(dir)) == before)
     #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path) == ["profiles.json"])
+}
+
+@Test func searchOnlyDirectoryStillSavesAndIsTightened() throws {
+    // Mode 0100: no read permission. The directory is opened for search only,
+    // so loading and saving work and the mode is repaired to 0700.
+    let dir = tmp()
+    let store = ProfileStore(directory: dir)
+    try store.save([sample])
+    chmod(dir.path, 0o100)
+    defer { chmod(dir.path, 0o700) }
+    #expect(try store.load() == [sample])
+    try store.save([binding])
+    #expect(mode(dir) == 0o700)
+    #expect(try store.load() == [binding])
+}
+
+@Test func invalidListIsInvalidProfilesNotAWriteOrReadError() throws {
+    // Owner rule: a list that fails validation is neither a disk write failure
+    // nor an unreadable file, even when the directory does not exist yet.
+    for dir in [tmp(), tmp().appending(path: "absent")] {
+        let store = ProfileStore(directory: dir)
+        let dup = Profile.empty(for: HostInput("h")!, agent: .secretive)
+        let e = #expect(throws: ProfileStoreError.self) { try store.save([dup, dup]) }
+        #expect(e == .invalidProfiles("profiles to save: more than one profile for h"))
+        #expect(!FileManager.default.fileExists(atPath: store.file.path))
+    }
 }
