@@ -3,9 +3,7 @@ import Testing
 @testable import SigSieveKit
 
 private func tmp() -> URL {
-    let u = FileManager.default.temporaryDirectory.appending(path: "sigsieve-profile-tests-\(UUID().uuidString)")
-    try! FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
-    return u
+    TestDirectory.make()
 }
 
 private func mode(_ u: URL) -> mode_t {

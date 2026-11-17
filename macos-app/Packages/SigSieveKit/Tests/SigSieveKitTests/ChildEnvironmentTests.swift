@@ -3,9 +3,7 @@ import Testing
 @testable import SigSieveKit
 
 private func tmp(_ name: String = "d") -> String {
-    let parent = FileManager.default.temporaryDirectory.appending(path: "sigsieve-env-tests-\(UUID().uuidString)")
-    try! FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
-    chmod(parent.path, 0o700)
+    let parent = TestDirectory.make()
     let dir = parent.appending(path: name).path
     try! FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: false)
     chmod(dir, 0o700)
@@ -44,17 +42,38 @@ private func verified() throws -> VerifiedTempDir { try TempDir.verified(TempDir
     #expect(AgentChoice.openssh(socket: "/a b").socketPath(home: "/h") == "/a b")
 }
 
-@Test func processEnvironmentNeverLeaksIn() throws {
-    // make() builds from its arguments only; these names are set in this
-    // test process and must not appear.
-    setenv("SIGSIEVE_ALLOW", "SHA256:leak", 1)
-    setenv("SIGSIEVE_UPSTREAM", "/leak", 1)
-    setenv("SIGSIEVE_DESTINATIONS", "leak", 1)
-    setenv("LD_PRELOAD_LEAK", "x", 1)
-    defer { for n in ["SIGSIEVE_ALLOW", "SIGSIEVE_UPSTREAM", "SIGSIEVE_DESTINATIONS", "LD_PRELOAD_LEAK"] { unsetenv(n) } }
+@Test func onlyTheAllowlistedNamesExist() throws {
+    // make() builds from its arguments only (pinned by the source scan below);
+    // setenv is not used here because it races getenv in parallel tests.
     let env = try ChildEnvironment.make(home: "/h", cliDirectory: "/c", tmpdir: try verified(), agent: .secretive)
     #expect(Set(env.dictionary.keys) == ["HOME", "PATH", "LANG", "TMPDIR", "SSH_AUTH_SOCK"])
-    #expect(!env.dictionary.values.contains { $0.contains("leak") })
+    #expect(env.variables.count == 5)
+}
+
+@Test(arguments: ["", "relative", "/a\nb", "/a\u{202E}b"])
+func unsafeHomeIsRefused(_ home: String) throws {
+    #expect(throws: ChildEnvironmentError.unsafeHome(home)) {
+        try ChildEnvironment.make(home: home, cliDirectory: "/c", tmpdir: try verified(), agent: .secretive)
+    }
+}
+
+@Test(arguments: ["", "relative.sock", "/", "/a\u{0}b", "/a\u{200B}b"])
+func unsafeSocketIsRefused(_ socket: String) throws {
+    #expect(throws: ChildEnvironmentError.unsafeSocket(socket)) {
+        try ChildEnvironment.make(home: "/h", cliDirectory: "/c", tmpdir: try verified(), agent: .openssh(socket: socket))
+    }
+}
+
+@Test func pathLongerThanTheSocketLimitIsRefused() throws {
+    // 70 bytes is the most the CLI's "<dir>/sigsieve-<12 hex>/agent.sock" fits in sun_path.
+    var d = tmp()
+    while resolved(d).utf8.count <= TempDir.maxPathBytes {
+        d += "/x"
+        try FileManager.default.createDirectory(atPath: d, withIntermediateDirectories: false)
+        chmod(d, 0o700)
+    }
+    #expect(throws: TempDirError.tooLong(resolved(d))) { try TempDir.verified(d) }
+    #expect(resolved(d).utf8.count + 33 > 103)
 }
 
 @Test(arguments: ["relative/bin", "", "/a:/b", "/a\nb", "/a\u{0}b"])
@@ -182,4 +201,6 @@ func groupOrOtherAccessIsRefused(_ m: Int) {
     for forbidden in ["ProcessInfo", "getenv", "_NSGetEnviron", "NSTemporaryDirectory", "temporaryDirectory", "\"/tmp"] {
         #expect(!text.contains(forbidden), "ChildEnvironment.swift mentions \(forbidden)")
     }
+    #expect(!text.contains(/\benviron\b/), "ChildEnvironment.swift mentions environ")
+    #expect(text.contains("confstr(_CS_DARWIN_USER_TEMP_DIR"))
 }

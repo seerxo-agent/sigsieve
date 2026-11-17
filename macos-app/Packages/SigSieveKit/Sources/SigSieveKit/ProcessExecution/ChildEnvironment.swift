@@ -13,6 +13,7 @@ public enum TempDirError: Error, Equatable, CustomStringConvertible {
     case wrongOwner(String)
     case notPrivate(String)
     case unsafeAncestor(String)
+    case tooLong(String)
 
     public var description: String {
         switch self {
@@ -25,6 +26,7 @@ public enum TempDirError: Error, Equatable, CustomStringConvertible {
         case .wrongOwner(let p): "temporary directory \(p) is not owned by the current user"
         case .notPrivate(let p): "temporary directory \(p) gives group or others access"
         case .unsafeAncestor(let p): "\(p), above the temporary directory, is writable by group or others without the sticky bit, or owned by another user"
+        case .tooLong(let p): "temporary directory \(p) is longer than \(TempDir.maxPathBytes) bytes, too long for the CLI's agent socket path"
         }
     }
 }
@@ -37,8 +39,14 @@ public struct VerifiedTempDir: Hashable, Sendable {
 }
 
 public enum TempDir {
-    /// The per-user temporary directory from `confstr`, never from the
-    /// process environment (`TMPDIR` may be anything the launcher set).
+    /// The CLI binds `<dir>/sigsieve-<12 hex>/agent.sock` (33 more bytes) and
+    /// macOS `sun_path` holds 103 bytes plus NUL; refuse early, not at bind.
+    public static let maxPathBytes = 70
+
+    /// The per-user temporary directory from `confstr`, not from `$TMPDIR`
+    /// (which may be anything the launcher set). macOS may still adjust the
+    /// confstr result for the process (for example an app container suffix);
+    /// whatever it returns goes through `verified` like any other path.
     public static func system() throws -> String {
         let size = confstr(_CS_DARWIN_USER_TEMP_DIR, nil, 0)
         guard size > 1 else { throw TempDirError.unavailable }
@@ -55,6 +63,8 @@ public enum TempDir {
     /// The ancestor rule is what makes the result usable later: only root or
     /// this user can replace the directory between this check and its use,
     /// and the CLI checks again when it creates its socket directory there.
+    /// Extended ACLs are not inspected, by the app or the CLI; only the owner
+    /// or root can add one.
     public static func verified(_ path: String, uid: uid_t = getuid()) throws -> VerifiedTempDir {
         guard path.hasPrefix("/") else { throw TempDirError.notAbsolute(path) }
         guard let r = realpath(path, nil) else {
@@ -96,6 +106,7 @@ public enum TempDir {
                   a.st_mode & 0o022 == 0 || a.st_mode & S_ISVTX != 0
             else { throw TempDirError.unsafeAncestor(dir) }
         }
+        guard resolved.utf8.count <= maxPathBytes else { throw TempDirError.tooLong(resolved) }
         return VerifiedTempDir(resolved)
     }
 
@@ -115,6 +126,10 @@ public struct EnvVar: Hashable, Sendable {
 public enum ChildEnvironmentError: Error, Equatable {
     /// Not absolute, or holds `:` (a second PATH entry) or a control character.
     case unsafeCLIDirectory(String)
+    /// Not absolute, or holds a control character.
+    case unsafeHome(String)
+    /// The agent socket is not absolute, or holds a control or format character.
+    case unsafeSocket(String)
 }
 
 /// The whole environment of a child process, built from scratch: nothing is
@@ -130,17 +145,28 @@ public struct ChildEnvironment: Hashable, Sendable {
 
     public static func make(home: String, cliDirectory: String, tmpdir: VerifiedTempDir,
                             agent: AgentChoice) throws -> ChildEnvironment {
-        guard cliDirectory.hasPrefix("/"), !cliDirectory.contains(":"),
-              !cliDirectory.unicodeScalars.contains(where: { $0.properties.generalCategory == .control })
-        else { throw ChildEnvironmentError.unsafeCLIDirectory(cliDirectory) }
+        guard isAbsoluteAndPlain(cliDirectory), !cliDirectory.contains(":") else {
+            throw ChildEnvironmentError.unsafeCLIDirectory(cliDirectory)
+        }
+        // The CLI refuses a relative HOME for --secretive; refuse here first so
+        // the app never computes a socket path the CLI would not.
+        guard isAbsoluteAndPlain(home) else { throw ChildEnvironmentError.unsafeHome(home) }
+        let socket = agent.socketPath(home: home)
+        guard isAbsoluteAndPlain(socket), socket != "/" else { throw ChildEnvironmentError.unsafeSocket(socket) }
         return ChildEnvironment(variables: [
             EnvVar(name: "HOME", value: home),
             EnvVar(name: "PATH", value: "/usr/bin:/bin:/usr/sbin:/sbin:\(cliDirectory)"),
             // Fixed so CLI and OpenSSH output is parsed in one language.
             EnvVar(name: "LANG", value: "en_US.UTF-8"),
             EnvVar(name: "TMPDIR", value: tmpdir.path),
-            EnvVar(name: "SSH_AUTH_SOCK", value: agent.socketPath(home: home)),
+            EnvVar(name: "SSH_AUTH_SOCK", value: socket),
         ])
+    }
+
+    private static func isAbsoluteAndPlain(_ s: String) -> Bool {
+        s.hasPrefix("/") && !s.unicodeScalars.contains {
+            $0.properties.generalCategory == .control || $0.properties.generalCategory == .format
+        }
     }
 }
 
