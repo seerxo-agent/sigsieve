@@ -22,20 +22,23 @@ env:
 
 jobs:
   build-and-test:
-    runs-on: macos-15
+    # macos-26, not macos-15: CommandBuilderTests uses #expect(processExitsWith:)
+    # exit tests, a Swift Testing API from Swift 6.2 / Xcode 26. Xcode 16.4 (the
+    # macos-15 default) ships Swift 6.1 and cannot build the test target.
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       # actions/checkout v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Select Xcode 16.4 (not the runner default)
-        # Image readme of 2026-11-04: Xcode 16.4 lives at this path on macos-15.
+      - name: Select Xcode 26.6 by path
+        # Image 20261102.0473.1 (macOS 26.7.2) defaults to Xcode 26.6 at this path.
         # A missing app or any other version fails the job.
         run: |
-          sudo xcode-select -s /Applications/Xcode_16.4.app
+          sudo xcode-select -s /Applications/Xcode_26.6.app
           xcodebuild -version
-          xcodebuild -version | head -1 | grep -qx 'Xcode 16.4' || { echo "::error::not running Xcode 16.4"; exit 1; }
+          xcodebuild -version | head -1 | grep -qx 'Xcode 26.6' || { echo "::error::not running Xcode 26.6"; exit 1; }
       - name: Project is compatible with this Xcode
         run: |
           grep -q 'objectVersion = 77;' macos-app/SigSieve.xcodeproj/project.pbxproj || { echo "::error::objectVersion is not 77"; exit 1; }

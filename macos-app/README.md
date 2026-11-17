@@ -12,7 +12,7 @@ window is not a guarantee the connection will be allowed.
 ## Requirements
 
 - macOS 13 or newer; Apple Silicon first.
-- Xcode 16 or newer (CI uses Xcode 16.4 on `macos-15`).
+- Xcode 26 or newer (the tests use Swift 6.2 exit tests).
 - The `sigsieve` CLI, built from this repository (Rust 1.99.1, see
   `rust-toolchain.toml`).
 
@@ -72,10 +72,14 @@ Without `SIGSIEVE_TEST_CLI` the tests that need the CLI are skipped. With
 ## CI
 
 `.github/workflows/macos-app.yml` runs on changes under `macos-app/`. On
-`macos-15` it selects Xcode 16.4 by path (the job fails on any other version),
+`macos-26` it selects Xcode 26.6 by path (the job fails on any other version),
 checks the project opens under it, builds the CLI with Rust 1.99.1, runs the
 package tests against that CLI, builds the app and lints its `Info.plist`. It
 uploads nothing and uses no secrets.
+
+CI builds with Xcode 26.6; local development has used Xcode 27.2. The workflow has
+not run yet. Its first run happens when the branch is pushed, so it is unverified
+until then.
 
 ## Manual checklist
 
