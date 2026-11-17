@@ -1,0 +1,34 @@
+macos-app/Packages/SigSieveKit/Tests/SigSieveKitTests/KnownHostsTests.swift
+  s_63ebb2a1e1ff37::t_f9cf8042774a0b 493-523
+macos-app/Packages/SigSieveKit/Tests/SigSieveKitTests/SourceRulesTests.swift
+  s_63ebb2a1e1ff37::t_c1a9aa124972e3 68-70
+  s_63ebb2a1e1ff37::t_88445363cf2797 53-67,75
+  s_63ebb2a1e1ff37::t_e2504dc2ab9aef 71-74
+macos-app/App/AppModel.swift
+  s_63ebb2a1e1ff37::t_a5daee8f179e68 21-24,253-255,258-262,273-274,277,280-284
+  s_63ebb2a1e1ff37::t_e2504dc2ab9aef 183,263-272,275-276,278-279
+macos-app/App/Views/AdvancedSection.swift
+  s_63ebb2a1e1ff37::t_a5daee8f179e68 88-90,147
+macos-app/Packages/SigSieveKit/Tests/SigSieveKitTests/SSHConfigAliasesTests.swift
+  s_63ebb2a1e1ff37::t_032150fe1438c4 246-297,305-316
+  s_63ebb2a1e1ff37::t_b1dddfc8b1def8 298-304
+macos-app/Packages/SigSieveKit/Sources/SigSieveKit/SSH/SSHConfigAliases.swift
+  s_63ebb2a1e1ff37::t_e2504dc2ab9aef 9-18,77-79
+  s_63ebb2a1e1ff37::t_0d2bf35e24bf42 19-26,57,59-72,74,111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cdd4aa9190bff0de7424e6ef009e24a583cd1d5f",
+  "prompts": {},
+  "sessions": {
+    "s_63ebb2a1e1ff37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e9e90eb-9ef2-40e7-84a4-ada9eadcfa7f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
