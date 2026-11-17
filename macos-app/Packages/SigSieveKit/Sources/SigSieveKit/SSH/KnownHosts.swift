@@ -39,19 +39,28 @@ public enum KnownHosts {
             let fields = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
             guard let first = fields.first else { continue }
             if first.hasPrefix("@") {
-                // "@revoked <hosts> <type> <blob>"
-                if first.lowercased() == "@revoked", fields.count >= 4 { revoked.insert(String(fields[3])) }
-            } else if fields.count >= 3 {
+                // "@revoked <hosts> <type> <blob>"; every non-type field after the hosts counts, so a
+                // malformed revoked line errs towards revoking more.
+                if first.lowercased() == "@revoked" {
+                    for f in fields.dropFirst(2) where !isKeyType(f) { revoked.insert(String(f)) }
+                }
+            } else if fields.count >= 3, !isKeyType(first) {
+                // A line starting with a key type is a bare key, not a host line; ssh-keygen would
+                // fingerprint it whatever follows, so it is never offered.
                 plain.append((fields, line))
             }
         }
         return plain.compactMap { fields, line in
-            guard !revoked.contains(String(fields[2])) else { return nil }
+            guard !fields.contains(where: { revoked.contains(String($0)) }) else { return nil }
             let host = fields[0]
             // ponytail: name is the first pattern of the input line (output order is checked in entries).
             let name = host.hasPrefix("|1|") ? nil : String(host.split(separator: ",", omittingEmptySubsequences: false)[0])
             return Kept(name: name, line: line)
         }
+    }
+
+    private static func isKeyType(_ f: Substring) -> Bool {
+        ["ssh-", "ecdsa-", "sk-", "rsa-"].contains { f.lowercased().hasPrefix($0) }
     }
 
     public static func entries(file: URL, runner: Running, environment: ChildEnvironment) async -> [KnownHostEntry] {
@@ -81,11 +90,18 @@ public enum KnownHosts {
         return entries
     }
 
-    /// Regular file, at most 4 MB, readable; anything else is "no entries".
+    /// One read path: a symlink is resolved first (a symlinked known_hosts is supported), then the
+    /// path is opened without following links or blocking, and the descriptor itself must be a
+    /// regular file of at most 4 MB. At most 4 MB + 1 bytes are read; more means "no entries".
     private static func read(_ file: URL) -> String? {
+        guard let r = realpath(file.path, nil) else { return nil }
+        defer { free(r) }
+        let fd = open(r, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard fd >= 0 else { return nil }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         var st = stat()
-        guard stat(file.path, &st) == 0, st.st_mode & S_IFMT == S_IFREG, st.st_size <= maxFileBytes,
-              let data = try? Data(contentsOf: file), data.count <= maxFileBytes else { return nil }
+        guard fstat(fd, &st) == 0, st.st_mode & S_IFMT == S_IFREG, st.st_size <= maxFileBytes,
+              let data = try? handle.read(upToCount: maxFileBytes + 1), data.count <= maxFileBytes else { return nil }
         return String(decoding: data, as: UTF8.self)
     }
 

@@ -143,3 +143,52 @@ private func file(_ text: String) throws -> URL {
                                              environment: env(), stdin: nil, timeout: .seconds(10))
     #expect(want.stdout.contains(entries.first?.fingerprint.value ?? "?"))
 }
+
+@Test func aBareKeyLineCannotCarryARevokedKey() {
+    let kept = KnownHosts.selectableLines("ssh-ed25519 KEYX c\n@revoked * ssh-ed25519 KEYX\nhost-a ssh-ed25519 KEYY")
+    #expect(!kept.contains("KEYX")); #expect(kept.contains("KEYY"))
+}
+
+@Test func tabSeparatedLinesAreHandled() {
+    let kept = KnownHosts.selectableLines("host-a\tssh-ed25519\tKEYA\n@revoked\t*\tssh-ed25519\tKEYB\nhost-b\tssh-ed25519\tKEYB")
+    #expect(kept.contains("KEYA")); #expect(!kept.contains("KEYB"))
+}
+
+@Test func fifoAtThePathGivesNoEntriesWithoutHanging() async {
+    let p = TestDirectory.make().appending(path: "fifo").path
+    #expect(mkfifo(p, 0o600) == 0)
+    // O_NONBLOCK on open and the regular-file check mean a FIFO neither blocks nor is read.
+    #expect(await KnownHosts.entries(file: URL(filePath: p), runner: FakeRunner(), environment: env()).isEmpty)
+}
+
+@Test func symlinkedFileIsRead() async throws {
+    let f = try file("host-a ssh-ed25519 KEYA\n")
+    let link = TestDirectory.make().appending(path: "link")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: f)
+    let runner = FakeRunner(stdout: out(a43, "host-a", "ED25519") + "\n")
+    #expect(await KnownHosts.entries(file: link, runner: runner, environment: env()).count == 1)
+}
+
+@Test func realSshKeygenRevokedKeyIsNotOfferedFromABareKeyLine() async throws {
+    let dir = TestDirectory.make()
+    let p = Process()
+    p.executableURL = URL(filePath: "/usr/bin/ssh-keygen")
+    p.arguments = ["-t", "ed25519", "-N", "", "-f", dir.appending(path: "k").path, "-q"]
+    try p.run(); p.waitUntilExit()
+    let parts = try String(contentsOf: dir.appending(path: "k.pub"), encoding: .utf8).split(separator: " ")
+    let key = "\(parts[0]) \(parts[1])"
+    let f = try file("\(key) junk\n@revoked * \(key)\n")
+    #expect(!KnownHosts.selectableLines(try String(contentsOf: f, encoding: .utf8)).contains(String(parts[1])))
+    #expect(await KnownHosts.entries(file: f, runner: ProcessRunner(), environment: env()).isEmpty)
+}
+
+@Test func aLineSshKeygenRejectsFailsClosed() async throws {
+    let dir = TestDirectory.make()
+    let p = Process()
+    p.executableURL = URL(filePath: "/usr/bin/ssh-keygen")
+    p.arguments = ["-t", "ed25519", "-N", "", "-f", dir.appending(path: "k").path, "-q"]
+    try p.run(); p.waitUntilExit()
+    let parts = try String(contentsOf: dir.appending(path: "k.pub"), encoding: .utf8).split(separator: " ")
+    let f = try file("good.example \(parts[0]) \(parts[1])\nbad.example ssh-ed25519 !!!notbase64!!!\n")
+    #expect(await KnownHosts.entries(file: f, runner: ProcessRunner(), environment: env()).isEmpty)
+}
