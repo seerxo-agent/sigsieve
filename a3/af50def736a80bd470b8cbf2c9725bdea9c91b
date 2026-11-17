@@ -1,0 +1,42 @@
+macos-app/App/Views/KeyList.swift
+  s_63ebb2a1e1ff37::t_dfe194ebd88b4b 1-57
+macos-app/App/Views/AdvancedSection.swift
+  s_63ebb2a1e1ff37::t_46fc80b1f6f8cd 1-135,139-149
+  s_63ebb2a1e1ff37::t_bc3f6753c053c8 136-138
+macos-app/App/AppModel.swift
+  s_63ebb2a1e1ff37::t_d16027293be2ec 52-54,56-66,119,125,211
+  s_63ebb2a1e1ff37::t_bc3f6753c053c8 104-113
+  s_63ebb2a1e1ff37::t_11c2c0b212dd7c 145-146,148,220,274,443
+  s_63ebb2a1e1ff37::t_24e67d80f5c06f 44,162-165
+  s_63ebb2a1e1ff37::t_c2dcaa23f83a65 219
+  s_63ebb2a1e1ff37::t_db8e868ddded7d 1-18,20-43,45-51,67-103,114-118,120-124,126-144,147,149-161,166-202,208-210,212-218,221-273,275-442,444-449
+  s_63ebb2a1e1ff37::t_2ed73cbf3e1d21 19,55,203-207
+macos-app/App/Views/StatusRow.swift
+  s_63ebb2a1e1ff37::t_b01b21897466a7 1-74
+macos-app/App/SigSieveApp.swift
+  s_63ebb2a1e1ff37::t_4fff0865e18ef9 1,6-7,9-14,19-30,32,43,45-77
+  s_63ebb2a1e1ff37::t_afe0b576d80dfa 31,33-42,44
+macos-app/App/Views/SettingsView.swift
+  s_63ebb2a1e1ff37::t_e6b90e0768cdae 1-82
+macos-app/App/Views/CheckSection.swift
+  s_63ebb2a1e1ff37::t_ecb88e3ecb4447 1-93,95-130
+  s_63ebb2a1e1ff37::t_72a588a111f878 94
+macos-app/App/Views/ServerPicker.swift
+  s_63ebb2a1e1ff37::t_9fee4c40e5313e 1-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a3af50def736a80bd470b8cbf2c9725bdea9c91b",
+  "prompts": {},
+  "sessions": {
+    "s_63ebb2a1e1ff37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e9e90eb-9ef2-40e7-84a4-ada9eadcfa7f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
