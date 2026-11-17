@@ -30,6 +30,11 @@ public struct AliasDiscovery: Equatable, Sendable {
     public let aliases: [HostInput]
     public let stamps: [FileStamp]
     public let skippedIncludes: [String]
+    /// True when some file ssh may read is not covered by `stamps`: an Include was skipped (see
+    /// `skippedIncludes`), or a read limit (depth, file size, file, byte or Include budget) left a
+    /// file unread, or a file could not be decoded. A change there would not invalidate a passed
+    /// check, so the app checks again right before it connects.
+    public let untracked: Bool
 }
 
 /// Host aliases from `~/.ssh/config`, for display only. This reads files and
@@ -47,7 +52,8 @@ public enum SSHConfigAliases {
         var d = Discovery(home: home)
         if statAny(config.path) != nil { d.stamp(config.path) }
         d.read(config.path, depth: 0)
-        return AliasDiscovery(aliases: d.aliases, stamps: d.stamps, skippedIncludes: d.skipped)
+        return AliasDiscovery(aliases: d.aliases, stamps: d.stamps, skippedIncludes: d.skipped,
+                              untracked: d.untracked || !d.skipped.isEmpty)
     }
 
     public static func currentStamps(for stamps: [FileStamp]) -> [FileStamp] {
@@ -95,8 +101,11 @@ public enum SSHConfigAliases {
         var aliases: [HostInput] = []
         var stamps: [FileStamp] = []
         var skipped: [String] = []
+        var untracked = false
         private var seen: Set<HostInput> = []
-        private var visited: Set<String> = []
+        /// Realpaths read, and whether their aliases were collected: a file first reached through a
+        /// Match-scoped Include is read again if a plain Include reaches it later.
+        private var visited: [String: Bool] = [:]
         private var stamped: Set<String> = []
         private var listings: [String: [String]] = [:]
         private var filesRead = 0, bytesRead: Int64 = 0, includesSeen = 0
@@ -113,27 +122,36 @@ public enum SSHConfigAliases {
 
         private mutating func noteLimit(_ arg: String) {
             limitHit = true
+            untracked = true
             if !limitNoted { limitNoted = true; skipped.append("\(arg) (limit reached)") }
         }
 
-        mutating func read(_ path: String, depth: Int) {
-            guard depth <= SSHConfigAliases.maxDepth,
-                  let real = realpath(path),
-                  visited.insert(real).inserted,
+        /// Reads `path` for its Includes (stamped and followed) and, with `aliases`, its Host
+        /// aliases. A file reached only through an Include inside a `Match` block is read with
+        /// `aliases` false: ssh reads it only when the Match applies, so its hosts are not listed,
+        /// but it and every file it includes are stamped.
+        mutating func read(_ path: String, depth: Int, aliases collect: Bool = true) {
+            guard let real = realpath(path),
+                  visited[real] != true, visited[real] == nil || collect,
                   let (size, _) = SSHConfigAliases.statAny(real),
-                  SSHConfigAliases.isRegularFile(real),
-                  size <= SSHConfigAliases.maxFileSize
+                  SSHConfigAliases.isRegularFile(real)
             else { return }
+            guard depth <= SSHConfigAliases.maxDepth, size <= SSHConfigAliases.maxFileSize else {
+                untracked = true
+                return
+            }
+            visited[real] = collect
             // Charged before reading: a file that fails to read or decode still counts.
             guard filesRead < SSHConfigAliases.maxFiles, bytesRead + size <= SSHConfigAliases.maxBytes else {
                 limitHit = true
+                untracked = true
                 return
             }
             filesRead += 1
             bytesRead += size
             guard let data = FileManager.default.contents(atPath: real),
                   var text = String(data: data, encoding: .utf8)
-            else { return }
+            else { untracked = true; return }
             if text.unicodeScalars.first == "\u{FEFF}" { text.unicodeScalars.removeFirst() }
 
             var inMatch = false
@@ -142,13 +160,13 @@ public enum SSHConfigAliases {
                 switch keyword {
                 case "host":
                     inMatch = false
-                    for a in args where !a.contains(where: { "*?".contains($0) }) && !a.hasPrefix("!") {
+                    for a in args where collect && !a.contains(where: { "*?".contains($0) }) && !a.hasPrefix("!") {
                         if let h = HostInput(a), seen.insert(h).inserted { aliases.append(h) }
                     }
                 case "match":
                     inMatch = true
-                case "include" where !inMatch:
-                    for a in args { include(a, depth: depth) }
+                case "include":
+                    for a in args { include(a, depth: depth, aliases: collect && !inMatch) }
                 default:
                     break
                 }
@@ -182,7 +200,7 @@ public enum SSHConfigAliases {
             return (keyword.lowercased(), args)
         }
 
-        private mutating func include(_ arg: String, depth: Int) {
+        private mutating func include(_ arg: String, depth: Int, aliases collect: Bool) {
             includesSeen += 1
             if limitHit || includesSeen > SSHConfigAliases.maxIncludes { noteLimit(arg); return }
             let unsupported = arg.contains { "$%[{\"\\".contains($0) } || (arg.hasPrefix("~") && !arg.hasPrefix("~/"))
@@ -197,7 +215,7 @@ public enum SSHConfigAliases {
 
             guard wild(last) else {
                 stamp(path)
-                read(path, depth: depth + 1)
+                read(path, depth: depth + 1, aliases: collect)
                 if limitHit { noteLimit(arg) }
                 return
             }
@@ -209,7 +227,7 @@ public enum SSHConfigAliases {
             }
             for n in listings[dir]! where fnmatch(last, n, FNM_PERIOD) == 0 {
                 stamp(dir + "/" + n)
-                read(dir + "/" + n, depth: depth + 1)
+                read(dir + "/" + n, depth: depth + 1, aliases: collect)
                 if limitHit { noteLimit(arg); return }
             }
         }

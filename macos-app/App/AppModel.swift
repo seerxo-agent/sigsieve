@@ -360,9 +360,27 @@ final class AppModel: ObservableObject {
             return
         }
         inputsChanged()
-        guard canConnect, let inputs = currentInputs, let tmp = verifiedTmp else {
+        guard canConnect, var inputs = currentInputs, var tmp = verifiedTmp else {
             resetCheck()
             return
+        }
+        if discovery.untracked {
+            // Some file ssh may read has no stamp, so a change there would not have closed the
+            // gate: run the whole check again for these inputs and launch only if that passes.
+            checkState = .running(.checking)
+            var recheckGate = gate
+            let passed = await ConnectionCheck.recheckBeforeConnect(inputs, runner: runner, gate: &recheckGate)
+            verifyTmpdir()
+            guard let now = currentInputs, now == inputs, !sshConfigChanged(), let nowTmp = verifiedTmp else {
+                resetCheck()
+                connectError = "The inputs changed during the check before connecting. Check again."
+                return
+            }
+            gate = recheckGate
+            if let result = recheckGate.result { checkState = .finished(result) }
+            guard passed else { return }
+            inputs = now
+            tmp = nowTmp
         }
         do {
             let script = try Launcher.write(inputs, under: tmp.path)

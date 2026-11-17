@@ -16,6 +16,10 @@ struct CheckSection: View {
                     Text(step == .waitingForAgent ? "Waiting for agent…" : "Checking…").font(.caption)
                 }
             }
+            if model.discovery.untracked {
+                Text("Some Include files cannot be tracked; SigSieve checks again when you connect.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if let problem = model.inputsProblem {
                 Text(problem).font(.caption).foregroundStyle(.secondary)
             }

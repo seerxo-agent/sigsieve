@@ -314,3 +314,84 @@ private func copyTimes(from ref: String, to path: String) {
     let t6b = stampOf(inLocked)
     #expect(t6a.size == -1); #expect(t6b.size == -1); #expect(t6a != t6b, "T6")
 }
+
+// MARK: - F2: every file ssh may read is stamped, or `untracked` says it is not
+
+@Test func includeInsideMatchIsStampedButNotListed() {
+    let f = Fixture()
+    f.write(".ssh/inc", "Host frommatch\nInclude nested\n")
+    f.write(".ssh/nested", "Host deeper\n")
+    f.write(".ssh/config", "Match all\nInclude inc\nHost top\n")
+    let d = SSHConfigAliases.discover(config: f.config, home: f.home)
+    #expect(d.aliases.map(\.value) == ["top"])
+    #expect(d.stamps.map { URL(fileURLWithPath: $0.path).lastPathComponent } == ["config", "inc", "nested"])
+    #expect(!d.untracked)
+    #expect(SSHConfigAliases.currentStamps(for: d.stamps) == d.stamps)
+    f.write(".ssh/inc", "Host frommatch\nInclude nested\nProxyCommand x\n")
+    #expect(SSHConfigAliases.currentStamps(for: d.stamps) != d.stamps)
+    let e = SSHConfigAliases.discover(config: f.config, home: f.home)
+    f.write(".ssh/nested", "Host deeper\nProxyCommand x\n")
+    #expect(SSHConfigAliases.currentStamps(for: e.stamps) != e.stamps)
+}
+
+@Test func globbedIncludeInsideMatchStampsTheDirectoryAndItsFiles() {
+    let f = Fixture()
+    f.write(".ssh/m.d/a", "Host a\n")
+    f.write(".ssh/config", "Match host x\nInclude m.d/*\n")
+    let d = SSHConfigAliases.discover(config: f.config, home: f.home)
+    #expect(d.aliases.isEmpty)
+    #expect(d.stamps.map { URL(fileURLWithPath: $0.path).lastPathComponent } == ["config", "m.d", "a"])
+    f.write(".ssh/m.d/b", "Host b\n")
+    #expect(SSHConfigAliases.currentStamps(for: d.stamps) != d.stamps)
+}
+
+@Test func aFileIncludedInMatchAndLaterPlainlyIsListed() {
+    let f = Fixture()
+    f.write(".ssh/both", "Host shared\n")
+    f.write(".ssh/config", "Match all\nInclude both\nHost h\nInclude both\n")
+    #expect(SSHConfigAliases.discover(config: f.config, home: f.home).aliases.map(\.value) == ["h", "shared"])
+}
+
+@Test func cleanConfigIsFullyTracked() {
+    let f = Fixture()
+    f.write(".ssh/inc", "Host b\n")
+    f.write(".ssh/config", "Include inc\nInclude missing\nHost a\n")
+    #expect(!SSHConfigAliases.discover(config: f.config, home: f.home).untracked)
+}
+
+@Test func skippedIncludesAreUntracked() {
+    let f = Fixture()
+    for arg in ["${X}/y", "~root/z", "%d/x", "{a,b}", "w*/x"] {
+        f.write(".ssh/config", "Include \(arg)\n")
+        #expect(SSHConfigAliases.discover(config: f.config, home: f.home).untracked, "\(arg)")
+        f.write(".ssh/config", "Match all\nInclude \(arg)\n")
+        #expect(SSHConfigAliases.discover(config: f.config, home: f.home).untracked, "Match: \(arg)")
+    }
+}
+
+@Test func readLimitsMakeDiscoveryUntracked() throws {
+    // The include budget.
+    let g = Fixture()
+    g.write(".ssh/config", (0..<2000).map { "Include missing\($0)\n" }.joined())
+    #expect(SSHConfigAliases.discover(config: g.config, home: g.home).untracked)
+    // The file budget.
+    let f = Fixture()
+    for i in 0..<300 { f.write(".ssh/conf.d/h\(String(format: "%03d", i))", "Host h\(i)\n") }
+    f.write(".ssh/config", "Include conf.d/*\n")
+    #expect(SSHConfigAliases.discover(config: f.config, home: f.home).untracked)
+    // The depth cap.
+    let c = Fixture()
+    for i in 1...20 { c.write(".ssh/f\(i)", "Include f\(i + 1)\n") }
+    c.write(".ssh/config", "Include f1\n")
+    #expect(SSHConfigAliases.discover(config: c.config, home: c.home).untracked)
+    // The per-file size cap.
+    let s = Fixture()
+    s.write(".ssh/big", String(repeating: "# pad\n", count: 200_000))
+    s.write(".ssh/config", "Include big\n")
+    #expect(SSHConfigAliases.discover(config: s.config, home: s.home).untracked)
+    // An undecodable file.
+    let u = Fixture()
+    u.write(".ssh/config", "Include bad\n")
+    try Data([0xFF, 0xFE, 0xFF]).write(to: u.home.appending(path: ".ssh/bad"))
+    #expect(SSHConfigAliases.discover(config: u.config, home: u.home).untracked)
+}

@@ -261,3 +261,51 @@ private func anyChangeClosesTheGate(_ c: Change) throws {
          "--dry-run", "--", "-o", "StrictHostKeyChecking=yes"],
     ])
 }
+
+// MARK: - F2: re-check before Connect when some Include files are untracked
+
+/// First check passes; the re-check before Connect fails at the dry run. Never launch.
+@Test func failingRecheckClosesTheGate() async throws {
+    let inputs = try makeInputs()
+    let runner = FakeRunner([ok(0), ok(0), ok(0), ok(1, "Result: FAILED\n")])
+    var g = CheckGate()
+    g.record(await ConnectionCheck.run(inputs, runner: runner), for: inputs)
+    #expect(g.canConnect(inputs))
+    #expect(await ConnectionCheck.recheckBeforeConnect(inputs, runner: runner, gate: &g) == false)
+    #expect(!g.canConnect(inputs))
+    #expect(g.result?.passed == false)
+    #expect(runner.calls.count == 4)
+}
+
+@Test func passingRecheckKeepsTheGateOpen() async throws {
+    let inputs = try makeInputs()
+    let runner = FakeRunner([ok(0), ok(0), ok(0), ok(0)])
+    var g = CheckGate()
+    g.record(await ConnectionCheck.run(inputs, runner: runner), for: inputs)
+    #expect(await ConnectionCheck.recheckBeforeConnect(inputs, runner: runner, gate: &g))
+    #expect(g.canConnect(inputs))
+    #expect(runner.calls.count == 4)
+    #expect(runner.calls[2].arguments.first == "doctor" && runner.calls[3].arguments.first == "connect")
+}
+
+/// The earlier passing result is never reused: the re-check's own result is what the gate holds.
+@Test func recheckCannotReuseAStalePass() async throws {
+    let inputs = try makeInputs()
+    var g = CheckGate()
+    g.record(passing, for: inputs)
+    let runner = FakeRunner([ok(1)])
+    #expect(await ConnectionCheck.recheckBeforeConnect(inputs, runner: runner, gate: &g) == false)
+    #expect(g.result?.doctor.outcome == .failed)
+    #expect(!g.canConnect(inputs))
+    #expect(runner.calls.count == 1)
+}
+
+@Test func recheckRunsNothingForAClosedGate() async throws {
+    let inputs = try makeInputs()
+    var g = CheckGate()
+    let runner = FakeRunner([])
+    #expect(await ConnectionCheck.recheckBeforeConnect(inputs, runner: runner, gate: &g) == false)
+    g.record(passing, for: try Change.home.apply(to: inputs))
+    #expect(await ConnectionCheck.recheckBeforeConnect(inputs, runner: runner, gate: &g) == false)
+    #expect(runner.calls.isEmpty)
+}

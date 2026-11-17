@@ -73,3 +73,25 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     #expect(model.contains("let changed = await reloadKnownHostsIfChanged()\n        guard !changed, knownHosts.contains(entry) else {"))
     #expect(model.contains("if !(await reloadKnownHostsIfChanged()) { await loadKnownHosts() }"))
 }
+
+/// F2: when some Include files are untracked, connect() re-runs the whole check through the Kit
+/// right before writing the launcher, and launches only if that re-check passed for the same
+/// inputs. The decision itself is unit-tested in ConnectionCheckTests (recheckBeforeConnect).
+@Test func connectRechecksWhenIncludesAreUntracked() throws {
+    let app = appRoot.appending(path: "App")
+    let model = try String(contentsOf: app.appending(path: "AppModel.swift"), encoding: .utf8)
+    let start = try #require(model.range(of: "func connect() async {"))
+    let end = try #require(model.range(of: "// MARK: Profile edits", range: start.upperBound..<model.endIndex))
+    let body = String(model[start.upperBound..<end.lowerBound])
+    func at(_ s: String) throws -> String.Index { try #require(body.range(of: s), "connect() lacks \(s)").lowerBound }
+    let branch = try at("if discovery.untracked {")
+    let recheck = try at("await ConnectionCheck.recheckBeforeConnect(inputs, runner: runner, gate: &recheckGate)")
+    let same = try at("guard let now = currentInputs, now == inputs, !sshConfigChanged(), let nowTmp = verifiedTmp else {")
+    let keep = try at("gate = recheckGate")
+    let refuse = try at("guard passed else { return }")
+    let write = try at("Launcher.write(inputs, under: tmp.path)")
+    #expect(branch < recheck && recheck < same && same < keep && keep < refuse && refuse < write)
+    #expect(body.components(separatedBy: "Launcher.write(").count == 2, "one launcher write in connect()")
+    let view = try String(contentsOf: app.appending(path: "Views/CheckSection.swift"), encoding: .utf8)
+    #expect(view.contains("if model.discovery.untracked {\n                Text(\"Some Include files cannot be tracked; SigSieve checks again when you connect.\")"))
+}

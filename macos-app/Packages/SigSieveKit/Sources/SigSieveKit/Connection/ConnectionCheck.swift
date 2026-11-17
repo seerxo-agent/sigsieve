@@ -78,6 +78,18 @@ public enum ConnectionCheck {
         return CheckResult(doctor: doctor, dryRun: dry)
     }
 
+    /// The re-check before Connect when `AliasDiscovery.untracked` is true (some file ssh may read
+    /// has no stamp, so a change there would not have closed the gate). Only for a gate already
+    /// open for `inputs`. Runs the whole check again and records the new result for `inputs`, so
+    /// the earlier pass is replaced and can never open the gate on its own. Returns whether the
+    /// gate is open after the re-check; the new result is `gate.result`.
+    public static func recheckBeforeConnect(_ inputs: CheckInputs, runner: Running, gate: inout CheckGate) async -> Bool {
+        guard gate.canConnect(inputs) else { return false }
+        let result = await run(inputs, runner: runner)
+        gate.record(result, for: inputs)
+        return gate.canConnect(inputs)
+    }
+
     private static func step(_ arguments: [String], _ inputs: CheckInputs, _ runner: Running) async -> StepResult {
         do {
             let r = try await runner.run(.cli(inputs.cli.path), arguments, environment: inputs.environment,
