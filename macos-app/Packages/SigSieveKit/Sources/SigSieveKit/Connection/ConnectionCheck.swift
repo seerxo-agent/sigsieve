@@ -65,7 +65,13 @@ public enum ConnectionCheck {
     static let timeout: Duration = .seconds(150)
 
     /// `sigsieve doctor`, then (only if it passed) `sigsieve connect --dry-run`.
+    /// A profile with a `policyProblem` is refused as invalid configuration
+    /// without starting anything.
     public static func run(_ inputs: CheckInputs, runner: Running) async -> CheckResult {
+        if let problem = inputs.profile.policyProblem {
+            return CheckResult(doctor: StepResult(outcome: .invalidConfiguration, lines: [], hint: problem, raw: problem),
+                               dryRun: nil)
+        }
         let doctor = await step(["doctor"] + CommandBuilder.doctorArguments(inputs.profile), inputs, runner)
         guard doctor.outcome == .passed else { return CheckResult(doctor: doctor, dryRun: nil) }
         let dry = await step(["connect"] + CommandBuilder.connectArguments(inputs.profile, dryRun: true), inputs, runner)

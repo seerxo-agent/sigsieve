@@ -53,7 +53,8 @@ private struct PassedResult: View {
                 }
                 .font(.caption)
             }
-            if !model.bindingActive {
+            // A passed check exists only without a policyProblem, so binding here always has a host key.
+            if model.selectedProfile?.mode != .binding {
                 Text("Forwarded key can sign for any server while connected").font(.caption)
             }
             OutputDisclosure(raw: raw)

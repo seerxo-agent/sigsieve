@@ -20,6 +20,7 @@ struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @State private var cliPath = ""
     @State private var socket = ""
+    @State private var socketError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -28,7 +29,7 @@ struct SettingsView: View {
             Text("Default agent for new servers").font(.subheadline)
             Picker("", selection: Binding(
                 get: { model.defaultAgent == .secretive ? 0 : 1 },
-                set: { $0 == 0 ? model.setDefaultAgent(.secretive) : model.setDefaultAgent(.openssh(socket: socket)) })) {
+                set: { $0 == 0 ? useAgent(.secretive) : useAgent(.openssh(socket: socket)) })) {
                 Text("Secretive").tag(0)
                 Text("OpenSSH agent").tag(1)
             }
@@ -37,8 +38,10 @@ struct SettingsView: View {
             HStack {
                 TextField("Agent socket path", text: $socket)
                     .textFieldStyle(.roundedBorder)
-                Button("Use") { model.setDefaultAgent(.openssh(socket: socket)) }
-                    .disabled(!AppModel.isUsableSocket(socket))
+                Button("Use") { useAgent(.openssh(socket: socket)) }
+            }
+            if let socketError {
+                Text(socketError).font(.caption).foregroundStyle(.red)
             }
 
             Text("SigSieve CLI path (optional, absolute)").font(.subheadline)
@@ -69,6 +72,16 @@ struct SettingsView: View {
             cliPath = model.cliPathSetting
             if case .openssh(let s) = model.defaultAgent { socket = s }
             else if case .openssh(let s) = AppModel.appAgent { socket = s }
+        }
+    }
+
+    private func useAgent(_ agent: AgentChoice) {
+        if model.setDefaultAgent(agent) {
+            socketError = nil
+        } else {
+            socketError = socket.isEmpty
+                ? "Enter the agent socket path to use the OpenSSH agent. The default agent is unchanged."
+                : "The agent socket must be an absolute path (starting with /) without control characters. The default agent is unchanged."
         }
     }
 

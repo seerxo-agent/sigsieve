@@ -35,6 +35,19 @@ public struct Profile: Hashable, Codable, Sendable {
         self.destinations = destinations
     }
 
+    /// Why this profile's protection cannot be applied as chosen; nil when it can.
+    ///
+    /// Destination binding with no host key would give the CLI no
+    /// `--allow-destination`, which is identity filtering under another name.
+    /// That is refused here, never downgraded: the app, `ConnectionCheck.run`,
+    /// `Launcher.write` and `CommandBuilder` all go through this one rule.
+    public var policyProblem: String? {
+        mode == .binding && destinations.allSatisfy(\.hostKeys.isEmpty) ? Self.bindingWithoutHostKey : nil
+    }
+
+    public static let bindingWithoutHostKey =
+        "Destination binding needs at least one host key. Add one, or switch to Identity filtering."
+
     /// A server without a saved profile forwards no key.
     public static func empty(for server: HostInput, agent: AgentChoice) -> Profile {
         Profile(server: server, agent: agent, forwardedKeys: [], mode: .filtering, destinations: [])

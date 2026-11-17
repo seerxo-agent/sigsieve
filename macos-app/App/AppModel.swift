@@ -40,6 +40,7 @@ final class AppModel: ObservableObject {
     /// Inputs of the last check, and whether the root ssh config existed then (ruling 2).
     private var checked: (inputs: CheckInputs, rootExisted: Bool)?
     private var checkTask: Task<Void, Never>?
+    private var waitingTask: Task<Void, Never>?
     private var removedStale = false
     private var refreshing = false
 
@@ -59,12 +60,6 @@ final class AppModel: ObservableObject {
 
     /// The saved CLI path is unusable (only possible if edited outside the app).
     var cliSettingProblem: String? { Self.cliPathProblem(cliPathSetting).map { "Saved CLI path \"\(cliPathSetting)\": \($0)" } }
-
-    /// Binding mode with no host key passes no `--allow-destination`: the CLI filters only.
-    var bindingActive: Bool {
-        guard let p = selectedProfile else { return false }
-        return p.mode == .binding && !p.destinations.flatMap(\.hostKeys).isEmpty
-    }
 
     /// The app's own `SSH_AUTH_SOCK` as an OpenSSH agent, else Secretive.
     static var appAgent: AgentChoice {
@@ -127,15 +122,18 @@ final class AppModel: ObservableObject {
         if verifiedTmp == nil { return "The temporary directory failed verification." }
         guard let p = selectedProfile else { return "Choose a server." }
         if p.forwardedKeys.isEmpty { return "Choose at least one key to forward." }
+        if let problem = p.policyProblem { return problem }
         if currentInputs == nil { return "The agent socket or CLI location cannot be used." }
         return nil
     }
 
     /// nil when the CLI or TMPDIR is in error, the profiles file is unusable,
-    /// no server is selected, or no key is forwarded.
+    /// no server is selected, no key is forwarded, or the profile has a
+    /// `policyProblem` (binding without a host key is never downgraded).
     var currentInputs: CheckInputs? {
         guard storeError == nil, case .success(let info) = cli, let tmp = verifiedTmp,
               let profile = selectedProfile, !profile.forwardedKeys.isEmpty,
+              profile.policyProblem == nil,
               let env = try? ChildEnvironment.make(home: home, cliDirectory: Self.directory(of: info),
                                                    tmpdir: tmp, agent: profile.agent)
         else { return nil }
@@ -233,7 +231,9 @@ final class AppModel: ObservableObject {
         let agent = selectedProfile?.agent ?? defaultAgent
         do {
             let env = try ChildEnvironment.make(home: home, cliDirectory: "/usr/bin", tmpdir: tmp, agent: agent)
-            agentState = await AgentKeys.list(runner: runner, environment: env)
+            let state = await AgentKeys.list(runner: runner, environment: env)
+            // A slower answer for an agent that is no longer selected must not overwrite the current one.
+            if agent == (selectedProfile?.agent ?? defaultAgent) { agentState = state }
         } catch {
             agentState = .unreachable("the agent socket \(agent.socketPath(home: home)) cannot be used")
         }
@@ -270,6 +270,8 @@ final class AppModel: ObservableObject {
     private func resetCheck() {
         checkTask?.cancel()
         checkTask = nil
+        waitingTask?.cancel()
+        waitingTask = nil
         checkState = .idle
         gate = CheckGate()
     }
@@ -286,15 +288,16 @@ final class AppModel: ObservableObject {
         checked = (inputs, rootConfigExists)
         checkState = .running(.checking)
         let runner = self.runner
+        waitingTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self, self.checkState == .running(.checking) else { return }
+            self.checkState = .running(.waitingForAgent)
+        }
         let task = Task { [weak self] in
-            let waiting = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(2))
-                guard !Task.isCancelled, let self, self.checkState == .running(.checking) else { return }
-                self.checkState = .running(.waitingForAgent)
-            }
             let result = await ConnectionCheck.run(inputs, runner: runner)
-            waiting.cancel()
             guard let self, !Task.isCancelled else { return }
+            self.waitingTask?.cancel()
+            self.waitingTask = nil
             self.gate.record(result, for: inputs)
             // A result for inputs that are no longer current is never shown.
             if self.currentInputs == inputs, !self.sshConfigChanged() {
@@ -315,6 +318,7 @@ final class AppModel: ObservableObject {
         if sshConfigChanged() {
             rediscover()
             resetCheck()
+            connectError = "SSH configuration changed since the check. Check again."
             return
         }
         inputsChanged()
@@ -398,11 +402,14 @@ final class AppModel: ObservableObject {
 
     // MARK: Settings
 
-    func setDefaultAgent(_ agent: AgentChoice) {
-        if case .openssh(let s) = agent, !Self.isUsableSocket(s) { return }
+    /// false (and nothing changes) for an OpenSSH socket that is empty or not absolute.
+    @discardableResult
+    func setDefaultAgent(_ agent: AgentChoice) -> Bool {
+        if case .openssh(let s) = agent, !Self.isUsableSocket(s) { return false }
         defaultAgent = agent
         if let data = try? JSONEncoder().encode(agent) { defaults.set(data, forKey: Self.agentKey) }
         inputsChanged(agentMayDiffer: true)
+        return true
     }
 
     /// Ruling 1: only an absolute path is accepted; empty means "not set".
@@ -416,6 +423,9 @@ final class AppModel: ObservableObject {
         cliPathError = nil
         cliPathSetting = path
         defaults.set(path, forKey: Self.cliPathKey)
+        // The old CLI must not stay usable while the new setting is resolved.
+        cli = nil
+        resetCheck()
         verifyTmpdir()
         await locateCLI()
         inputsChanged()

@@ -53,8 +53,8 @@ struct AdvancedSection: View {
 
     @ViewBuilder private var destinations: some View {
         let list = model.selectedProfile?.destinations ?? []
-        if !model.bindingActive {
-            Text("Binding is off until a host key is added; the forwarded key can then sign for any server.")
+        if let problem = model.selectedProfile?.policyProblem {
+            Text(problem)
                 .font(.caption).foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)
         }

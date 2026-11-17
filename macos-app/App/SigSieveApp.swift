@@ -49,6 +49,11 @@ struct MenuWindow: View {
         .padding(12)
         .frame(width: 380)
         .onAppear { Task { await model.refresh() } }
+        // onAppear is not guaranteed to fire on every reopen of a .window MenuBarExtra;
+        // its panel becomes key each time it opens. This app has no other window.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            Task { await model.refresh() }
+        }
     }
 }
 

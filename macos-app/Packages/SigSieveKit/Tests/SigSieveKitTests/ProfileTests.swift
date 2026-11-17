@@ -408,3 +408,30 @@ func dotComponentCannotBypassTheSymlinkRule(_ dot: String) throws {
     #expect(mode(target) == 0o755)
     #expect(try FileManager.default.contentsOfDirectory(atPath: target.path) == ["inner"])
 }
+
+// Binding is never downgraded to filtering: one rule, four cases.
+
+@Test func policyProblemBindingWithoutDestinations() {
+    var p = binding
+    p.destinations = []
+    #expect(p.policyProblem == "Destination binding needs at least one host key. Add one, or switch to Identity filtering.")
+}
+
+@Test func policyProblemBindingWithOnlyEmptyDestinations() {
+    var p = binding
+    p.destinations = [Destination(name: "github.com", hostKeys: [])]
+    #expect(p.policyProblem == "Destination binding needs at least one host key. Add one, or switch to Identity filtering.")
+}
+
+@Test func policyProblemBindingWithAHostKeyIsNil() {
+    #expect(binding.policyProblem == nil)
+}
+
+@Test func policyProblemFilteringIsNilWithOrWithoutStoredDestinations() {
+    #expect(sample.policyProblem == nil)
+    var f = binding
+    f.mode = .filtering
+    #expect(f.policyProblem == nil)
+    f.destinations = []
+    #expect(f.policyProblem == nil)
+}

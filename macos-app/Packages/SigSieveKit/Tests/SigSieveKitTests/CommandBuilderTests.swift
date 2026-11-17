@@ -213,3 +213,34 @@ func launcherRefusesAnUnsafeSelfDirectory(_ dir: String) async {
     #expect(lines.last == "")
     #expect(lines.dropLast().last.map(String.init) == "exec " + CommandBuilder.copyableCommand(q, cli: cli, environment: env))
 }
+
+@Test func filteringWithStoredDestinationsHasLiteralArgvWithoutDestinations() {
+    var f = q
+    f.mode = .filtering
+    #expect(CommandBuilder.doctorArguments(f) == ["--upstream", "/s", "--allow-fingerprint", fp1.value])
+    #expect(CommandBuilder.connectArguments(f, dryRun: true) ==
+        ["build-host", "--upstream", "/s", "--allow-fingerprint", fp1.value, "--dry-run"] + tail)
+}
+
+@Test func bindingWithOneHostKeyHasLiteralArgvWithDestination() {
+    var b = q
+    b.destinations = [Destination(name: "github.com", hostKeys: [hk3])]
+    #expect(CommandBuilder.doctorArguments(b) ==
+        ["--upstream", "/s", "--allow-fingerprint", fp1.value, "--allow-destination", hk3.value])
+    #expect(CommandBuilder.connectArguments(b, dryRun: false) ==
+        ["build-host", "--upstream", "/s", "--allow-fingerprint", fp1.value, "--allow-destination", hk3.value] + tail)
+}
+
+// Never filtering arguments for a profile that says binding: the builder stops the app.
+@Test(arguments: [0, 1, 2])
+func bindingWithoutAHostKeyStopsTheBuilder(_ call: Int) async {
+    await #expect(processExitsWith: .failure) { [call] in
+        let p = Profile(server: HostInput("web")!, agent: .secretive, forwardedKeys: [Fingerprint("SHA256:" + String(repeating: "a", count: 42) + "A")!],
+                        mode: .binding, destinations: [Destination(name: "d", hostKeys: [])])
+        switch call {
+        case 0: _ = CommandBuilder.doctorArguments(p)
+        case 1: _ = CommandBuilder.connectArguments(p, dryRun: true)
+        default: _ = CommandBuilder.connectArguments(p, dryRun: false)
+        }
+    }
+}

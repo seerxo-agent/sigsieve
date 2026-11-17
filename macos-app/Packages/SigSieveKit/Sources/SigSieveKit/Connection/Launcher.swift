@@ -6,6 +6,8 @@ public enum LauncherError: Error, Equatable, CustomStringConvertible {
     case io(step: String, errno: Int32)
     case terminalMissing
     case openFailed(String)
+    /// The profile's protection cannot be applied as chosen (`Profile.policyProblem`).
+    case invalidPolicy(String)
 
     public var description: String {
         switch self {
@@ -13,6 +15,7 @@ public enum LauncherError: Error, Equatable, CustomStringConvertible {
         case .io(let step, let e): "\(step) failed: \(String(cString: strerror(e)))"
         case .terminalMissing: "Terminal.app was not found at \(Launcher.terminalPath)"
         case .openFailed(let m): "Terminal could not open the launcher: \(m)"
+        case .invalidPolicy(let m): m
         }
     }
 }
@@ -28,6 +31,7 @@ public enum Launcher {
     /// Creates `<tmpdir>/sigsieve-launch-XXXXXX` (0700) holding `connect.command`
     /// (0700). `tmpdir` is the verified TMPDIR. Removes what it created on failure.
     public static func write(_ inputs: CheckInputs, under tmpdir: String) throws -> URL {
+        if let problem = inputs.profile.policyProblem { throw LauncherError.invalidPolicy(problem) }
         let parts = tmpdir.split(separator: "/")
         guard tmpdir.hasPrefix("/"), !parts.contains("."), !parts.contains("..") else {
             throw LauncherError.unsafeTmpdir(tmpdir)

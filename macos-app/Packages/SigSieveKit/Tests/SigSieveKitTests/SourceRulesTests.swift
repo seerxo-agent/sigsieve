@@ -2,28 +2,36 @@ import Foundation
 import Testing
 
 // A second check, not the boundary (the boundary is ProcessRunner). Scans the
-// Kit's Sources/, and macos-app/App/ only when that directory exists.
+// Kit's Sources/ and macos-app/App/, which must exist.
 
 private let kitRoot = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+private let appRoot = kitRoot.deletingLastPathComponent().deletingLastPathComponent()
+/// The one file allowed to start a process, relative to macos-app/.
+private let processRunnerPath = "Packages/SigSieveKit/Sources/SigSieveKit/ProcessExecution/ProcessRunner.swift"
 
+/// Each Swift file with its path relative to macos-app/.
 private func sourceFiles() throws -> [(name: String, text: String)] {
-    var roots = [kitRoot.appending(path: "Sources")]
-    let app = kitRoot.deletingLastPathComponent().deletingLastPathComponent().appending(path: "App")
-    if FileManager.default.fileExists(atPath: app.path) { roots.append(app) }
+    let app = appRoot.appending(path: "App")
+    try #require(FileManager.default.fileExists(atPath: app.path), "macos-app/App/ is missing")
+    let root = appRoot.standardizedFileURL.path(percentEncoded: false)
+    let prefix = root.hasSuffix("/") ? root : root + "/"
     var files: [(String, String)] = []
-    for root in roots {
+    for root in [kitRoot.appending(path: "Sources"), app] {
         let e = try #require(FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil))
         for case let url as URL in e where url.pathExtension == "swift" {
-            files.append((url.lastPathComponent, try String(contentsOf: url, encoding: .utf8)))
+            let path = url.standardizedFileURL.path(percentEncoded: false)
+            #expect(path.hasPrefix(prefix), "\(path) is outside macos-app/")
+            files.append((String(path.dropFirst(prefix.count)), try String(contentsOf: url, encoding: .utf8)))
         }
     }
-    #expect(files.contains { $0.0 == "ProcessRunner.swift" })
+    #expect(files.contains { $0.0 == processRunnerPath })
+    #expect(files.contains { $0.0.hasPrefix("App/") })
     return files
 }
 
 @Test func onlyProcessRunnerUsesProcess() throws {
     for (name, text) in try sourceFiles() {
-        for token in ["Process()", "NSTask"] where name != "ProcessRunner.swift" {
+        for token in ["Process()", "NSTask", "Process.run(", "launchedProcess"] where name != processRunnerPath {
             #expect(!text.contains(token), "\(name) mentions \(token)")
         }
         for token in ["posix_spawn", "execv", "NSAppleScript"] {

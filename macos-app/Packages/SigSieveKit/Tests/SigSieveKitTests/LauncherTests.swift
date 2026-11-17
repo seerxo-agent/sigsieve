@@ -106,3 +106,16 @@ private func exists(_ path: String) -> Bool {
     #expect(exists(target + "/connect.command"))
     #expect(exists(link))
 }
+
+@Test func writeRefusesBindingWithoutAHostKeyAndCreatesNothing() throws {
+    let tmp = TestDirectory.make()
+    let base = try makeInputs(tmpdir: tmp)
+    var p = base.profile
+    p.mode = .binding
+    let inputs = CheckInputs(profile: p, cli: base.cli, environment: base.environment, configStamps: [])
+    #expect(throws: LauncherError.invalidPolicy(
+        "Destination binding needs at least one host key. Add one, or switch to Identity filtering.")) {
+        try Launcher.write(inputs, under: tmp.path(percentEncoded: false))
+    }
+    #expect(try FileManager.default.contentsOfDirectory(atPath: tmp.path(percentEncoded: false)).isEmpty)
+}

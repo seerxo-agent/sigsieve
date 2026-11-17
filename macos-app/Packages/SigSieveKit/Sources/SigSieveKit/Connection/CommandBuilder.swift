@@ -65,6 +65,9 @@ public enum CommandBuilder {
     }
 
     private static func policyArguments(_ p: Profile) -> [String] {
+        // Binding without a host key would build filtering arguments for a profile that says binding.
+        precondition(p.policyProblem == nil,
+                     "bug: a .binding profile without a host key reached CommandBuilder; Profile.policyProblem, ConnectionCheck.run and Launcher.write refuse it first")
         let agent: [String] = switch p.agent {
         case .secretive: ["--secretive"]
         case .openssh(let socket): ["--upstream", socket]

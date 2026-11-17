@@ -205,3 +205,46 @@ private func anyChangeClosesTheGate(_ c: Change) throws {
     g.record(failed, for: inputs)
     #expect(!g.canConnect(inputs))
 }
+
+@Test func bindingWithoutAHostKeyIsInvalidAndRunsNothing() async throws {
+    var p = baseProfile
+    p.mode = .binding
+    p.destinations = [Destination(name: "github.com", hostKeys: [])]
+    let inputs = try makeInputs(profile: p)
+    let runner = FakeRunner([])
+    let r = await ConnectionCheck.run(inputs, runner: runner)
+    let reason = "Destination binding needs at least one host key. Add one, or switch to Identity filtering."
+    #expect(r.doctor == StepResult(outcome: .invalidConfiguration, lines: [], hint: reason, raw: reason))
+    #expect(r.dryRun == nil)
+    #expect(!r.passed)
+    #expect(runner.calls.isEmpty)
+    var g = CheckGate()
+    g.record(r, for: inputs)
+    #expect(!g.canConnect(inputs))
+}
+
+@Test func bindingWithAHostKeyPassesTheDestinationToBothSteps() async throws {
+    var p = baseProfile
+    p.mode = .binding
+    p.destinations = [Destination(name: "github.com", hostKeys: [fp("c")])]
+    let runner = FakeRunner([ok(0), ok(0)])
+    let r = await ConnectionCheck.run(try makeInputs(profile: p), runner: runner)
+    #expect(r.passed)
+    #expect(runner.calls.map(\.arguments) == [
+        ["doctor", "--secretive", "--allow-fingerprint", fp("a").value, "--allow-destination", fp("c").value],
+        ["connect", "web", "--secretive", "--allow-fingerprint", fp("a").value, "--allow-destination", fp("c").value,
+         "--dry-run", "--", "-o", "StrictHostKeyChecking=yes"],
+    ])
+}
+
+@Test func filteringWithStoredDestinationsPassesNoDestination() async throws {
+    var p = baseProfile
+    p.destinations = [Destination(name: "github.com", hostKeys: [fp("c")])]
+    let runner = FakeRunner([ok(0), ok(0)])
+    _ = await ConnectionCheck.run(try makeInputs(profile: p), runner: runner)
+    #expect(runner.calls.map(\.arguments) == [
+        ["doctor", "--secretive", "--allow-fingerprint", fp("a").value],
+        ["connect", "web", "--secretive", "--allow-fingerprint", fp("a").value,
+         "--dry-run", "--", "-o", "StrictHostKeyChecking=yes"],
+    ])
+}
