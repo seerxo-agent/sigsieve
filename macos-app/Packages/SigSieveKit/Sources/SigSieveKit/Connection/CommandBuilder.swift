@@ -36,10 +36,17 @@ public enum CommandBuilder {
         // ChildEnvironment.make refuse `=` upstream; this is only a backstop.
         precondition(!cliPath.contains("="),
                      "bug: CLILocator and ChildEnvironment refuse '=' in the CLI path, yet it reached CommandBuilder: \(cliPath)")
+        let arguments = [cliPath, "connect"] + connectArguments(p, dryRun: false)
+        // fish reads `\` inside single quotes as an escape, so one there could end a quoted word.
+        // HostInput, ChildEnvironment.make and CLILocator refuse `\` upstream (finding F1); this
+        // is only a backstop. The command is for POSIX shells either way.
+        for value in arguments + environment.variables.map(\.value) {
+            precondition(!value.contains("\\"),
+                         "bug: HostInput, ChildEnvironment.make and CLILocator refuse '\\', yet it reached CommandBuilder: \(value)")
+        }
         let assignments = environment.variables.map { "\($0.name)=\(ShellQuote.quote($0.value))" }
         // TERM="$TERM" is the only unquoted text: Terminal's own value.
-        let words = ["/usr/bin/env", "-i"] + assignments + ["TERM=\"$TERM\""]
-            + ([cliPath, "connect"] + connectArguments(p, dryRun: false)).map(ShellQuote.quote)
+        let words = ["/usr/bin/env", "-i"] + assignments + ["TERM=\"$TERM\""] + arguments.map(ShellQuote.quote)
         return words.joined(separator: " ")
     }
 
@@ -56,6 +63,8 @@ public enum CommandBuilder {
         precondition(selfDirectory.hasPrefix("/") && !components.isEmpty
                      && !components.contains(".") && !components.contains(".."),
                      "launcher directory must be an absolute path below / without . or ..: \(selfDirectory)")
+        // Under the verified TMPDIR (ASCII letters, digits and /._-), so never `\` (finding F1 backstop).
+        precondition(!selfDirectory.contains("\\"), "bug: launcher directory contains '\\': \(selfDirectory)")
         return """
         #!/bin/sh
         /bin/rm -rf -- \(ShellQuote.quote(selfDirectory))

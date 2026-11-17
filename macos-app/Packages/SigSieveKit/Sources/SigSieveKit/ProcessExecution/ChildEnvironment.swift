@@ -125,11 +125,11 @@ public struct EnvVar: Hashable, Sendable {
 
 public enum ChildEnvironmentError: Error, Equatable {
     /// Not absolute, or holds `:` (a second PATH entry), `=` (env(1) in the
-    /// Terminal launcher would read the CLI path as an assignment) or a control character.
+    /// Terminal launcher would read the CLI path as an assignment), `\` or a control character.
     case unsafeCLIDirectory(String)
-    /// Not absolute, or holds a control character.
+    /// Not absolute, or holds `\` or a control character.
     case unsafeHome(String)
-    /// The agent socket is not absolute, or holds a control or format character.
+    /// The agent socket is not absolute, or holds `\` or a control or format character.
     case unsafeSocket(String)
 }
 
@@ -164,9 +164,11 @@ public struct ChildEnvironment: Hashable, Sendable {
         ])
     }
 
+    /// `\` is refused because these values reach the copyable command (finding F1:
+    /// defense in depth; the command is still for POSIX shells only).
     private static func isAbsoluteAndPlain(_ s: String) -> Bool {
         s.hasPrefix("/") && !s.unicodeScalars.contains {
-            $0.properties.generalCategory == .control || $0.properties.generalCategory == .format
+            $0 == "\\" || $0.properties.generalCategory == .control || $0.properties.generalCategory == .format
         }
     }
 }

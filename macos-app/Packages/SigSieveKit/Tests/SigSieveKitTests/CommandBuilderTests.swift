@@ -244,3 +244,59 @@ func bindingWithoutAHostKeyStopsTheBuilder(_ call: Int) async {
         }
     }
 }
+
+// F1 backstop: a `\` that got past HostInput, ChildEnvironment.make and CLILocator stops the
+// builder. Built with @testable initializers, since the public ones refuse it.
+@Test(arguments: [0, 1, 2])
+func backslashStopsTheBuilder(_ call: Int) async {
+    await #expect(processExitsWith: .failure) { [call] in
+        let fp = Fingerprint("SHA256:" + String(repeating: "a", count: 42) + "A")!
+        let p = Profile(server: HostInput("web")!, agent: .secretive, forwardedKeys: [fp], mode: .filtering, destinations: [])
+        let plainCLI = CLIInfo(path: URL(filePath: "/opt/homebrew/bin/sigsieve"), version: "sigsieve 1.0.0")
+        let plainEnv = ChildEnvironment(variables: [EnvVar(name: "HOME", value: "/Users/t")])
+        switch call {
+        case 0:
+            _ = CommandBuilder.copyableCommand(p, cli: CLIInfo(path: URL(filePath: "/opt/a\\b/sigsieve"), version: "sigsieve 1.0.0"),
+                                               environment: plainEnv)
+        case 1:
+            _ = CommandBuilder.copyableCommand(p, cli: plainCLI,
+                                               environment: ChildEnvironment(variables: [EnvVar(name: "SSH_AUTH_SOCK", value: "/x\\")]))
+        default:
+            _ = CommandBuilder.launcherScript(p, cli: plainCLI, environment: plainEnv, selfDirectory: "/tmp/a\\b")
+        }
+    }
+}
+
+@Test func backslashFreeValuesPassTheBackstop() {
+    let cli = CLIInfo(path: URL(filePath: "/opt/homebrew/bin/sigsieve"), version: "sigsieve 1.0.0")
+    let env = ChildEnvironment(variables: [EnvVar(name: "HOME", value: "/Users/t")])
+    #expect(CommandBuilder.copyableCommand(p, cli: cli, environment: env).hasPrefix("/usr/bin/env -i HOME='/Users/t' "))
+}
+
+/// fish is not a supported shell for the copyable command (README: POSIX shells only). This only
+/// shows that the `\` refusal leaves fish nothing to escape with; it runs only where fish is installed.
+private let fishPath = ["/opt/homebrew/bin/fish", "/usr/local/bin/fish"].first { FileManager.default.isExecutableFile(atPath: $0) }
+
+@Test(.enabled(if: fishPath != nil, "fish is not installed at /opt/homebrew/bin/fish or /usr/local/bin/fish"))
+func copyableCommandRoundTripsUnderFishWithoutBackslashes() throws {
+    let cli = try hostileCLI("#!/bin/sh\nprintf '%s\\n' \"$0\" \"$@\"\n")
+    var profile = q
+    profile.server = HostInput("h'$(id);touch pwn;#")!
+    profile.agent = .openssh(socket: "/;touch pwn;#'")
+    let env = try hostileEnvironment(cli: cli, agent: profile.agent)
+    let cwd = TestDirectory.make()
+    let proc = Process()
+    proc.executableURL = URL(filePath: try #require(fishPath))
+    proc.arguments = ["--no-config", "-c", CommandBuilder.copyableCommand(profile, cli: cli, environment: env)]
+    proc.environment = ["TERM": "xterm"]
+    proc.currentDirectoryURL = cwd
+    let pipe = Pipe()
+    proc.standardOutput = pipe
+    try proc.run()
+    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+    proc.waitUntilExit()
+    #expect(proc.terminationStatus == 0)
+    let expected = [cli.path.path(percentEncoded: false), "connect"] + CommandBuilder.connectArguments(profile, dryRun: false)
+    #expect(String(decoding: data, as: UTF8.self) == expected.map { $0 + "\n" }.joined())
+    #expect(!FileManager.default.fileExists(atPath: cwd.appending(path: "pwn").path))
+}

@@ -205,3 +205,17 @@ func groupOrOtherAccessIsRefused(_ m: Int) {
     #expect(!text.contains(/\benviron\b/), "ChildEnvironment.swift mentions environ")
     #expect(text.contains("confstr(_CS_DARWIN_USER_TEMP_DIR"))
 }
+
+// F1: every value of the copyable command refuses `\` (defense in depth; POSIX shells only).
+@Test func backslashIsRefusedInHomeSocketAndCLIDirectory() throws {
+    let t = try verified()
+    #expect(throws: ChildEnvironmentError.unsafeHome("/Users/a\\b")) {
+        try ChildEnvironment.make(home: "/Users/a\\b", cliDirectory: "/c", tmpdir: t, agent: .secretive)
+    }
+    #expect(throws: ChildEnvironmentError.unsafeSocket("/;touch pwn;#\\")) {
+        try ChildEnvironment.make(home: "/h", cliDirectory: "/c", tmpdir: t, agent: .openssh(socket: "/;touch pwn;#\\"))
+    }
+    #expect(throws: ChildEnvironmentError.unsafeCLIDirectory("/opt/a\\b/bin")) {
+        try ChildEnvironment.make(home: "/h", cliDirectory: "/opt/a\\b/bin", tmpdir: t, agent: .secretive)
+    }
+}

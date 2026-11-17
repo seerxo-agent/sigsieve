@@ -30,6 +30,11 @@ open macos-app/build/Build/Products/Release/SigSieve.app
 The app is ad hoc signed for local runs. It has no Developer ID, is not
 notarized and is not distributed.
 
+## Copyable command
+
+The copyable command is for POSIX shells (sh, bash, zsh). fish and csh/tcsh
+are not supported; open `/bin/sh` first and paste it there.
+
 ## Known_hosts limits
 
 When you bind a server to its host key, the app lists keys from your known_hosts

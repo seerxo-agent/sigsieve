@@ -38,8 +38,11 @@ public struct HostInput: Hashable, Sendable {
         guard let first = s.unicodeScalars.first, first != "-" else { return nil }
         // Format characters (bidi overrides, zero-width, BOM) are invisible, so
         // the host shown in the UI could differ from the bytes sent to the CLI.
+        // `\` is refused as defense in depth for the copyable command (finding F1);
+        // that command is still for POSIX shells only.
         guard !s.unicodeScalars.contains(where: {
-            $0.properties.isWhitespace
+            $0 == "\\"
+                || $0.properties.isWhitespace
                 || $0.properties.generalCategory == .control
                 || $0.properties.generalCategory == .format
         }) else { return nil }

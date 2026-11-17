@@ -89,3 +89,8 @@ func fingerprintRejectsNonzeroSpareBits(_ last: String) {
 @Test func fingerprintAcceptsARealOpenSSHValue() {
     #expect(Fingerprint("SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU") != nil)
 }
+
+// F1: fish reads `\` inside single quotes as an escape, so a host with one could end a quoted
+// word of the copyable command there. Refused as defense in depth (POSIX shells only).
+@Test(arguments: ["x\\", "a\\b", "\\", "a\\'b"])
+func hostInputRejectsBackslash(_ s: String) { #expect(HostInput(s) == nil) }
