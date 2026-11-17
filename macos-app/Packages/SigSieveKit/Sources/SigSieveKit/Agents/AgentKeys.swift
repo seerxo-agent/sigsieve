@@ -85,9 +85,12 @@ public enum KeyFilter {
     /// Case-insensitive substring over comment, type and fingerprint; an empty query keeps all.
     public static func filter(_ keys: [AgentKey], query: String) -> [AgentKey] {
         guard !query.isEmpty else { return keys }
+        // Stdlib String comparison is canonically equivalent (NFC == NFD) and does not fold
+        // diacritics; lowercasing both sides gives case-insensitivity without NSString bridging.
+        let q = query.lowercased()
         return keys.filter {
-            $0.comment.range(of: query, options: .caseInsensitive) != nil || $0.type.range(of: query, options: .caseInsensitive) != nil
-                || $0.fingerprint.value.range(of: query, options: .caseInsensitive) != nil
+            $0.comment.lowercased().contains(q) || $0.type.lowercased().contains(q)
+                || $0.fingerprint.value.lowercased().contains(q)
         }
     }
 }
