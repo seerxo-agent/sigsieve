@@ -6,12 +6,18 @@ private final class FakeRunner: Running, @unchecked Sendable {
     private let lock = NSLock()
     private(set) var calls: [(tool: Tool, arguments: [String], stdin: String?, timeout: Duration)] = []
     let result: Result<RunResult, RunError>
+    /// Consumed one per call before `result` is used.
+    private var queue: [String] = []
+    init(first: [String], then stdout: String) { result = .success(RunResult(exitCode: 0, stdout: stdout, stderr: "")); queue = first }
     init(exit: Int32 = 0, stdout: String = "") { result = .success(RunResult(exitCode: exit, stdout: stdout, stderr: "")) }
     init(error: RunError) { result = .failure(error) }
 
     func run(_ tool: Tool, _ arguments: [String], environment: ChildEnvironment,
              stdin: Data?, timeout: Duration) async throws -> RunResult {
         lock.withLock { calls.append((tool, arguments, stdin.map { String(decoding: $0, as: UTF8.self) }, timeout)) }
+        if let next = lock.withLock({ queue.isEmpty ? nil : queue.removeFirst() }) {
+            return RunResult(exitCode: 0, stdout: next, stderr: "")
+        }
         return try result.get()
     }
 }
@@ -55,10 +61,11 @@ private func file(_ text: String) throws -> URL {
 
 @Test func entriesAreFingerprintedFromStdinNotFromTheFile() async throws {
     let f = try file("host-a,alias ssh-ed25519 KEYA\n@revoked h ssh-ed25519 KEYB\n")
-    let runner = FakeRunner(stdout: out(a43, "host-a,alias", "ED25519") + "\n")
+    let runner = FakeRunner(first: [out(b43, "h", "ED25519") + "\n"], then: out(a43, "host-a,alias", "ED25519") + "\n")
     let entries = await KnownHosts.entries(file: f, runner: runner, environment: env())
     #expect(entries == [KnownHostEntry(name: "host-a", fingerprint: Fingerprint("SHA256:" + a43)!, type: "ED25519")])
-    let call = try #require(runner.calls.first)
+    #expect(runner.calls.first?.stdin == "h ssh-ed25519 KEYB")
+    let call = try #require(runner.calls.last)
     #expect(call.arguments == ["-l", "-E", "sha256", "-f", "-"])
     #expect(call.stdin == "host-a,alias ssh-ed25519 KEYA")
     #expect(call.timeout == .seconds(10))
@@ -86,11 +93,10 @@ private func file(_ text: String) throws -> URL {
     #expect(entries.map(\.name) == ["host-a"])
 }
 
-@Test func malformedOutputLinesAreDroppedButKeepAlignment() async throws {
+@Test func unparseableOutputLineFailsClosed() async throws {
     let f = try file("host-a ssh-ed25519 KEYA\nhost-b ssh-ed25519 KEYB\n")
     let runner = FakeRunner(stdout: "garbage\n" + out(b43, "host-b", "ED25519") + "\n")
-    let entries = await KnownHosts.entries(file: f, runner: runner, environment: env())
-    #expect(entries.map(\.name) == ["host-b"])
+    #expect(await KnownHosts.entries(file: f, runner: runner, environment: env()).isEmpty)
 }
 
 @Test func outputCountMismatchFailsClosed() async throws {
@@ -191,4 +197,110 @@ private func file(_ text: String) throws -> URL {
     let parts = try String(contentsOf: dir.appending(path: "k.pub"), encoding: .utf8).split(separator: " ")
     let f = try file("good.example \(parts[0]) \(parts[1])\nbad.example ssh-ed25519 !!!notbase64!!!\n")
     #expect(await KnownHosts.entries(file: f, runner: ProcessRunner(), environment: env()).isEmpty)
+}
+
+@Test func revokedFingerprintRunReturningTooFewLinesGivesNoEntries() async throws {
+    let f = try file("host-a ssh-ed25519 KEYA\n@revoked h ssh-ed25519 KEYB\n@revoked h2 ssh-ed25519 KEYC\n")
+    let runner = FakeRunner(first: [out(b43, "h", "ED25519") + "\n"], then: out(a43, "host-a", "ED25519") + "\n")
+    #expect(await KnownHosts.entries(file: f, runner: runner, environment: env()).isEmpty)
+}
+
+@Test func revokedFingerprintIsDroppedFromTheResult() async throws {
+    let f = try file("host-a ssh-ed25519 KEYA\nhost-b ssh-ed25519 KEYB\n@revoked h ssh-ed25519 KEYC\n")
+    let runner = FakeRunner(first: [out(a43, "h", "ED25519") + "\n"],
+                            then: out(a43, "host-a", "ED25519") + "\n" + out(b43, "host-b", "ED25519") + "\n")
+    #expect(await KnownHosts.entries(file: f, runner: runner, environment: env()).map(\.name) == ["host-b"])
+}
+
+private func throwawayBlob() throws -> (blob: String, fingerprint: String) {
+    let dir = TestDirectory.make()
+    let p = Process()
+    p.executableURL = URL(filePath: "/usr/bin/ssh-keygen")
+    p.arguments = ["-t", "ed25519", "-N", "", "-f", dir.appending(path: "k").path, "-q"]
+    try p.run(); p.waitUntilExit()
+    let parts = try String(contentsOf: dir.appending(path: "k.pub"), encoding: .utf8).split(separator: " ")
+    let q = Process(), pipe = Pipe()
+    q.executableURL = URL(filePath: "/usr/bin/ssh-keygen")
+    q.arguments = ["-l", "-E", "sha256", "-f", dir.appending(path: "k.pub").path]
+    q.standardOutput = pipe
+    try q.run(); q.waitUntilExit()
+    let fp = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).split(separator: " ")[1]
+    return (String(parts[1]), String(fp))
+}
+
+/// Raw bytes of a known_hosts file; entries() must never offer the revoked key.
+private func realEntries(_ bytes: [UInt8]) async throws -> [KnownHostEntry] {
+    let u = TestDirectory.make().appending(path: "known_hosts")
+    try Data(bytes).write(to: u)
+    return await KnownHosts.entries(file: u, runner: ProcessRunner(), environment: env())
+}
+
+@Test func realSshKeygenNeverOffersARevokedKeyHiddenByOddBytes() async throws {
+    let (b, fp) = try throwawayBlob()
+    let rev = "@revoked * ssh-ed25519 \(b)\n"
+    let mid = b.index(b.startIndex, offsetBy: 20)
+    let shapes = [
+        "host ssh-ed25519 \(b)\r junk\n", "host ssh-ed25519 \(b)\0junk\n",
+        "host ssh-ed25519 \(b) \u{301}junk\n",
+        "host ssh-ed25519 \(b[..<mid])\u{0C}\(b[mid...])\n",
+    ]
+    for shape in shapes {
+        let entries = try await realEntries(Array((shape + rev).utf8))
+        #expect(!entries.contains { $0.fingerprint.value == fp }, "leaked: \(shape.debugDescription)")
+    }
+    // The revocation itself hidden behind a form feed: the whole file is refused.
+    let hidden = "@revoked * ssh-ed25519 \(b[..<mid])\u{0C}\(b[mid...])\nhost ssh-ed25519 \(b)\n"
+    #expect(try await realEntries(Array(hidden.utf8)).isEmpty)
+}
+
+@Test func uncleanRevokedLineRefusesTheFileWithFakeRunner() async throws {
+    let f = try file("host-a ssh-ed25519 KEYA\n@revoked * ssh-ed25519 KEYB\u{0C}KEYC\n")
+    let runner = FakeRunner(stdout: out(a43, "host-a", "ED25519") + "\n")
+    #expect(await KnownHosts.entries(file: f, runner: runner, environment: env()).isEmpty)
+    #expect(runner.calls.isEmpty)
+}
+
+@Test func deviceNodeIsNotOpened() async {
+    #expect(await KnownHosts.entries(file: URL(filePath: "/dev/null"), runner: FakeRunner(), environment: env()).isEmpty)
+}
+
+@Test func outputHostFieldNotMatchingTheInputFailsClosed() async throws {
+    // Right count, parseable, but the line at position 1 echoes a different host: unexpected.
+    let f = try file("host-a ssh-ed25519 KEYA\nhost-b ssh-ed25519 KEYB\n")
+    let runner = FakeRunner(stdout: out(a43, "host-a", "ED25519") + "\n" + out(b43, "other", "ED25519") + "\n")
+    #expect(await KnownHosts.entries(file: f, runner: runner, environment: env()).isEmpty)
+}
+
+@Test func revokedRunOutputProblemsFailClosed() async throws {
+    let f = try file("host-a ssh-ed25519 KEYA\n@revoked h ssh-ed25519 KEYB\n")
+    let good = out(a43, "host-a", "ED25519") + "\n"
+    for bad in ["", "garbage\n", out(b43, "wrong", "ED25519") + "\n", out(b43, "h", "ED25519") + "\n" + out(a43, "h", "ED25519") + "\n"] {
+        let runner = FakeRunner(first: [bad], then: good)
+        #expect(await KnownHosts.entries(file: f, runner: runner, environment: env()).isEmpty, "\(bad.debugDescription)")
+    }
+    #expect(await KnownHosts.entries(file: f, runner: FakeRunner(exit: 1), environment: env()).isEmpty)
+}
+
+@Test func realSshKeygenRevokedKeyUnderAnotherHostIsNotOfferedBeforeOrAfter() async throws {
+    let (b, fp) = try throwawayBlob()
+    let text = "before.example ssh-ed25519 \(b)\n@revoked * ssh-ed25519 \(b)\nafter.example ssh-ed25519 \(b) c\nalias,other ssh-ed25519 \(b)\n"
+    #expect(!(try await realEntries(Array(text.utf8))).contains { $0.fingerprint.value == fp })
+}
+
+@Test func aRejectedLineAmongThreeRealKeysFailsClosedNeverShiftingNames() async throws {
+    let a = try throwawayBlob(), b = try throwawayBlob(), c = try throwawayBlob()
+    let text = "one ssh-ed25519 \(a.blob)\ntwo ssh-ed25519 !!!bad!!!\nthree ssh-ed25519 \(c.blob)\n"
+    #expect(try await realEntries(Array(text.utf8)).isEmpty)
+    // Without the rejected line every name sits on its own key.
+    let ok = try await realEntries(Array("one ssh-ed25519 \(a.blob)\ntwo ssh-ed25519 \(b.blob)\nthree ssh-ed25519 \(c.blob)\n".utf8))
+    #expect(ok.map(\.name) == ["one", "two", "three"])
+    #expect(ok.map(\.fingerprint.value) == [a.fingerprint, b.fingerprint, c.fingerprint])
+}
+
+@Test func nonAsciiLinesAreDroppedAndNonAsciiRevokedLineEmptiesTheList() async throws {
+    let (b, _) = try throwawayBlob()
+    let (g, gfp) = try throwawayBlob()
+    let dropped = try await realEntries(Array("h\u{e9}st ssh-ed25519 \(b)\ngood ssh-ed25519 \(g)\nc ssh-ed25519 \(b) caf\u{e9}\n".utf8))
+    #expect(dropped.map(\.fingerprint.value) == [gfp])
+    #expect(try await realEntries(Array("@revoked h\u{e9} ssh-ed25519 \(b)\ngood ssh-ed25519 \(g)\n".utf8)).isEmpty)
 }
