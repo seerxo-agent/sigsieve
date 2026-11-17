@@ -35,6 +35,10 @@ public struct CLILocator: Sendable {
     /// The first candidate that exists decides: a broken one is reported, not skipped.
     public func locate(environment: (URL) -> ChildEnvironment) async throws -> CLIInfo {
         let candidates = self.candidates()
+        // An explicit setting is never replaced by another binary.
+        if let user = userPath, !user.isEmpty, Self.resolve(user) == nil {
+            throw CLIError.notFound(searched: [user])
+        }
         for candidate in candidates {
             guard let resolved = Self.resolve(candidate) else { continue }
             var st = stat()
@@ -61,7 +65,7 @@ public struct CLILocator: Sendable {
         let fromPATH = (appPATH ?? "").split(separator: ":", omittingEmptySubsequences: true)
             .filter { $0.hasPrefix("/") }.map { String($0).trimmingSlash + "/sigsieve" }
         var seen = Set<String>(), result: [String] = []
-        for p in (userPath.map { [$0] } ?? []) + fixed + fromPATH where seen.insert(p).inserted {
+        for p in (userPath.flatMap { $0.isEmpty ? nil : [$0] } ?? []) + fixed + fromPATH where seen.insert(p).inserted {
             result.append(p)
         }
         return result

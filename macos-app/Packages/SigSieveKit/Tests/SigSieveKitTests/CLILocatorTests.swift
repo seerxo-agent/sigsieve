@@ -56,14 +56,38 @@ private func locator(_ r: Running, user: String? = nil, app: String? = nil, fixe
         let fixed = try file(), app = try file()
         let missing = TestDirectory.make().appending(path: "sigsieve").path
         let r = FakeRunner()
-        // user missing -> skipped, fixed beats appPATH
-        let info = try await locator(r, user: missing, app: app.deletingLastPathComponent().path, fixed: [fixed.path])
+        // no user path -> fixed beats appPATH
+        let info = try await locator(r, user: nil, app: app.deletingLastPathComponent().path, fixed: [missing, fixed.path])
             .locate(environment: env)
         #expect(info.path.path == resolved(fixed.path))
-        // only appPATH left
-        let info2 = try await locator(FakeRunner(), user: missing, app: "relative:" + app.deletingLastPathComponent().path)
+        // empty user path counts as unset; only appPATH left
+        let info2 = try await locator(FakeRunner(), user: "", app: "relative:" + app.deletingLastPathComponent().path,
+                                      fixed: [missing])
             .locate(environment: env)
         #expect(info2.path.path == resolved(app.path))
+    }
+
+    @Test func missingUserPathDoesNotFallThrough() async throws {
+        let fixed = try file()
+        let missing = TestDirectory.make().appending(path: "sigsieve").path
+        let r = FakeRunner()
+        await #expect(throws: CLIError.notFound(searched: [missing])) {
+            try await locator(r, user: missing, fixed: [fixed.path]).locate(environment: env)
+        }
+        #expect(r.calls.isEmpty)
+    }
+
+    @Test func realRunnerRefusalOfRenamedTargetIsUnsupportedVersion() async throws {
+        let other = try file(name: "other")
+        let link = TestDirectory.make().appending(path: "sigsieve")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: other)
+        let error = await #expect(throws: CLIError.self) {
+            try await CLILocator(runner: ProcessRunner(), userPath: link.path, appPATH: nil, fixed: [])
+                .locate(environment: env)
+        }
+        guard case .unsupportedVersion(let p, let out) = error else { Issue.record("got \(String(describing: error))"); return }
+        #expect(p == resolved(other.path))
+        #expect(out.contains("notAllowed"))
     }
 
     @Test func symlinkIsResolvedInTheReportedPath() async throws {
@@ -128,12 +152,11 @@ private func locator(_ r: Running, user: String? = nil, app: String? = nil, fixe
     }
 
     @Test func nothingFoundListsWhatWasSearched() async throws {
-        let a = TestDirectory.make().appending(path: "sigsieve").path
         let b = TestDirectory.make().appending(path: "sigsieve").path
         let c = TestDirectory.make().path
         let app = "\(c):relative/bin::\(c)"
-        await #expect(throws: CLIError.notFound(searched: [a, b, c + "/sigsieve"])) {
-            try await locator(FakeRunner(), user: a, app: app, fixed: [b]).locate(environment: env)
+        await #expect(throws: CLIError.notFound(searched: [b, c + "/sigsieve"])) {
+            try await locator(FakeRunner(), user: nil, app: app, fixed: [b]).locate(environment: env)
         }
     }
 
