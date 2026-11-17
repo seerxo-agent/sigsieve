@@ -31,7 +31,11 @@ public enum AgentKeys {
     public static func parse(_ output: String) -> [AgentKey] {
         var seen = Set<Fingerprint>()
         var keys: [AgentKey] = []
-        for line in output.split(whereSeparator: \.isNewline) {
+        // Only "\n" separates lines (and a trailing "\r" is dropped), so U+2028, U+2029 and NEL
+        // inside a comment stay in the comment. Split on the scalar: "\r\n" is one Character.
+        for raw in output.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: true) {
+            var line = Substring(String(String.UnicodeScalarView(raw)))
+            if line.unicodeScalars.last == "\r" { line = line.dropLast() }
             guard let key = parseLine(line), seen.insert(key.fingerprint).inserted else { continue }
             keys.append(key)
         }
@@ -46,7 +50,8 @@ public enum AgentKeys {
         let rest = parts[2]
         guard rest.hasSuffix(")"), let open = rest.range(of: " (", options: .backwards) else { return nil }
         let type = rest[open.upperBound...].dropLast()
-        guard !type.isEmpty, !type.contains(" ") else { return nil }
+        guard !type.isEmpty, type.unicodeScalars.allSatisfy({ ("A"..."Z").contains($0) || ("0"..."9").contains($0) || $0 == "-" })
+        else { return nil }
         return AgentKey(fingerprint: fingerprint, bits: bits, type: String(type), comment: String(rest[..<open.lowerBound]))
     }
 
@@ -56,7 +61,12 @@ public enum AgentKeys {
             result = try await runner.run(.sshAdd, ["-l", "-E", "sha256"], environment: environment,
                                           stdin: nil, timeout: .seconds(10))
         } catch {
-            return .unreachable(String(describing: error))
+            switch error as? RunError {
+            case .timedOut?: return .unreachable("ssh-add did not answer within 10 seconds")
+            case .cannotStart(let reason)?: return .unreachable("ssh-add could not start: \(reason)")
+            case .notAllowed?: return .unreachable("ssh-add was not allowed to run")
+            case nil: return .unreachable("ssh-add failed: \(error.localizedDescription)")
+            }
         }
         switch result.exitCode {
         case 0:
@@ -76,8 +86,8 @@ public enum KeyFilter {
     public static func filter(_ keys: [AgentKey], query: String) -> [AgentKey] {
         guard !query.isEmpty else { return keys }
         return keys.filter {
-            $0.comment.localizedStandardContains(query) || $0.type.localizedStandardContains(query)
-                || $0.fingerprint.value.localizedStandardContains(query)
+            $0.comment.range(of: query, options: [.caseInsensitive, .literal]) != nil || $0.type.range(of: query, options: .caseInsensitive) != nil
+                || $0.fingerprint.value.range(of: query, options: [.caseInsensitive, .literal]) != nil
         }
     }
 }

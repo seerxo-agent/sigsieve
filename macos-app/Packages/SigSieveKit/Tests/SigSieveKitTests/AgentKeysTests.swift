@@ -68,6 +68,27 @@ private func synthetic(_ n: Int) -> [AgentKey] {
         #expect(AgentKeys.parse("garbage\n256 SHA256:\(a43) ok (ED25519)\n").count == 1)
     }
 
+    @Test func typeMustBeUppercaseAsciiAndBitsNumeric() {
+        #expect(AgentKeys.parse("256 SHA256:\(a43) key (old)\n") == [])
+        #expect(AgentKeys.parse("256 SHA256:\(a43) key (\u{E9}D)\n") == [])
+        #expect(AgentKeys.parse("x56 SHA256:\(a43) key (ED25519)\n") == [])
+        #expect(AgentKeys.parse("256 SHA256:\(a43) key (SK-ED25519)\n").count == 1)
+    }
+
+    @Test func unicodeLineSeparatorsStayInTheComment() {
+        let k = AgentKeys.parse("256 SHA256:\(a43) a\u{2028}b\u{2029}c\u{85}d (ED25519)\r\n")
+        #expect(k.count == 1); #expect(k[0].comment == "a\u{2028}b\u{2029}c\u{85}d")
+    }
+
+    @Test func runErrorsGetReadableSentences() async {
+        #expect(await AgentKeys.list(runner: FakeRunner(error: .timedOut), environment: env())
+                == .unreachable("ssh-add did not answer within 10 seconds"))
+        #expect(await AgentKeys.list(runner: FakeRunner(error: .cannotStart("boom")), environment: env())
+                == .unreachable("ssh-add could not start: boom"))
+        #expect(await AgentKeys.list(runner: FakeRunner(error: .notAllowed("/x")), environment: env())
+                == .unreachable("ssh-add was not allowed to run"))
+    }
+
     @Test func exit0ListsKeysAndUsesSshAddWithTimeout() async {
         let r = FakeRunner(exit: 0, stdout: "256 SHA256:\(a43) k (ED25519)\n")
         let state = await AgentKeys.list(runner: r, environment: env())
@@ -116,6 +137,12 @@ private func synthetic(_ n: Int) -> [AgentKey] {
         #expect(KeyFilter.filter(keys, query: "rsa").map(\.comment) == ["home"])
         #expect(KeyFilter.filter(keys, query: "sha256:bbb").map(\.comment) == ["home"])
         #expect(KeyFilter.filter(keys, query: "zzz").isEmpty)
+    }
+
+    @Test func filterDoesNotFoldDiacritics() {
+        let keys = [AgentKey(fingerprint: fp(a43), bits: 256, type: "RSA", comment: "\u{E9}")]
+        #expect(KeyFilter.filter(keys, query: "e").isEmpty)
+        #expect(KeyFilter.filter(keys, query: "\u{C9}").count == 1)
     }
 
     @Test func filtering500KeysIsFast() {

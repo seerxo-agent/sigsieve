@@ -7,14 +7,7 @@ enum TestDirectory {
     // Short names: TempDir paths must stay within 70 bytes, and the per-user
     // temporary directory itself takes 54 ("/private/var/folders/xx/<28>/T").
     private static let root: URL = {
-        let fm = FileManager.default
-        let base = fm.temporaryDirectory
-        var r: URL
-        repeat {
-            r = base.appending(path: "k_" + String(UUID().uuidString.prefix(4)))
-        } while fm.fileExists(atPath: r.path)
-        try! fm.createDirectory(at: r, withIntermediateDirectories: false)
-        chmod(r.path, 0o700)
+        let r = mkdirUnique(in: FileManager.default.temporaryDirectory, prefix: "k_")
         rootPath = r.path
         atexit { if let p = TestDirectory.rootPath { TestDirectory.removeTree(p) } }
         return r
@@ -22,11 +15,16 @@ enum TestDirectory {
 
     nonisolated(unsafe) private static var rootPath: String?
 
-    static func make() -> URL {
-        let u = root.appending(path: String(UUID().uuidString.prefix(4)))
-        try! FileManager.default.createDirectory(at: u, withIntermediateDirectories: false)
-        chmod(u.path, 0o700)
-        return u
+    static func make() -> URL { mkdirUnique(in: root, prefix: "") }
+
+    /// mkdir is the existence check: on EEXIST (a 4-hex name collided) try another name.
+    private static func mkdirUnique(in parent: URL, prefix: String) -> URL {
+        for _ in 0..<100 {
+            let u = parent.appending(path: prefix + String(UUID().uuidString.prefix(4)))
+            if mkdir(u.path, 0o700) == 0 { return u }
+            precondition(errno == EEXIST, "mkdir \(u.path): \(String(cString: strerror(errno)))")
+        }
+        fatalError("no free test directory name under \(parent.path) after 100 tries")
     }
 
     /// Tests leave restrictive modes and flags behind; restore them inside the
