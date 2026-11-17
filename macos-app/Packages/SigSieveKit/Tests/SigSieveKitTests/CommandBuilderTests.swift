@@ -15,9 +15,10 @@ private let q = Profile(server: HostInput("build-host")!, agent: .openssh(socket
 private let tail = ["--", "-o", "StrictHostKeyChecking=yes"]
 
 /// Runs `/bin/sh` with exactly `environment` (test only; Sources never start processes this way).
-private func sh(_ arguments: [String], environment: [String: String] = [:]) throws -> (status: Int32, out: String) {
+private func sh(_ arguments: [String], environment: [String: String] = [:],
+                shell: String = "/bin/sh") throws -> (status: Int32, out: String) {
     let proc = Process()
-    proc.executableURL = URL(filePath: "/bin/sh")
+    proc.executableURL = URL(filePath: shell)
     proc.arguments = arguments
     proc.environment = environment
     let pipe = Pipe()
@@ -128,10 +129,13 @@ func quotedWordRoundTripsThroughSh(_ s: String) throws {
     #expect(expected.contains("h'$(id)`id`") && expected.contains("/tmp/a b"))
 }
 
-@Test func copyableCommandRunsTheIntendedArgvWithHostileValues() throws {
+// The user may paste it into zsh (the macOS login shell) as well as sh.
+@Test(arguments: [["/bin/sh"], ["/bin/zsh", "-f"]])
+func copyableCommandRunsTheIntendedArgvWithHostileValues(_ shell: [String]) throws {
     let cli = try hostileCLI("#!/bin/sh\nprintf '%s\\n' \"$0\" \"$@\"\n")
     let env = try hostileEnvironment(cli: cli, agent: .secretive)
-    let r = try sh(["-c", CommandBuilder.copyableCommand(p, cli: cli, environment: env)], environment: ["TERM": "xterm"])
+    let r = try sh(Array(shell.dropFirst()) + ["-c", CommandBuilder.copyableCommand(p, cli: cli, environment: env)],
+                   environment: ["TERM": "xterm"], shell: shell[0])
     #expect(r.status == 0)
     let expected = [cli.path.path(percentEncoded: false), "connect"] + CommandBuilder.connectArguments(p, dryRun: false)
     #expect(r.out == expected.map { $0 + "\n" }.joined())
@@ -184,9 +188,21 @@ func quotedWordRoundTripsThroughSh(_ s: String) throws {
     #expect(lines.count == 3)
     #expect(lines[0] == "#!/bin/sh")
     #expect(lines[1] == "/bin/rm -rf -- '/d/x'")
-    #expect(lines[2].hasPrefix("exec /usr/bin/env -i HOME='/Users/t' PATH='/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin' LANG='en_US.UTF-8' TMPDIR='"))
-    #expect(lines[2].contains("' SSH_AUTH_SOCK='/Users/t/Library/") )
-    #expect(lines[2].hasSuffix(" TERM=\"$TERM\" '/opt/homebrew/bin/sigsieve' 'connect' 'web' '--secretive' '--allow-fingerprint' '\(fp1.value)' '--allow-fingerprint' '\(fp2.value)' '--' '-o' 'StrictHostKeyChecking=yes'"))
+    // These values hold no quote, so wrapping them in '' by hand is their quoted form.
+    let assignments = env.variables.map { "\($0.name)='\($0.value)'" }.joined(separator: " ")
+    #expect(lines[2] == "exec /usr/bin/env -i \(assignments) TERM=\"$TERM\" '/opt/homebrew/bin/sigsieve' 'connect' 'web' '--secretive' '--allow-fingerprint' '\(fp1.value)' '--allow-fingerprint' '\(fp2.value)' '--' '-o' 'StrictHostKeyChecking=yes'")
+}
+
+// The rm line is a recursive delete: anything but a named absolute directory stops the app.
+@Test(arguments: ["", "relative", "/", "//", "/a/../b", "/..", "/a/..", "/a/./b"])
+func launcherRefusesAnUnsafeSelfDirectory(_ dir: String) async {
+    await #expect(processExitsWith: .failure) { [dir] in
+        let cli = CLIInfo(path: URL(filePath: "/opt/homebrew/bin/sigsieve"), version: "sigsieve 1.0.0")
+        let env = try ChildEnvironment.make(home: "/Users/t", cliDirectory: "/opt/homebrew/bin",
+                                            tmpdir: TempDir.verified(TempDir.system()), agent: .secretive)
+        let p = Profile(server: HostInput("web")!, agent: .secretive, forwardedKeys: [], mode: .filtering, destinations: [])
+        _ = CommandBuilder.launcherScript(p, cli: cli, environment: env, selfDirectory: dir)
+    }
 }
 
 @Test func copyableCommandEqualsTheLauncherExecLine() throws {

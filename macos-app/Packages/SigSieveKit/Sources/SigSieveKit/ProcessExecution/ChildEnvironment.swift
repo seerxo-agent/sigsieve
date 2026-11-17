@@ -124,7 +124,8 @@ public struct EnvVar: Hashable, Sendable {
 }
 
 public enum ChildEnvironmentError: Error, Equatable {
-    /// Not absolute, or holds `:` (a second PATH entry) or a control character.
+    /// Not absolute, or holds `:` (a second PATH entry), `=` (env(1) in the
+    /// Terminal launcher would read the CLI path as an assignment) or a control character.
     case unsafeCLIDirectory(String)
     /// Not absolute, or holds a control character.
     case unsafeHome(String)
@@ -145,7 +146,7 @@ public struct ChildEnvironment: Hashable, Sendable {
 
     public static func make(home: String, cliDirectory: String, tmpdir: VerifiedTempDir,
                             agent: AgentChoice) throws -> ChildEnvironment {
-        guard isAbsoluteAndPlain(cliDirectory), !cliDirectory.contains(":") else {
+        guard isAbsoluteAndPlain(cliDirectory), !cliDirectory.contains(":"), !cliDirectory.contains("=") else {
             throw ChildEnvironmentError.unsafeCLIDirectory(cliDirectory)
         }
         // The CLI refuses a relative HOME for --secretive; refuse here first so

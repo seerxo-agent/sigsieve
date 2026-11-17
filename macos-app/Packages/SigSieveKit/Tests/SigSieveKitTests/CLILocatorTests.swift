@@ -118,6 +118,22 @@ private func locator(_ r: Running, user: String? = nil, app: String? = nil, fixe
         #expect(r.calls.isEmpty)
     }
 
+    @Test func resolvedPathWithEqualsSignIsRefusedBeforeRunning() async throws {
+        // A link without "=" to a CLI under a directory with "=": the resolved path decides.
+        let dir = TestDirectory.make().appending(path: "a=b")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: false)
+        let target = dir.appending(path: "sigsieve")
+        try "#!/bin/sh\n".write(to: target, atomically: false, encoding: .utf8)
+        chmod(target.path, 0o755)
+        let link = TestDirectory.make().appending(path: "sigsieve")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        let r = FakeRunner()
+        await #expect(throws: CLIError.notExecutable(resolved(target.path))) {
+            try await locator(r, user: link.path).locate(environment: env)
+        }
+        #expect(r.calls.isEmpty)
+    }
+
     @Test(arguments: ["sigsieve 1.0.0\n", "sigsieve 1.12.3\n"])
     func acceptsVersion1(_ out: String) async throws {
         let info = try await locator(FakeRunner(stdout: out), user: try file().path).locate(environment: env)

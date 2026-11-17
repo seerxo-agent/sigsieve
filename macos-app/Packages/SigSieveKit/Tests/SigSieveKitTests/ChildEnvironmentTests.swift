@@ -76,9 +76,10 @@ func unsafeSocketIsRefused(_ socket: String) throws {
     #expect(resolved(d).utf8.count + 33 > 103)
 }
 
-@Test(arguments: ["relative/bin", "", "/a:/b", "/a\nb", "/a\u{0}b"])
+@Test(arguments: ["relative/bin", "", "/a:/b", "/a\nb", "/a\u{0}b", "/a=b/bin"])
 func unsafeCLIDirectoryIsRefused(_ dir: String) throws {
-    // A ":" would add a second PATH entry; a relative one depends on the cwd.
+    // A ":" would add a second PATH entry; a relative one depends on the cwd;
+    // "=" makes env(1) in the launcher read the CLI path as an assignment.
     #expect(throws: ChildEnvironmentError.unsafeCLIDirectory(dir)) {
         try ChildEnvironment.make(home: "/h", cliDirectory: dir, tmpdir: try verified(), agent: .secretive)
     }

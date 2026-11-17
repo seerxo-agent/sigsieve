@@ -10,6 +10,8 @@ public struct CLIInfo: Hashable, Sendable {
 public enum CLIError: Error, Equatable {
     /// Every path that was tried, in order.
     case notFound(searched: [String])
+    /// Not an executable regular file, or the resolved path contains `=`
+    /// (env(1) in the Terminal launcher would read it as an assignment).
     case notExecutable(String)
     /// `--version` failed, was not answered in time, or printed something other than `sigsieve 1.x.y`.
     case unsupportedVersion(path: String, output: String)
@@ -42,7 +44,7 @@ public struct CLILocator: Sendable {
         for candidate in candidates {
             guard let resolved = Self.resolve(candidate) else { continue }
             var st = stat()
-            guard stat(resolved, &st) == 0, st.st_mode & S_IFMT == S_IFREG, access(resolved, X_OK) == 0
+            guard !resolved.contains("="), stat(resolved, &st) == 0, st.st_mode & S_IFMT == S_IFREG, access(resolved, X_OK) == 0
             else { throw CLIError.notExecutable(resolved) }
             let url = URL(filePath: resolved)
             let output: String

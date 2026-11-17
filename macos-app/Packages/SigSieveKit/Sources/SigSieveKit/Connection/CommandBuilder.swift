@@ -32,8 +32,10 @@ public enum CommandBuilder {
         let cliPath = cli.path.path(percentEncoded: false)
         // env(1) takes every word containing `=` before the program as an
         // assignment (`--` does not stop that), so such a path would run
-        // `connect` through PATH instead of the CLI.
-        precondition(!cliPath.contains("="), "the CLI path must not contain '=': \(cliPath)")
+        // `connect` through PATH instead of the CLI. CLILocator and
+        // ChildEnvironment.make refuse `=` upstream; this is only a backstop.
+        precondition(!cliPath.contains("="),
+                     "bug: CLILocator and ChildEnvironment refuse '=' in the CLI path, yet it reached CommandBuilder: \(cliPath)")
         let assignments = environment.variables.map { "\($0.name)=\(ShellQuote.quote($0.value))" }
         // TERM="$TERM" is the only unquoted text: Terminal's own value.
         let words = ["/usr/bin/env", "-i"] + assignments + ["TERM=\"$TERM\""]
@@ -44,9 +46,17 @@ public enum CommandBuilder {
     /// The `.command` file Terminal runs. It removes its own directory
     /// (`selfDirectory`, created by the caller) and then replaces itself with
     /// the CLI, with an environment of exactly `environment` plus TERM.
+    ///
+    /// The `rm` line is a recursive delete, so `selfDirectory` must be absolute,
+    /// name at least one component, and hold no `.` or `..` component; anything
+    /// else is a caller bug and stops the app.
     public static func launcherScript(_ p: Profile, cli: CLIInfo, environment: ChildEnvironment,
                                       selfDirectory: String) -> String {
-        """
+        let components = selfDirectory.split(separator: "/")
+        precondition(selfDirectory.hasPrefix("/") && !components.isEmpty
+                     && !components.contains(".") && !components.contains(".."),
+                     "launcher directory must be an absolute path below / without . or ..: \(selfDirectory)")
+        return """
         #!/bin/sh
         /bin/rm -rf -- \(ShellQuote.quote(selfDirectory))
         exec \(copyableCommand(p, cli: cli, environment: environment))
