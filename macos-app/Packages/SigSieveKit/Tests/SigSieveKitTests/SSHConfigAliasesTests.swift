@@ -243,3 +243,74 @@ private struct Fixture {
     unlink(path)
     #expect(stamp() == missing)
 }
+
+private func stampOf(_ path: String) -> FileStamp { SSHConfigAliases.stamps(for: [path])[0] }
+/// Gives `path` the access and modification times of `ref` (what `touch -r` and `cp -p` do).
+private func copyTimes(from ref: String, to path: String) {
+    var st = stat()
+    #expect(stat(ref, &st) == 0)
+    var times = [st.st_atimespec, st.st_mtimespec]
+    #expect(utimensat(AT_FDCWD, path, &times, AT_SYMLINK_NOFOLLOW) == 0)
+}
+
+/// The old size+mtime stamp missed each of these: size and mtime are the same before and after.
+@Test func stampNoticesChangesThatKeepSizeAndMtime() throws {
+    let dir = TestDirectory.make().path
+    let ref = dir + "/ref"
+    try Data("ref".utf8).write(to: URL(filePath: ref))
+    func put(_ p: String, _ text: String) throws { try Data(text.utf8).write(to: URL(filePath: p)); copyTimes(from: ref, to: p) }
+    func sameSizeAndTime(_ a: FileStamp, _ b: FileStamp) -> Bool { a.size == b.size && a.modified == b.modified }
+
+    // T1: same-size rewrite in place, mtime restored.
+    let kh = dir + "/known_hosts"
+    try put(kh, "@revoked * ssh-ed25519 K\n")
+    let t1a = stampOf(kh)
+    try put(kh, "#revoked * ssh-ed25519 K\n")
+    let t1b = stampOf(kh)
+    #expect(sameSizeAndTime(t1a, t1b)); #expect(t1a != t1b, "T1")
+
+    // T2: delete and recreate with the same size and mtime.
+    unlink(kh)
+    try put(kh, "#revoked * ssh-ed25519 K\n")
+    let t2 = stampOf(kh)
+    #expect(sameSizeAndTime(t1b, t2)); #expect(t1b != t2, "T2")
+
+    // T3: missing -> FIFO.
+    let fifo = dir + "/fifo"
+    let t3a = stampOf(fifo)
+    mkfifo(fifo, 0o600)
+    #expect(t3a != stampOf(fifo), "T3")
+
+    // T4: missing -> dangling symlink.
+    let dangling = dir + "/dangling"
+    let t4a = stampOf(dangling)
+    symlink(dir + "/nowhere", dangling)
+    #expect(t4a != stampOf(dangling), "T4")
+
+    // T5: symlink retargeted to a file with the same size and mtime.
+    let a = dir + "/a", b = dir + "/b", link = dir + "/link"
+    try put(a, "same"); try put(b, "same")
+    symlink(a, link)
+    let t5a = stampOf(link)
+    unlink(link); symlink(b, link); copyTimes(from: ref, to: link)
+    let t5b = stampOf(link)
+    #expect(sameSizeAndTime(t5a, t5b)); #expect(t5a != t5b, "T5")
+    // T5b: the link stays as it is, but its target is replaced by rename; only the followed stat sees it.
+    let c = dir + "/c"
+    try put(c, "same")
+    let t5c = stampOf(link)
+    #expect(rename(c, b) == 0)
+    let t5d = stampOf(link)
+    #expect(sameSizeAndTime(t5c, t5d)); #expect(t5c != t5d, "T5b")
+
+    // T6: missing -> exists under a directory this user cannot search.
+    let locked = dir + "/locked"
+    mkdir(locked, 0o700)
+    defer { chmod(locked, 0o700) }
+    let inLocked = locked + "/known_hosts2"
+    let t6a = stampOf(inLocked)
+    try put(inLocked, "x")
+    chmod(locked, 0)
+    let t6b = stampOf(inLocked)
+    #expect(t6a.size == -1); #expect(t6b.size == -1); #expect(t6a != t6b, "T6")
+}

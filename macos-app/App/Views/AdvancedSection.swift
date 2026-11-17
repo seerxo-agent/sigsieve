@@ -85,6 +85,9 @@ struct AdvancedSection: View {
             }
             .listStyle(.bordered(alternatesRowBackgrounds: false))
             .frame(height: 110)
+            if let error = model.knownHostsError {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
         }
     }
 
@@ -141,7 +144,7 @@ private struct KnownHostRow: View {
             }
             Spacer()
             Button("Add") {
-                model.addDestination(Destination(name: entry.name ?? entry.fingerprint.short, hostKeys: [entry.fingerprint]))
+                Task { await model.addKnownHost(entry) }
             }
             .disabled(isRSA || !model.canEdit)
         }

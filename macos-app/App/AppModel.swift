@@ -18,6 +18,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var agentState: AgentState = .unreachable("not asked yet")
     @Published private(set) var discovery: AliasDiscovery
     @Published private(set) var knownHosts: [KnownHostEntry] = []
+    /// Set when a picker Add was refused because the files behind the list changed.
+    @Published private(set) var knownHostsError: String?
+    /// `knownHostsStamps` taken just before `knownHosts` was read; an Add compares them with now.
+    private var knownHostsLoadedStamps: [FileStamp] = []
     @Published private(set) var profiles: [Profile] = []
     @Published var selectedServer: HostInput? { didSet { if oldValue != selectedServer { inputsChanged(agentMayDiffer: true) } } }
     @Published var keyQuery = ""
@@ -176,7 +180,7 @@ final class AppModel: ObservableObject {
         rediscover()
         await locateCLI()
         await refreshAgent()
-        await loadKnownHosts()
+        if !(await reloadKnownHostsIfChanged()) { await loadKnownHosts() }
         inputsChanged()
     }
 
@@ -246,11 +250,38 @@ final class AppModel: ObservableObject {
     }
 
     private func loadKnownHosts() async {
+        // Stamped before reading, and stored with the list it describes, so a change during the
+        // read is caught at the next Add.
+        let stamps = knownHostsStamps
         guard let tmp = verifiedTmp,
               let env = try? ChildEnvironment.make(home: home, cliDirectory: "/usr/bin", tmpdir: tmp, agent: .secretive)
-        else { knownHosts = []; return }
-        knownHosts = await KnownHosts.entries(file: knownHostsFile, revocationFiles: revocationFiles.map { URL(filePath: $0) },
-                                              runner: runner, environment: env)
+        else { knownHosts = []; knownHostsLoadedStamps = stamps; return }
+        let list = await KnownHosts.entries(file: knownHostsFile, revocationFiles: revocationFiles.map { URL(filePath: $0) },
+                                            runner: runner, environment: env)
+        knownHosts = list
+        knownHostsLoadedStamps = stamps
+    }
+
+    /// When a file behind the picker changed since the list was loaded (a key may have been
+    /// revoked), a passed check is reset at once (its result and Connect disappear) and the list
+    /// is reloaded. Returns whether that happened. connect() also re-compares the stamps.
+    private func reloadKnownHostsIfChanged() async -> Bool {
+        guard knownHostsStamps != knownHostsLoadedStamps else { return false }
+        resetCheck()
+        await loadKnownHosts()
+        return true
+    }
+
+    /// A picker Add. The list is only loaded on refresh, so if any file behind it changed since,
+    /// the check is reset, the list reloaded and the Add refused.
+    func addKnownHost(_ entry: KnownHostEntry) async {
+        let changed = await reloadKnownHostsIfChanged()
+        guard !changed, knownHosts.contains(entry) else {
+            knownHostsError = "known_hosts changed. The list was reloaded; pick again."
+            return
+        }
+        knownHostsError = nil
+        addDestination(Destination(name: entry.name ?? entry.fingerprint.short, hostKeys: [entry.fingerprint]))
     }
 
     // MARK: Gate bookkeeping

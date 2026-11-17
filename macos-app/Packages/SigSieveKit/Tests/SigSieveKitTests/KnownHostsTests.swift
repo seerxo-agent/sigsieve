@@ -490,3 +490,34 @@ private func throwawaySKBlob() throws -> String {
         #expect(await KnownHosts.entries(file: main, revocationFiles: [bad], runner: runner, environment: env()).isEmpty, "\(bad.lastPathComponent)")
     }
 }
+
+@Test func aSecondaryRevocationAlsoAppliesByText() async throws {
+    let main = try file("a ssh-ed25519 KEYA\n")
+    let second = TestDirectory.make().appending(path: "kh2")
+    try Data("@revoked * ssh-ed25519 KEYA\n".utf8).write(to: second)
+    // The fake fingerprints the two runs differently, so only the text layer can catch it.
+    let runner = FakeRunner(first: [out(b43, "*", "ED25519") + "\n"], then: out(a43, "a", "ED25519") + "\n")
+    #expect(await KnownHosts.entries(file: main, revocationFiles: [second], runner: runner, environment: env()).isEmpty)
+}
+
+@Test func aSecondaryRevocationAppliesByFingerprintToAnotherSpelling() async throws {
+    let r = try rsaPair(), k = try throwawayBlob()
+    let main = TestDirectory.make().appending(path: "known_hosts")
+    try Data("a ssh-rsa \(r.blob)\nb ssh-ed25519 \(k.blob)\n".utf8).write(to: main)
+    let second = TestDirectory.make().appending(path: "kh2")
+    try Data("@revoked * ssh-rsa \(r.alt)\n".utf8).write(to: second)
+    let entries = await KnownHosts.entries(file: main, revocationFiles: [second], runner: ProcessRunner(), environment: env())
+    #expect(entries.map(\.name) == ["b"])
+    #expect(!entries.contains { $0.fingerprint.value == r.fingerprint })
+}
+
+@Test func aRevocationPathUnderAnUnsearchableDirectoryGivesNoEntries() async throws {
+    let main = try file("a ssh-ed25519 KEYA\n")
+    let locked = TestDirectory.make().appending(path: "locked")
+    try FileManager.default.createDirectory(at: locked, withIntermediateDirectories: false)
+    chmod(locked.path, 0)
+    defer { chmod(locked.path, 0o700) }
+    let runner = FakeRunner(stdout: out(a43, "a", "ED25519") + "\n")
+    #expect(await KnownHosts.entries(file: main, revocationFiles: [locked.appending(path: "known_hosts2")],
+                                     runner: runner, environment: env()).isEmpty)
+}

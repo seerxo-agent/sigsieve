@@ -6,6 +6,24 @@ public struct FileStamp: Hashable, Sendable {
     public let path: String
     public let size: Int64
     public let modified: Date
+    /// Identity: mode, device, inode and ctime (sec, nsec) from `lstat`, then the same from
+    /// `stat`. A failed call records `-errno` instead, so ENOENT, EACCES and ENOTDIR differ.
+    ///
+    /// Security assumptions. Detects: a rewrite (even same size with the mtime restored), delete
+    /// and recreate, a symlink retargeted or its target replaced, a mode change, and missing vs
+    /// unreadable vs a FIFO or dangling link. Does not guarantee: ctime cannot be set from
+    /// userland, but root can, and a filesystem without real ctime/inode semantics (some network
+    /// or FUSE volumes) can defeat it. That is acceptable because the stamp only invalidates a
+    /// stale check shown in the UI; it is not a security boundary. The Rust CLI and OpenSSH
+    /// re-check at connect.
+    public let identity: [Int64]
+
+    init(path: String, size: Int64, modified: Date, identity: [Int64] = []) {
+        self.path = path
+        self.size = size
+        self.modified = modified
+        self.identity = identity
+    }
 }
 
 public struct AliasDiscovery: Equatable, Sendable {
@@ -36,17 +54,29 @@ public enum SSHConfigAliases {
         self.stamps(for: stamps.map(\.path))
     }
 
-    /// Stamps of the given paths as they are now (see `stampValue`).
+    /// Stamps of the given paths as they are now (see `stampValue` and `FileStamp.identity`).
     public static func stamps(for paths: [String]) -> [FileStamp] {
-        paths.map { path in
-            let (size, modified) = stampValue(path)
-            return FileStamp(path: path, size: size, modified: modified)
-        }
+        paths.map(stamp)
     }
 
-    /// What a stamp records: size and mtime; size -1 when the path is missing (or cannot be
-    /// stat'ed), -2 with the mtime when it exists but this user cannot read it (a chmod alone
-    /// changes neither size nor mtime, and unreadable is not the same as missing).
+    static func stamp(_ path: String) -> FileStamp {
+        let (size, modified) = stampValue(path)
+        return FileStamp(path: path, size: size, modified: modified, identity: identity(path))
+    }
+
+    private static func identity(_ path: String) -> [Int64] {
+        func fields(_ call: (UnsafeMutablePointer<stat>) -> Int32) -> [Int64] {
+            var st = stat()
+            guard call(&st) == 0 else { return [-Int64(errno)] }
+            return [Int64(st.st_mode), Int64(st.st_dev), Int64(bitPattern: UInt64(st.st_ino)),
+                    Int64(st.st_ctimespec.tv_sec), Int64(st.st_ctimespec.tv_nsec)]
+        }
+        return fields { lstat(path, $0) } + fields { stat(path, $0) }
+    }
+
+    /// Size and mtime of a stamp; size -1 when the path is missing (or cannot be stat'ed), -2
+    /// with the mtime when it exists but this user cannot read it. Size and mtime alone are not
+    /// enough (see the security assumptions on `FileStamp.identity`).
     static func stampValue(_ path: String) -> (Int64, Date) {
         guard let (size, modified) = statAny(path) else { return (-1, .distantPast) }
         return access(path, R_OK) == 0 ? (size, modified) : (-2, modified)
@@ -78,8 +108,7 @@ public enum SSHConfigAliases {
         /// a symlinked include that is retargeted must still be noticed.
         mutating func stamp(_ path: String) {
             guard stamped.insert(path).inserted else { return }
-            let (size, modified) = SSHConfigAliases.stampValue(path)
-            stamps.append(FileStamp(path: path, size: size, modified: modified))
+            stamps.append(SSHConfigAliases.stamp(path))
         }
 
         private mutating func noteLimit(_ arg: String) {

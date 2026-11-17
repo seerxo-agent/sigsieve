@@ -50,3 +50,26 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
         }
     }
 }
+
+/// The picker's App wiring, which the Kit tests cannot reach: every file it reads, those files
+/// in the check's stamps, and the two sentences that set expectations next to it.
+@Test func knownHostsPickerWiringAndWording() throws {
+    let app = appRoot.appending(path: "App")
+    let model = try String(contentsOf: app.appending(path: "AppModel.swift"), encoding: .utf8)
+    for path in ["\".ssh/known_hosts\"", "\"/etc/ssh/ssh_known_hosts\"", "\"/etc/ssh/ssh_known_hosts2\"", "\"/.ssh/known_hosts2\""] {
+        #expect(model.contains(path), "AppModel.swift lacks \(path)")
+    }
+    #expect(model.contains("SSHConfigAliases.stamps(for: [knownHostsFile.path] + revocationFiles)"))
+    #expect(model.contains("configStamps: discovery.stamps + knownHostsStamps"))
+    #expect(model.contains("revocationFiles: revocationFiles.map"))
+    let view = try String(contentsOf: app.appending(path: "Views/AdvancedSection.swift"), encoding: .utf8)
+    #expect(view.contains("Text(\"SigSieve does not verify that these host keys belong to the server.\")"))
+    #expect(view.contains("Text(\"Listed keys were found in your local known_hosts files. Custom UserKnownHostsFile, GlobalKnownHostsFile, KnownHostsCommand and RevokedHostKeys settings are not read.\")"))
+    // A picker Add goes through the stale-list guard, never straight to addDestination.
+    #expect(view.contains("await model.addKnownHost(entry)"))
+    #expect(!view.contains("Destination(name: entry.name"))
+    // A changed picker file resets the check and reloads, on Add and on refresh.
+    #expect(model.contains("guard knownHostsStamps != knownHostsLoadedStamps else { return false }\n        resetCheck()\n        await loadKnownHosts()"))
+    #expect(model.contains("let changed = await reloadKnownHostsIfChanged()\n        guard !changed, knownHosts.contains(entry) else {"))
+    #expect(model.contains("if !(await reloadKnownHostsIfChanged()) { await loadKnownHosts() }"))
+}
