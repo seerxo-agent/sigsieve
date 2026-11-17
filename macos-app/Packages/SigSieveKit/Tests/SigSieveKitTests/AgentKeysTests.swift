@@ -143,6 +143,11 @@ private func synthetic(_ n: Int) -> [AgentKey] {
         let keys = [AgentKey(fingerprint: fp(a43), bits: 256, type: "RSA", comment: "\u{E9}")]
         #expect(KeyFilter.filter(keys, query: "e").isEmpty)
         #expect(KeyFilter.filter(keys, query: "\u{C9}").count == 1)
+        // Canonical equivalence holds: NFD "e" + U+0301 is the same character as U+00E9.
+        let nfd = [AgentKey(fingerprint: fp(a43), bits: 256, type: "RSA", comment: "cafe\u{0301}")]
+        #expect(KeyFilter.filter(nfd, query: "cafe").isEmpty)
+        #expect(KeyFilter.filter(nfd, query: "caf\u{C9}").count == 1)
+        #expect(KeyFilter.filter(nfd, query: "caf\u{E9}").count == 1)
     }
 
     @Test func filtering500KeysIsFast() {

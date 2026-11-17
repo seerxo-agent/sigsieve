@@ -86,8 +86,8 @@ public enum KeyFilter {
     public static func filter(_ keys: [AgentKey], query: String) -> [AgentKey] {
         guard !query.isEmpty else { return keys }
         return keys.filter {
-            $0.comment.range(of: query, options: [.caseInsensitive, .literal]) != nil || $0.type.range(of: query, options: .caseInsensitive) != nil
-                || $0.fingerprint.value.range(of: query, options: [.caseInsensitive, .literal]) != nil
+            $0.comment.range(of: query, options: .caseInsensitive) != nil || $0.type.range(of: query, options: .caseInsensitive) != nil
+                || $0.fingerprint.value.range(of: query, options: .caseInsensitive) != nil
         }
     }
 }
