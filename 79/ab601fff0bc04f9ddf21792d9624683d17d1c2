@@ -1,0 +1,21 @@
+macos-app/Packages/SigSieveKit/Tests/SigSieveKitTests/ConnectionCheckTests.swift
+  s_63ebb2a1e1ff37::t_99d62554a2432d 1-201
+macos-app/Packages/SigSieveKit/Sources/SigSieveKit/Connection/ConnectionCheck.swift
+  s_63ebb2a1e1ff37::t_2d830f15e0c38f 1-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "79ab601fff0bc04f9ddf21792d9624683d17d1c2",
+  "prompts": {},
+  "sessions": {
+    "s_63ebb2a1e1ff37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e9e90eb-9ef2-40e7-84a4-ada9eadcfa7f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
