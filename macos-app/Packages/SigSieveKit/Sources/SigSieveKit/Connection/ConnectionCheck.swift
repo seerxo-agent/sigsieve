@@ -66,9 +66,9 @@ public enum ConnectionCheck {
 
     /// `sigsieve doctor`, then (only if it passed) `sigsieve connect --dry-run`.
     public static func run(_ inputs: CheckInputs, runner: Running) async -> CheckResult {
-        let doctor = await step(CommandBuilder.doctorArguments(inputs.profile), inputs, runner)
+        let doctor = await step(["doctor"] + CommandBuilder.doctorArguments(inputs.profile), inputs, runner)
         guard doctor.outcome == .passed else { return CheckResult(doctor: doctor, dryRun: nil) }
-        let dry = await step(CommandBuilder.connectArguments(inputs.profile, dryRun: true), inputs, runner)
+        let dry = await step(["connect"] + CommandBuilder.connectArguments(inputs.profile, dryRun: true), inputs, runner)
         return CheckResult(doctor: doctor, dryRun: dry)
     }
 

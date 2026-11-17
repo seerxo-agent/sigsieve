@@ -9,12 +9,12 @@ private let baseProfile = Profile(server: HostInput("web")!, agent: .secretive, 
 private let baseTmp = TestDirectory.make()
 private let baseStamp = FileStamp(path: "/cfg/config", size: 10, modified: Date(timeIntervalSince1970: 1000))
 
-private func makeInputs(profile: Profile = baseProfile, cliPath: String = "/opt/x/sigsieve",
+private func makeInputs(profile: Profile = baseProfile, home: String = "/Users/test", cliPath: String = "/opt/x/sigsieve",
                         version: String = "sigsieve 1.0.0", tmpdir: URL = baseTmp,
                         stamps: [FileStamp] = [baseStamp]) throws -> CheckInputs {
     let cli = CLIInfo(path: URL(filePath: cliPath), version: version)
     let env = try ChildEnvironment.make(
-        home: "/Users/test", cliDirectory: URL(filePath: cliPath).deletingLastPathComponent().path(percentEncoded: false),
+        home: home, cliDirectory: URL(filePath: cliPath).deletingLastPathComponent().path(percentEncoded: false),
         tmpdir: TempDir.verified(tmpdir.path(percentEncoded: false)), agent: profile.agent)
     return CheckInputs(profile: profile, cli: cli, environment: env, configStamps: stamps)
 }
@@ -24,6 +24,7 @@ private struct Call: Equatable {
     let arguments: [String]
     let timeout: Duration
     let stdin: Data?
+    let environment: ChildEnvironment
 }
 
 private final class FakeRunner: Running, @unchecked Sendable {
@@ -37,7 +38,7 @@ private final class FakeRunner: Running, @unchecked Sendable {
     func run(_ tool: Tool, _ arguments: [String], environment: ChildEnvironment,
              stdin: Data?, timeout: Duration) async throws -> RunResult {
         let next: Result<RunResult, RunError> = lock.withLock {
-            recorded.append(Call(tool: tool.url, arguments: arguments, timeout: timeout, stdin: stdin))
+            recorded.append(Call(tool: tool.url, arguments: arguments, timeout: timeout, stdin: stdin, environment: environment))
             return queue.removeFirst()
         }
         return try next.get()
@@ -58,8 +59,12 @@ private let passing = CheckResult(doctor: StepResult(outcome: .passed, lines: []
     #expect(r.passed)
     #expect(r.doctor.outcome == .passed)
     #expect(r.dryRun?.outcome == .passed)
-    #expect(runner.calls.map(\.arguments) == [CommandBuilder.doctorArguments(baseProfile),
-                                              CommandBuilder.connectArguments(baseProfile, dryRun: true)])
+    let key = fp("a").value
+    #expect(runner.calls.map(\.arguments) == [
+        ["doctor", "--secretive", "--allow-fingerprint", key],
+        ["connect", "web", "--secretive", "--allow-fingerprint", key, "--dry-run", "--", "-o", "StrictHostKeyChecking=yes"],
+    ])
+    #expect(runner.calls.allSatisfy { $0.environment == inputs.environment })
     #expect(runner.calls.allSatisfy { $0.tool == inputs.cli.path && $0.stdin == nil })
 }
 
@@ -157,13 +162,14 @@ private let passing = CheckResult(doctor: StepResult(outcome: .passed, lines: []
 }
 
 private enum Change: CaseIterable {
-    case forwardedKeys, mode, destinations, server, agent, cliPath, cliVersion, tmpdir, configStampSize, configStampDate
+    case home, forwardedKeys, mode, destinations, server, agent, cliPath, cliVersion, tmpdir, configStampSize, configStampDate
 
     func apply(to i: CheckInputs) throws -> CheckInputs {
         var p = i.profile
         var path = i.cli.path.path(percentEncoded: false), version = i.cli.version
-        var tmp = baseTmp, stamps = i.configStamps
+        var tmp = baseTmp, stamps = i.configStamps, home = "/Users/test"
         switch self {
+        case .home: home = "/Users/other"
         case .forwardedKeys: p.forwardedKeys.append(fp("b"))
         case .mode: p.mode = .binding
         case .destinations: p.destinations = [Destination(name: "d", hostKeys: [fp("c")])]
@@ -176,7 +182,7 @@ private enum Change: CaseIterable {
         case .configStampDate:
             stamps = [FileStamp(path: baseStamp.path, size: baseStamp.size, modified: Date(timeIntervalSince1970: 2000))]
         }
-        return try makeInputs(profile: p, cliPath: path, version: version, tmpdir: tmp, stamps: stamps)
+        return try makeInputs(profile: p, home: home, cliPath: path, version: version, tmpdir: tmp, stamps: stamps)
     }
 }
 
