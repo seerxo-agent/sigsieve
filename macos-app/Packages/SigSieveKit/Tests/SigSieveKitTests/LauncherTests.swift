@@ -61,7 +61,7 @@ private func exists(_ path: String) -> Bool {
     #expect(a.deletingLastPathComponent() != b.deletingLastPathComponent())
 }
 
-@Test func writeFailureThrowsAndLeavesNothing() throws {
+@Test func writeIntoAMissingDirectoryThrows() throws {
     let tmp = TestDirectory.make()
     let missing = tmp.appending(path: "nope").path(percentEncoded: false)
     #expect(throws: LauncherError.self) { try Launcher.write(makeInputs(tmpdir: tmp), under: missing) }

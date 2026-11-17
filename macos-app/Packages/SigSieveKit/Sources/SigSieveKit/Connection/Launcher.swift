@@ -32,28 +32,32 @@ public enum Launcher {
         guard tmpdir.hasPrefix("/"), !parts.contains("."), !parts.contains("..") else {
             throw LauncherError.unsafeTmpdir(tmpdir)
         }
+        let parentFD = Darwin.open(tmpdir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard parentFD >= 0 else { throw LauncherError.io(step: "opening the temporary directory", errno: errno) }
+        defer { close(parentFD) }
         var template = Array((tmpdir + "/" + prefix + "XXXXXX").utf8CString)
         guard mkdtemp(&template) != nil else { throw LauncherError.io(step: "creating the launcher directory", errno: errno) }
         let dir = String(decoding: template.dropLast().map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        let dirName = String(dir.split(separator: "/").last ?? "")
 
+        var dirFD: Int32 = -1
         var created = false
-        func fail(_ step: String) -> LauncherError {
-            let e = errno
-            if created { unlinkat(AT_FDCWD, dir + "/" + scriptName, 0) }
-            rmdir(dir)
+        // `e` is read by the caller straight after the failing call.
+        func fail(_ step: String, _ e: Int32) -> LauncherError {
+            if created { unlinkat(dirFD, scriptName, 0) }
+            if dirFD >= 0 { close(dirFD) }
+            unlinkat(parentFD, dirName, AT_REMOVEDIR)
             return .io(step: step, errno: e)
         }
-        guard chmod(dir, 0o700) == 0 else { throw fail("setting the launcher directory mode") }
-        let dirFD = Darwin.open(dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-        guard dirFD >= 0 else { throw fail("opening the launcher directory") }
-        defer { close(dirFD) }
+        dirFD = Darwin.open(dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard dirFD >= 0 else { let e = errno; throw fail("opening the launcher directory", e) }
+        guard fchmod(dirFD, 0o700) == 0 else { let e = errno; throw fail("setting the launcher directory mode", e) }
 
         let fd = openat(dirFD, scriptName, O_CREAT | O_EXCL | O_NOFOLLOW | O_WRONLY | O_CLOEXEC, 0o700)
-        guard fd >= 0 else { throw fail("creating \(scriptName)") }
+        guard fd >= 0 else { let e = errno; throw fail("creating the script", e) }
         created = true
-        defer { close(fd) }
         // Regardless of umask.
-        guard fchmod(fd, 0o700) == 0 else { throw fail("setting the script mode") }
+        guard fchmod(fd, 0o700) == 0 else { let e = errno; close(fd); throw fail("setting the script mode", e) }
 
         let text = CommandBuilder.launcherScript(inputs.profile, cli: inputs.cli, environment: inputs.environment,
                                                  selfDirectory: dir)
@@ -61,9 +65,11 @@ public enum Launcher {
         while !rest.isEmpty {
             let n = rest.withUnsafeBytes { Foundation.write(fd, $0.baseAddress, $0.count) }
             if n < 0 && errno == EINTR { continue }
-            guard n > 0 else { throw fail("writing the script") }
+            guard n > 0 else { let e = errno; close(fd); throw fail("writing the script", e) }
             rest = rest.dropFirst(n)
         }
+        close(fd)
+        close(dirFD)
         return URL(filePath: dir + "/" + scriptName)
     }
 
@@ -86,10 +92,12 @@ public enum Launcher {
     /// nothing but `connect.command` (a regular file) or nothing at all.
     /// Nothing is followed through a symlink; errors are ignored.
     public static func removeStale(under tmpdir: String, olderThan: TimeInterval = 3600, now: Date = .now) {
+        let parts = tmpdir.split(separator: "/")
+        guard tmpdir.hasPrefix("/"), !parts.contains("."), !parts.contains("..") else { return }
         let parent = Darwin.open(tmpdir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard parent >= 0 else { return }
         defer { close(parent) }
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: tmpdir) else { return }
+        guard let names = entryNames(parent) else { return }
         for name in names where name.hasPrefix(prefix) {
             let child = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
             guard child >= 0 else { continue }
