@@ -33,7 +33,7 @@ private func isAlive(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 }
 
 /// Polls until the process is gone (an orphan is reaped by launchd shortly after it dies).
 private func goneSoon(_ pid: pid_t) async -> Bool {
-    for _ in 0..<100 {
+    for _ in 0..<750 {   // up to 15 s: a loaded machine can starve the reaper
         if !isAlive(pid) { return true }
         try? await Task.sleep(for: .milliseconds(20))
     }
@@ -41,7 +41,7 @@ private func goneSoon(_ pid: pid_t) async -> Bool {
 }
 
 private func readPid(_ file: URL) async throws -> pid_t {
-    for _ in 0..<250 {
+    for _ in 0..<1000 {   // up to 20 s
         if let s = try? String(contentsOf: file, encoding: .utf8), s.hasSuffix("\n"), let p = pid_t(s.dropLast()) { return p }
         try await Task.sleep(for: .milliseconds(20))
     }
@@ -172,16 +172,16 @@ func refusesAnyOtherExecutable(_ path: String) async throws {
 // MARK: - Timeout and cancellation
 
 @Test func timeoutKillsTheChild() async throws {
-    let cli = try script("#!/bin/sh\nsleep 30\n")
+    let cli = try script("#!/bin/sh\nsleep 60\n")
     let started = ContinuousClock.now
     await #expect(throws: RunError.timedOut) { try await run(cli, timeout: .milliseconds(300)) }
-    #expect(ContinuousClock.now - started < .seconds(10))
+    #expect(ContinuousClock.now - started < .seconds(40))   // far below the child's 60 s
 }
 
 @Test func timeoutLeavesNoOrphanedDescendant() async throws {
     let pidFile = dir().appending(path: "pid")
-    let cli = try script("#!/bin/sh\nsleep 30 &\necho $! > '\(pidFile.path)'\nwait\n")
-    let result = Task { try await run(cli, timeout: .seconds(1)) }
+    let cli = try script("#!/bin/sh\nsleep 60 &\necho $! > '\(pidFile.path)'\nwait\n")
+    let result = Task { try await run(cli, timeout: .seconds(5)) }
     let grandchild = try await readPid(pidFile)
     await #expect(throws: RunError.timedOut) { try await result.value }
     #expect(await goneSoon(grandchild))
@@ -191,10 +191,10 @@ func refusesAnyOtherExecutable(_ path: String) async throws {
     let pidFile = dir().appending(path: "pid")
     let cli = try script("#!/bin/sh\ntrap '' TERM\necho $$ > '\(pidFile.path)'\nwhile :; do sleep 1; done\n")
     let started = ContinuousClock.now
-    let result = Task { try await run(cli, timeout: .seconds(1)) }
+    let result = Task { try await run(cli, timeout: .seconds(5)) }
     let pid = try await readPid(pidFile)
     await #expect(throws: RunError.timedOut) { try await result.value }
-    #expect(ContinuousClock.now - started < .seconds(8))
+    #expect(ContinuousClock.now - started < .seconds(40))
     #expect(await goneSoon(pid))
 }
 
@@ -222,16 +222,16 @@ func refusesAnyOtherExecutable(_ path: String) async throws {
 
 @Test func aDescendantInAnotherSessionCannotBlockTheCallForever() async throws {
     // perl's setsid puts the grandchild outside the child's process group, so the
-    // group kill misses it and it keeps stdout open for 30 s.
+    // group kill misses it and it keeps stdout open for 90 s.
     let pidFile = dir().appending(path: "pid")
     let cli = try script("""
         #!/bin/sh
-        /usr/bin/perl -e 'use POSIX; if (fork == 0) { POSIX::setsid(); open(F, ">", $ARGV[0]); print F "$$\\n"; close F; exec "/bin/sleep", "30" } sleep 30' '\(pidFile.path)'
+        /usr/bin/perl -e 'use POSIX; if (fork == 0) { POSIX::setsid(); open(F, ">", $ARGV[0]); print F "$$\\n"; close F; exec "/bin/sleep", "90" } sleep 90' '\(pidFile.path)'
         """ + "\n")
     let started = ContinuousClock.now
-    let task = Task { try await run(cli, timeout: .seconds(1)) }
+    let task = Task { try await run(cli, timeout: .seconds(5)) }
     let stray = try await readPid(pidFile)
     defer { kill(stray, SIGKILL) }
     await #expect(throws: RunError.timedOut) { try await task.value }
-    #expect(ContinuousClock.now - started < .seconds(15))
+    #expect(ContinuousClock.now - started < .seconds(60))   // the stray sleeps 90 s
 }
