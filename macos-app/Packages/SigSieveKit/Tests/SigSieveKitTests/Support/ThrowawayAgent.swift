@@ -9,6 +9,11 @@ struct ThrowawayAgentError: Error, CustomStringConvertible {
 /// A private `ssh-agent` holding freshly generated Ed25519 keys, in its own
 /// temporary directory. Never touches `~/.ssh`, the user's agent or their keys.
 /// `deinit` kills the agent and removes the directory.
+///
+/// A test process that crashes or is killed runs neither `deinit` nor the
+/// `TestDirectory` atexit handler: its `ssh-agent -D` children are orphaned
+/// (find them with `pgrep -fl 'ssh-agent -D -a'`) and the `k_*` root stays in
+/// the per-user temporary directory. Both are safe to kill and delete by hand.
 final class ThrowawayAgent: @unchecked Sendable {
     let directory: URL
     let socket: String

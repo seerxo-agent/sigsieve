@@ -37,7 +37,11 @@ private func evidence(_ name: String, _ text: String) {
 /// Wraps a real `ProcessRunner`. Records every call the Kit makes (argv as
 /// the Kit built it, exit code, output). With `config`, a `connect` call gets
 /// `-F <config>` inserted right after `--`, so `ssh -G` inside the CLI reads
-/// the temporary file instead of the passwd home's `~/.ssh/config`.
+/// the temporary file instead of the passwd home's `~/.ssh/config`. Without
+/// `config`, a `connect` call is recorded and refused (fails closed): it never
+/// reaches the CLI, so a regression cannot make the real ssh config be read.
+struct UnisolatedConnect: Error {}
+
 private final class RecordingRunner: Running, @unchecked Sendable {
     struct Call {
         /// As the Kit built it.
@@ -61,7 +65,11 @@ private final class RecordingRunner: Running, @unchecked Sendable {
     func run(_ tool: Tool, _ arguments: [String], environment: ChildEnvironment,
              stdin: Data?, timeout: Duration) async throws -> RunResult {
         var argv = arguments
-        if let config, argv.first == "connect", let dd = argv.firstIndex(of: "--") {
+        if argv.first == "connect" {
+            guard let config, let dd = argv.firstIndex(of: "--") else {
+                lock.withLock { recorded.append(Call(arguments: arguments, sent: [], result: nil)) }
+                throw UnisolatedConnect()
+            }
             argv.insert(contentsOf: ["-F", config], at: dd + 1)
         }
         do {
@@ -78,7 +86,8 @@ private final class RecordingRunner: Running, @unchecked Sendable {
         calls.enumerated().map { i, c in
             let r = c.result
             return "call \(i + 1): sigsieve \(c.arguments.joined(separator: " "))\n"
-                + (c.sent == c.arguments ? "" : "sent to the CLI: sigsieve \(c.sent.joined(separator: " "))\n")
+                + (c.sent.isEmpty ? "refused: connect without an isolated config, nothing ran\n" : "")
+                + (c.sent == c.arguments || c.sent.isEmpty ? "" : "sent to the CLI: sigsieve \(c.sent.joined(separator: " "))\n")
                 + "exit: \(r.map { String($0.exitCode) } ?? "threw")\n"
                 + "--- stdout ---\n\(r?.stdout ?? "")--- stderr ---\n\(r?.stderr ?? "")"
         }.joined(separator: "\n") + "\nrunner calls: \(calls.count)"
@@ -106,6 +115,20 @@ private func goodConfig() throws -> (config: URL, include: URL) {
     return (config, include)
 }
 
+private let passingResult = CheckResult(doctor: StepResult(outcome: .passed, lines: [], hint: nil, raw: ""),
+                                        dryRun: StepResult(outcome: .passed, lines: [], hint: nil, raw: ""))
+
+/// The gate is open for a passing result on these inputs, and `failing`,
+/// recorded afterwards for the same inputs, closes it.
+private func expectFailingResultClosesAnOpenGate(_ failing: CheckResult, _ i: CheckInputs,
+                                                 sourceLocation: SourceLocation = #_sourceLocation) {
+    var gate = CheckGate()
+    gate.record(passingResult, for: i)
+    #expect(gate.canConnect(i), "control: a passing result opens the gate", sourceLocation: sourceLocation)
+    gate.record(failing, for: i)
+    #expect(!gate.canConnect(i), sourceLocation: sourceLocation)
+}
+
 private let unknownKey = Fingerprint("SHA256:" + String(repeating: "a", count: 42) + "A")!
 private let hostKey = Fingerprint("SHA256:" + String(repeating: "h", count: 42) + "A")!
 
@@ -118,6 +141,41 @@ private let hostKey = Fingerprint("SHA256:" + String(repeating: "h", count: 42) 
     #expect(path != nil && !path!.isEmpty, "CI must set SIGSIEVE_TEST_CLI to the built CLI")
     #expect(testCLI != nil, "SIGSIEVE_TEST_CLI=\(path ?? "") is not an executable regular file")
     #expect(testCLI?.lastPathComponent == "sigsieve")
+}
+
+/// The wrapper fails closed: `connect` without an isolated config never runs.
+@Test func recordingRunnerRefusesConnectWithoutAConfig() async throws {
+    final class Counting: Running, @unchecked Sendable {
+        private let lock = NSLock()
+        private var n = 0
+        var count: Int { lock.withLock { n } }
+        func run(_ tool: Tool, _ arguments: [String], environment: ChildEnvironment,
+                 stdin: Data?, timeout: Duration) async throws -> RunResult {
+            lock.withLock { n += 1 }
+            return RunResult(exitCode: 0, stdout: "", stderr: "")
+        }
+    }
+    let inner = Counting()
+    let runner = RecordingRunner(inner)
+    let profile = Profile(server: HostInput("t")!, agent: .openssh(socket: "/s"), forwardedKeys: [unknownKey],
+                          mode: .filtering, destinations: [])
+    let env = try ChildEnvironment.make(home: TestDirectory.make().path, cliDirectory: "/usr/bin",
+                                        tmpdir: TempDir.verified(TempDir.system()), agent: profile.agent)
+    let i = CheckInputs(profile: profile, cli: CLIInfo(path: URL(filePath: "/nonexistent/sigsieve"), version: "sigsieve 1.0.0"),
+                        environment: env, configStamps: [])
+    // Doctor "passes" (fake exit 0); the dry run must be refused, not run.
+    let r = await ConnectionCheck.run(i, runner: runner)
+    #expect(r.doctor.outcome == .passed)
+    #expect(r.dryRun?.outcome == .failed)
+    #expect(!r.passed)
+    #expect(inner.count == 1)
+    #expect(runner.calls.count == 2)
+    #expect(runner.calls[1].arguments.first == "connect" && runner.calls[1].sent.isEmpty && runner.calls[1].result == nil)
+    await #expect(throws: UnisolatedConnect.self) {
+        _ = try await runner.run(.cli(i.cli.path), ["connect", "t", "--", "-o", "StrictHostKeyChecking=yes"],
+                                 environment: env, stdin: nil, timeout: .seconds(1))
+    }
+    #expect(inner.count == 1)
 }
 
 // MARK: - Throwaway agent (no CLI needed)
@@ -170,11 +228,12 @@ private let hostKey = Fingerprint("SHA256:" + String(repeating: "h", count: 42) 
         chmod(fake.path, 0o755)
         let resolved = String(cString: realpath(fake.path, nil)!)
         let runner = RecordingRunner()
+        // Built before locate: its environment closure cannot throw.
+        let env = try ChildEnvironment.make(home: dir.path, cliDirectory: dir.path,
+                                            tmpdir: TempDir.verified(TempDir.system()), agent: .openssh(socket: "/s"))
         await #expect(throws: CLIError.unsupportedVersion(path: resolved, output: "sigsieve 2.0.0\n")) {
             _ = try await CLILocator(runner: runner, userPath: fake.path, appPATH: nil, fixed: [])
-                .locate { _ in try! ChildEnvironment.make(home: dir.path, cliDirectory: dir.path,
-                                                          tmpdir: TempDir.verified(TempDir.system()),
-                                                          agent: .openssh(socket: "/s")) }
+                .locate { _ in env }
         }
         #expect(runner.calls.map(\.arguments) == [["--version"]])
     }
@@ -201,6 +260,16 @@ struct RealCLITests {
         #expect(r.dryRun?.raw.contains(passwdSSHConfig) == false)
         #expect(r.passed)
         #expect(runner.calls.map { $0.result?.exitCode } == [0, 0])
+        // The Kit's argv exactly; the wrapper only adds -F <tmp> after "--" on connect.
+        let doctorArgv = ["doctor"] + CommandBuilder.doctorArguments(i.profile)
+        let connectArgv = ["connect"] + CommandBuilder.connectArguments(i.profile, dryRun: true)
+        try #require(runner.calls.count == 2)
+        #expect(runner.calls[0].arguments == doctorArgv)
+        #expect(runner.calls[0].sent == doctorArgv)
+        #expect(runner.calls[1].arguments == connectArgv)
+        var expectedSent = connectArgv
+        expectedSent.insert(contentsOf: ["-F", config.path], at: try #require(connectArgv.firstIndex(of: "--")) + 1)
+        #expect(runner.calls[1].sent == expectedSent)
     }
 
     /// Owner case (c): the fingerprint is not in the agent.
@@ -217,9 +286,7 @@ struct RealCLITests {
         #expect(!r.passed)
         #expect(runner.calls.count == 1)
         #expect(runner.calls[0].result?.exitCode == 1)
-        var gate = CheckGate()
-        gate.record(r, for: i)
-        #expect(!gate.canConnect(i))
+        expectFailingResultClosesAnOpenGate(r, i)
     }
 
     @Test func dryRunPassesAgainstAnIsolatedConfig() async throws {
@@ -274,38 +341,23 @@ struct RealCLITests {
         #expect(check.dryRun?.outcome == .failed)
         #expect(!check.passed)
         #expect(runner.calls.map { $0.result?.exitCode } == [0, 1])
-        var gate = CheckGate()
-        gate.record(check, for: i)
-        #expect(!gate.canConnect(i))
+        expectFailingResultClosesAnOpenGate(check, i)
         #expect(access(marker.path, F_OK) != 0)
-    }
-
-    @Test func sigsieveVariablesInTheTestEnvironmentAreIgnored() async throws {
-        let agent = try ThrowawayAgent(keys: 1)
-        defer { withExtendedLifetime(agent) {} } // alive until the test ends, also in optimized builds
-        setenv("SIGSIEVE_ALLOW", unknownKey.value, 1)
-        setenv("SIGSIEVE_DESTINATIONS", hostKey.value, 1)
-        defer { unsetenv("SIGSIEVE_ALLOW"); unsetenv("SIGSIEVE_DESTINATIONS") }
-        let i = try await inputs(filtering(agent, agent.fingerprints), agent, stamps: [])
-        let runner = RecordingRunner()
-        let r = try await runner.run(.cli(i.cli.path), ["doctor"] + CommandBuilder.doctorArguments(i.profile),
-                                     environment: i.environment, stdin: nil, timeout: .seconds(60))
-        evidence("doctor with SIGSIEVE_* set in the test process", runner.report())
-        #expect(r.exitCode == 0)
-        #expect(r.stdout.contains("Allowlist:          1 valid fingerprint(s)"))
-        #expect(r.stdout.contains("available  ED25519 \(agent.fingerprints[0].value)"))
-        #expect(!(r.stdout + r.stderr).contains(unknownKey.value))
-        #expect(r.stdout.contains("Destination binding: not enforced"))
-        #expect(!i.environment.variables.contains { $0.name.hasPrefix("SIGSIEVE") })
     }
 
     /// Owner case (a): a user path that does not exist is reported, never replaced.
     @Test func wrongCLIPathRunsNothing() async throws {
         let missing = TestDirectory.make().appending(path: "nope/sigsieve").path
         let runner = RecordingRunner()
+        let env = try ChildEnvironment.make(home: TestDirectory.make().path, cliDirectory: "/usr/bin",
+                                            tmpdir: TempDir.verified(TempDir.system()), agent: .openssh(socket: "/s"))
         await #expect(throws: CLIError.notFound(searched: [missing])) {
+            // The closure cannot throw; asking for an environment at all is recorded as a failure.
             _ = try await CLILocator(runner: runner, userPath: missing, appPATH: testCLI!.deletingLastPathComponent().path,
-                                     fixed: [testCLI!.path]).locate { _ in fatalError("no environment is needed") }
+                                     fixed: [testCLI!.path]).locate { _ in
+                Issue.record("locate asked for an environment for a missing user path")
+                return env
+            }
         }
         print("=== EVIDENCE wrong CLI path: runner calls \(runner.calls.count) ===")
         #expect(runner.calls.isEmpty)
@@ -360,9 +412,7 @@ struct RealCLITests {
         #expect(r.doctor.hint == Profile.bindingWithoutHostKey)
         #expect(r.dryRun == nil)
         #expect(runner.calls.count == 0)
-        var gate = CheckGate()
-        gate.record(r, for: i)
-        #expect(!gate.canConnect(i))
+        expectFailingResultClosesAnOpenGate(r, i)
     }
 
     @Test func bindingWithAHostKeyReachesTheCLIAsAllowDestination() async throws {
@@ -384,5 +434,30 @@ struct RealCLITests {
         #expect(r.doctor.raw.contains("destination binding verified"))
         #expect(r.dryRun?.raw.contains("Destination binding: enforced") == true)
         #expect(r.passed)
+    }
+}
+
+/// Its own serialized suite: it changes this process's environment (setenv).
+/// `.serialized` orders the tests inside this suite only; other suites still
+/// run in parallel, but nothing else in the test process reads SIGSIEVE_*.
+@Suite(.serialized, .enabled(if: testCLI != nil, "set SIGSIEVE_TEST_CLI to the built sigsieve"))
+struct ProcessEnvironmentTests {
+    @Test func sigsieveVariablesInTheTestEnvironmentAreIgnored() async throws {
+        let agent = try ThrowawayAgent(keys: 1)
+        defer { withExtendedLifetime(agent) {} } // alive until the test ends, also in optimized builds
+        setenv("SIGSIEVE_ALLOW", unknownKey.value, 1)
+        setenv("SIGSIEVE_DESTINATIONS", hostKey.value, 1)
+        defer { unsetenv("SIGSIEVE_ALLOW"); unsetenv("SIGSIEVE_DESTINATIONS") }
+        let i = try await inputs(filtering(agent, agent.fingerprints), agent, stamps: [])
+        let runner = RecordingRunner()
+        let r = try await runner.run(.cli(i.cli.path), ["doctor"] + CommandBuilder.doctorArguments(i.profile),
+                                     environment: i.environment, stdin: nil, timeout: .seconds(60))
+        evidence("doctor with SIGSIEVE_* set in the test process", runner.report())
+        #expect(r.exitCode == 0)
+        #expect(r.stdout.contains("Allowlist:          1 valid fingerprint(s)"))
+        #expect(r.stdout.contains("available  ED25519 \(agent.fingerprints[0].value)"))
+        #expect(!(r.stdout + r.stderr).contains(unknownKey.value))
+        #expect(r.stdout.contains("Destination binding: not enforced"))
+        #expect(!i.environment.variables.contains { $0.name.hasPrefix("SIGSIEVE") })
     }
 }

@@ -28,14 +28,14 @@ Things no automated test here can see. Run on a real Mac before a release.
 | 4 | Connect opens Terminal with the session; no Automation prompt appears; the launcher directory is gone afterwards. | not run (2026-11-18) |
 | 5 | Pasting the copyable command into another terminal connects the same way. | not run (2026-11-18) |
 | 6 | Editing the profile while a session is open does not affect it; the window says "applies to new connections". | not run (2026-11-18) |
-| 7 | Editing `~/.ssh/config` after a passed check disables Connect on the next window open. | not run (2026-11-18): needs the owner's real `~/.ssh/config`; the Kit side is covered by `configChangeAfterAPassingCheckClosesTheGate` |
+| 7 | Editing `~/.ssh/config` after a passed check disables Connect on the next window open or when Connect is pressed. | not run (2026-11-18): needs the owner's real `~/.ssh/config`; the Kit side is covered by `configChangeAfterAPassingCheckClosesTheGate` |
 
 A throwaway agent for item 1:
 
 ```bash
 d=$(mktemp -d) && { /usr/bin/ssh-agent -D -a "$d/a.sock" >/dev/null & pid=$!; }
 for i in $(seq 1 500); do ssh-keygen -q -t ed25519 -N '' -C "k$i" -f "$d/k$i"; done
-SSH_AUTH_SOCK="$d/a.sock" ssh-add -q "$d"/k[0-9]*[0-9]
+SSH_AUTH_SOCK="$d/a.sock" ssh-add -q "$d"/k*[0-9]   # the 500 private keys, not the .pub files
 # select $d/a.sock in Settings; afterwards:
 kill "$pid"; rm -rf "$d"
 ```
