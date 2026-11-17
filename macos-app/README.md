@@ -1,5 +1,58 @@
 # SigSieve for macOS
 
+A SwiftUI menu bar app for the `sigsieve` command line tool. You pick an SSH
+server, choose which agent keys it may use, run the CLI's check, and connect in
+Terminal. The design is in `DESIGN.md`.
+
+The app is a convenience layer. The Rust CLI enforces: all filtering, key
+binding and the setup checks happen in `sigsieve`, which re-checks when it
+connects. The app has no copy of those checks, and a passing check in the
+window is not a guarantee the connection will be allowed.
+
+## Requirements
+
+- macOS 13 or newer; Apple Silicon first.
+- Xcode 16 or newer (CI uses Xcode 16.4 on `macos-15`).
+- The `sigsieve` CLI, built from this repository (Rust 1.99.1, see
+  `rust-toolchain.toml`).
+
+## Build and run
+
+From the repository root:
+
+```bash
+cargo build --release --locked
+xcodebuild -project macos-app/SigSieve.xcodeproj -scheme SigSieve \
+  -configuration Release -derivedDataPath macos-app/build build
+open macos-app/build/Build/Products/Release/SigSieve.app
+```
+
+The app is ad hoc signed for local runs. It has no Developer ID, is not
+notarized and is not distributed.
+
+## Known_hosts limits
+
+When you bind a server to its host key, the app lists keys from your known_hosts
+file. What it can and cannot see:
+
+- Only ASCII lines are read. A line with a non-ASCII byte is dropped and not
+  offered.
+- A non-ASCII byte in an `@revoked` line empties the whole list, because that
+  revocation could not be applied.
+- Only `~/.ssh/known_hosts` is offered. Revocations are also read from
+  `/etc/ssh/ssh_known_hosts`, `/etc/ssh/ssh_known_hosts2` and
+  `~/.ssh/known_hosts2` (for `@revoked` only).
+- A custom `UserKnownHostsFile`, `GlobalKnownHostsFile`, `KnownHostsCommand` or
+  `RevokedHostKeys` is not read, so an empty revocation result does not mean
+  every source was checked.
+- A listed key means only that it was found in local files, not that it was
+  verified.
+
+## Security status
+
+The tests are not a substitute for an independent external security audit. That
+audit is still outstanding.
+
 ## Tests
 
 The Swift package `Packages/SigSieveKit` holds the app's logic. Its
@@ -15,6 +68,14 @@ SIGSIEVE_TEST_CLI=$PWD/target/release/sigsieve \
 
 Without `SIGSIEVE_TEST_CLI` the tests that need the CLI are skipped. With
 `CI` set, a missing or non-executable `SIGSIEVE_TEST_CLI` fails the run.
+
+## CI
+
+`.github/workflows/macos-app.yml` runs on changes under `macos-app/`. On
+`macos-15` it selects Xcode 16.4 by path (the job fails on any other version),
+checks the project opens under it, builds the CLI with Rust 1.99.1, runs the
+package tests against that CLI, builds the app and lints its `Info.plist`. It
+uploads nothing and uses no secrets.
 
 ## Manual checklist
 

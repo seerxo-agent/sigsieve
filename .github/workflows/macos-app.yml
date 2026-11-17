@@ -1,0 +1,66 @@
+name: macOS app
+
+on:
+  pull_request:
+    paths: ['macos-app/**', '.github/workflows/macos-app.yml']
+  push:
+    paths: ['macos-app/**', '.github/workflows/macos-app.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-app-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Select Xcode 16.4 (not the runner default)
+        # Image readme of 2026-11-04: Xcode 16.4 lives at this path on macos-15.
+        # A missing app or any other version fails the job.
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.4.app
+          xcodebuild -version
+          xcodebuild -version | head -1 | grep -qx 'Xcode 16.4' || { echo "::error::not running Xcode 16.4"; exit 1; }
+      - name: Project is compatible with this Xcode
+        run: |
+          grep -q 'objectVersion = 77;' macos-app/SigSieve.xcodeproj/project.pbxproj || { echo "::error::objectVersion is not 77"; exit 1; }
+          xcodebuild -list -project macos-app/SigSieve.xcodeproj | tee xcodebuild-list.log
+          sed -n '/Targets:/,/Build Configurations:/p' xcodebuild-list.log | grep -qE '^[[:space:]]+SigSieve$' || { echo "::error::target SigSieve missing"; exit 1; }
+          sed -n '/Schemes:/,$p' xcodebuild-list.log | grep -qE '^[[:space:]]+SigSieve$' || { echo "::error::scheme SigSieve missing"; exit 1; }
+      - name: Install the Rust toolchain named in rust-toolchain.toml
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
+          test "$channel" = "1.99.1" || { echo "::error::rust-toolchain.toml channel is '$channel', job builds 1.99.1"; exit 1; }
+          rustup toolchain install --profile minimal --component rustfmt --component clippy 1.99.1
+          rustc +1.99.1 --version
+          rustc +1.99.1 --version | grep -q '^rustc 1\.99\.1 ' || { echo "::error::not running Rust 1.99.1"; exit 1; }
+      - name: Build the CLI
+        run: cargo +1.99.1 build --release --locked
+      - name: SigSieveKit tests (real CLI; CI set, so a missing CLI fails)
+        run: |
+          SIGSIEVE_TEST_CLI="$PWD/target/release/sigsieve" \
+            swift test --package-path macos-app/Packages/SigSieveKit
+      - name: Build the app
+        run: |
+          xcodebuild -project macos-app/SigSieve.xcodeproj -scheme SigSieve \
+            -configuration Release -derivedDataPath macos-app/build build
+      - name: App bundle exists and its Info.plist is valid
+        run: |
+          app=macos-app/build/Build/Products/Release/SigSieve.app
+          test -d "$app" || { echo "::error::$app missing"; exit 1; }
+          plutil -lint "$app/Contents/Info.plist"
