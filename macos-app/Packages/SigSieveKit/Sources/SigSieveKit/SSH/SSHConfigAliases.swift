@@ -81,17 +81,19 @@ public enum SSHConfigAliases {
                   let real = realpath(path),
                   visited.insert(real).inserted,
                   let (size, _) = SSHConfigAliases.statAny(real),
+                  SSHConfigAliases.isRegularFile(real),
                   size <= SSHConfigAliases.maxFileSize
             else { return }
+            // Charged before reading: a file that fails to read or decode still counts.
             guard filesRead < SSHConfigAliases.maxFiles, bytesRead + size <= SSHConfigAliases.maxBytes else {
                 limitHit = true
                 return
             }
+            filesRead += 1
+            bytesRead += size
             guard let data = FileManager.default.contents(atPath: real),
                   var text = String(data: data, encoding: .utf8)
             else { return }
-            filesRead += 1
-            bytesRead += Int64(data.count)
             if text.unicodeScalars.first == "\u{FEFF}" { text.unicodeScalars.removeFirst() }
 
             var inMatch = false
@@ -171,6 +173,11 @@ public enum SSHConfigAliases {
                 if limitHit { noteLimit(arg); return }
             }
         }
+    }
+
+    private static func isRegularFile(_ path: String) -> Bool {
+        var st = stat()
+        return stat(path, &st) == 0 && st.st_mode & S_IFMT == S_IFREG
     }
 
     private static func realpath(_ path: String) -> String? {

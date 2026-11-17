@@ -200,3 +200,26 @@ private struct Fixture {
     f.write(".ssh/config", "\u{FEFF}Host bom\n")
     #expect(SSHConfigAliases.discover(config: f.config, home: f.home).aliases.map(\.value) == ["bom"])
 }
+
+@Test func undecodableFilesStillCountAgainstTheFileCap() throws {
+    let f = Fixture()
+    for i in 0..<300 {
+        let u = f.home.appending(path: ".ssh/conf.d/b\(String(format: "%03d", i))")
+        try FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([0xFF, 0xFE, 0xFF, 0xFE]).write(to: u)
+    }
+    f.write(".ssh/conf.d/z-valid", "Host late\n")
+    f.write(".ssh/config", "Include conf.d/*\n")
+    let d = SSHConfigAliases.discover(config: f.config, home: f.home)
+    #expect(d.aliases.isEmpty)
+    #expect(d.skippedIncludes == ["conf.d/* (limit reached)"])
+}
+
+@Test func includeNamingADirectoryDoesNotSpendTheBudget() {
+    let f = Fixture()
+    f.write(".ssh/dir/x", "Host x\n")
+    f.write(".ssh/config", "Include dir\nHost a\n")
+    let d = SSHConfigAliases.discover(config: f.config, home: f.home)
+    #expect(d.aliases.map(\.value) == ["a"] && d.skippedIncludes == [])
+    #expect(d.stamps.contains { $0.path.hasSuffix("/dir") })
+}
