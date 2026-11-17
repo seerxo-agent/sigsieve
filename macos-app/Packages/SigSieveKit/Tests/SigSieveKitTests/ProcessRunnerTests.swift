@@ -102,7 +102,7 @@ func refusesAnyOtherExecutable(_ path: String) async throws {
 }
 
 @Test func fixedToolsRun() async throws {
-    // ssh-keygen without arguments prints usage to stderr and exits 1; nothing about the user is read.
+    // ssh-keygen -Y with an unknown operation fails with a usage error; nothing about the user is read.
     let r = try await ProcessRunner().run(.sshKeygen, ["-Y", "bogus"], environment: try env(), stdin: nil, timeout: .seconds(5))
     #expect(r.exitCode != 0)
 }
@@ -218,4 +218,20 @@ func refusesAnyOtherExecutable(_ path: String) async throws {
     task.cancel()
     await #expect(throws: CancellationError.self) { try await task.value }
     #expect(!FileManager.default.fileExists(atPath: marker.path))
+}
+
+@Test func aDescendantInAnotherSessionCannotBlockTheCallForever() async throws {
+    // perl's setsid puts the grandchild outside the child's process group, so the
+    // group kill misses it and it keeps stdout open for 30 s.
+    let pidFile = dir().appending(path: "pid")
+    let cli = try script("""
+        #!/bin/sh
+        /usr/bin/perl -e 'use POSIX; if (fork == 0) { POSIX::setsid(); open(F, ">", $ARGV[0]); print F "$$\\n"; close F; exec "/bin/sleep", "30" } sleep 30' '\(pidFile.path)'
+        """ + "\n")
+    let started = ContinuousClock.now
+    let task = Task { try await run(cli, timeout: .seconds(1)) }
+    let stray = try await readPid(pidFile)
+    defer { kill(stray, SIGKILL) }
+    await #expect(throws: RunError.timedOut) { try await task.value }
+    #expect(ContinuousClock.now - started < .seconds(15))
 }

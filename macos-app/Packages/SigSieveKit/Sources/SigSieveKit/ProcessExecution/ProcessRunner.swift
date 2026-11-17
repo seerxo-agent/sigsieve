@@ -56,8 +56,10 @@ public struct ProcessRunner: Running {
         }
     }
 
-    /// Resolves symlinks; the resolved path is what gets started, so the file
-    /// cannot be swapped for a link after the check.
+    /// Resolves symlinks and launches the resolved path. This is a misconfiguration
+    /// guard (a link or setting that points at some other program), not a defence
+    /// against a local attacker: anyone who can write that directory can place any
+    /// binary named `sigsieve`, or swap the file between this check and the launch.
     static func allowedExecutable(_ tool: Tool) throws -> URL {
         guard case .cli(let url) = tool else { return tool.url }
         guard let r = realpath(url.path, nil) else { throw RunError.notAllowed(url.path) }
@@ -124,8 +126,7 @@ private final class Job: @unchecked Sendable {
         for (pipe, isOut) in [(out, true), (err, false)] {
             readers.enter()
             DispatchQueue.global().async {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                box.set(data, isOut: isOut)
+                box.drain(pipe.fileHandleForReading, isOut: isOut)
                 readers.leave()
             }
         }
@@ -149,7 +150,18 @@ private final class Job: @unchecked Sendable {
         DispatchQueue.global().asyncAfter(deadline: .now() + .nanoseconds(Self.nanoseconds(timeout)), execute: timer)
 
         process.waitUntilExit()
-        readers.wait()
+        // Normally the pipes reach EOF with the child. After a timeout or cancel a
+        // descendant in another session (setsid) can still hold them: give the
+        // SIGKILL grace plus a second, then stop reading instead of blocking forever.
+        var giveUp: DispatchTime?
+        while readers.wait(timeout: .now() + .milliseconds(50)) == .timedOut {
+            lock.lock()
+            let stopping = cancelled || timedOut
+            lock.unlock()
+            guard stopping else { continue }
+            if giveUp == nil { giveUp = .now() + .seconds(3) }
+            if .now() > giveUp! { box.abandon() }
+        }
         timer.cancel()
         lock.lock()
         finished = true
@@ -168,6 +180,11 @@ private final class Job: @unchecked Sendable {
         let pid = process.processIdentifier
         send(SIGTERM, pid)
         DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(2)) { [self] in
+            lock.lock()
+            let done = finished
+            lock.unlock()
+            // Once the run is over the group id may belong to something else.
+            if done { return }
             // Also after the leader is gone: a descendant that ignored SIGTERM may still hold the pipes.
             send(SIGKILL, pid)
         }
@@ -182,18 +199,38 @@ private final class Job: @unchecked Sendable {
 
     private static func nanoseconds(_ d: Duration) -> Int {
         let c = d.components
-        return Int(clamping: max(0, c.seconds)).multipliedReportingOverflow(by: 1_000_000_000).partialValue
-            + Int(c.attoseconds / 1_000_000_000)
+        let (ns, overflow) = Int(clamping: max(0, c.seconds)).multipliedReportingOverflow(by: 1_000_000_000)
+        return overflow ? Int.max : ns.addingReportingOverflow(Int(c.attoseconds / 1_000_000_000)).partialValue
     }
 }
 
 private final class Output: @unchecked Sendable {
     private let lock = NSLock()
     private var out = Data(), err = Data()
-    func set(_ d: Data, isOut: Bool) {
-        lock.lock(); defer { lock.unlock() }
-        if isOut { out = d } else { err = d }
+    private var abandoned = false
+
+    /// Reads until EOF, or until `abandon()`; polls so a pipe held open by a
+    /// stray descendant cannot block this thread forever. Closes the read end.
+    func drain(_ handle: FileHandle, isOut: Bool) {
+        let fd = handle.fileDescriptor
+        var buffer = [UInt8](repeating: 0, count: 65536)
+        loop: while true {
+            lock.lock(); let stop = abandoned; lock.unlock()
+            if stop { break }
+            var p = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&p, 1, 100)
+            if ready < 0 { if errno == EINTR { continue } else { break } }
+            if ready == 0 { continue }
+            let n = read(fd, &buffer, buffer.count)
+            if n < 0 { if errno == EINTR { continue } else { break loop } }
+            if n == 0 { break }
+            lock.lock()
+            if isOut { out.append(contentsOf: buffer[0..<n]) } else { err.append(contentsOf: buffer[0..<n]) }
+            lock.unlock()
+        }
+        try? handle.close()
     }
+    func abandon() { lock.lock(); abandoned = true; lock.unlock() }
     func get() -> (Data, Data) {
         lock.lock(); defer { lock.unlock() }
         return (out, err)

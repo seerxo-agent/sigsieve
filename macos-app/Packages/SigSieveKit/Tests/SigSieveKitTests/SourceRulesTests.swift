@@ -30,7 +30,7 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
             #expect(!text.contains(token), "\(name) mentions \(token)")
         }
         // libc system(); the Kit's own TempDir.system() is a different function.
-        let withoutOwnSystem = text.replacingOccurrences(of: "func system(", with: "").replacingOccurrences(of: ".system(", with: "")
+        let withoutOwnSystem = text.replacingOccurrences(of: "func system(", with: "").replacingOccurrences(of: "TempDir.system(", with: "")
         #expect(!withoutOwnSystem.contains("system("), "\(name) calls system(")
     }
 }
