@@ -1,7 +1,7 @@
 import Foundation
 
 public struct KnownHostEntry: Hashable, Sendable {
-    /// First host pattern of the line; `nil` for a hashed entry.
+    /// First host pattern of the line that is not a negation (`!`); `nil` for a hashed entry or none.
     public let name: String?
     public let fingerprint: Fingerprint
     /// The OpenSSH key type as `ssh-keygen` prints it (`ED25519`, `RSA`, ...), so the UI can disable RSA.
@@ -15,11 +15,23 @@ public struct KnownHostEntry: Hashable, Sendable {
 }
 
 /// Compatibility impact of the ASCII-only rule: only lines made of printable ASCII (plus space and
-/// tab) are offered. A line with a non-ASCII comment or host name is dropped and not offered. A
-/// non-ASCII or control byte in an `@revoked` line empties the whole list, because that revocation
-/// could not be applied. ssh-keygen tokenises bytes, the app must too.
+/// tab, and no double quote) are offered. A line with a non-ASCII comment or host name is dropped
+/// and not offered. A non-ASCII or control byte in an `@revoked` line empties the whole list, because that
+/// revocation could not be applied. ssh-keygen tokenises bytes, the app must too.
+///
+/// Only host lines with a plain `ssh-ed25519`, `ecdsa-sha2-nistp256/384/521` or `ssh-rsa` key are
+/// offered (RSA so the UI can show it disabled). Certificates, security-key and unknown types are
+/// never offered, but still feed revocation.
+///
+/// Listed keys were found in local known_hosts files. Revocation comes only from `@revoked` lines
+/// in the file and in `revocationFiles` (the App passes `/etc/ssh/ssh_known_hosts`,
+/// `/etc/ssh/ssh_known_hosts2` and `~/.ssh/known_hosts2`). Custom `UserKnownHostsFile`,
+/// `GlobalKnownHostsFile`, `KnownHostsCommand` and `RevokedHostKeys` settings are not read (the
+/// app never runs `ssh -G`), so an empty revocation result does not mean every source was checked.
 public enum KnownHosts {
     static let maxFileBytes = 4 * 1024 * 1024
+    private static let offeredTypes: Set<String> = ["ssh-ed25519", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384",
+                                                    "ecdsa-sha2-nistp521", "ssh-rsa"]
 
     private struct Kept {
         let name: String?
@@ -28,26 +40,26 @@ public enum KnownHosts {
     }
 
     private struct Parsed {
-        var kept: [Kept]
-        /// Revoked lines without their marker, ready for ssh-keygen.
-        var revokedLines: [(host: String, line: String)]
+        var plain: [(fields: [Substring], line: String)] = []
+        /// Revoked lines as `host type blob`, ready for ssh-keygen.
+        var revokedLines: [(host: String, line: String)] = []
+        var revokedFields = Set<String>()
     }
 
     /// The known_hosts lines that may be offered by text alone: no comments, no `@` marker of any
-    /// kind, only byte-clean lines, and no key whose fields match a `@revoked` line. One line per
-    /// entry, in file order. `entries` adds revocation by fingerprint on top of this.
+    /// kind, only byte-clean lines of an offered key type, and no key whose fields match a
+    /// `@revoked` line. One line per entry, in file order. `entries` adds revocation by fingerprint.
     public static func selectableLines(_ text: String) -> String {
-        (parse(Data(text.utf8))?.kept ?? []).map(\.line).joined(separator: "\n")
+        guard let parsed = parse(Data(text.utf8), offer: true) else { return "" }
+        return kept(parsed).map(\.line).joined(separator: "\n")
     }
 
     /// Works on bytes, because ssh-keygen tokenises bytes: a line is clean only if every byte is
     /// printable ASCII, space or tab (one trailing CR is dropped). An unclean line is dropped, but
     /// one that is or hides an `@revoked` line makes the whole file unusable (nil): its revocation
-    /// could not be applied.
-    private static func parse(_ data: Data) -> Parsed? {
-        var parsed = Parsed(kept: [], revokedLines: [])
-        var revoked = Set<String>()
-        var plain: [(fields: [Substring], line: String)] = []
+    /// could not be applied. With `offer` false only revocations are collected.
+    private static func parse(_ data: Data, offer: Bool) -> Parsed? {
+        var parsed = Parsed()
         for var raw in data.split(separator: 0x0A, omittingEmptySubsequences: true) {
             if raw.last == 0x0D { raw = raw.dropLast() }
             // '"' is unclean: ssh-keygen skips a quoted host field (it may hold spaces) while ssh
@@ -62,41 +74,65 @@ public enum KnownHosts {
             let fields = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
             guard let first = fields.first else { continue }
             if first.hasPrefix("@") {
-                // "@revoked <hosts> <type> <blob>"; every non-type field after the hosts counts, so a
-                // malformed revoked line errs towards revoking more.
-                if first.lowercased().hasPrefix("@revoked") {
-                    // "@revoked*" and a revoked line without host, type and blob are malformed
-                    // revocations: they cannot be applied, so the file is refused.
-                    guard first.lowercased() == "@revoked", fields.count >= 4 else { return nil }
-                    for f in fields.dropFirst(2) where !isKeyType(f) { revoked.insert(String(f)) }
+                // ssh knows exactly (case-sensitively) "@revoked" and "@cert-authority", followed by
+                // hosts, not by another marker; anything else is a malformed (possibly revoking) line.
+                guard first == "@revoked" || first == "@cert-authority",
+                      !fields.dropFirst().contains(where: { $0.hasPrefix("@") }) else { return nil }
+                if first == "@revoked" {
+                    // A revoked line without host, type and blob cannot be applied, nor one whose
+                    // all-digit host ssh-keygen would skip: refuse the file.
+                    guard fields.count >= 4, !isNumeric(fields[1]) else { return nil }
+                    // Permissive on purpose: certs, sk and unknown types still revoke.
+                    for f in fields.dropFirst(2) where !isKeyType(f) { parsed.revokedFields.insert(String(f)) }
                     parsed.revokedLines.append((String(fields[1]), fields[1...3].joined(separator: " ")))
                 }
-            } else if fields.count >= 3, !isKeyType(first), !fields[1].lowercased().hasSuffix("-cert-v01@openssh.com") {
-                // Certificate lines are not offered (a cert of K still revokes K, in the revoked run).
-                // A line starting with a key type is a bare key, not a host line; ssh-keygen would
-                // fingerprint it whatever follows, so it is never offered.
+            } else if offer, fields.count >= 3, offeredTypes.contains(String(fields[1])), fields[0] != fields[2],
+                      !isNumeric(fields[0]) {
                 // ssh-keygen gets exactly "host type blob" and never the raw line: it tokenises
                 // differently from ssh (quoted fields, trailing comments), so what it fingerprints
-                // must be built from the fields this code and ssh agree on.
-                plain.append((fields, fields[0...2].joined(separator: " ")))
+                // must be built from the fields this code and ssh agree on. The type allowlist (not a
+                // guess about bare keys) decides what is a host line; a line whose host is its blob is
+                // a bare key; an all-digit host is skipped by ssh-keygen, which would shift the output.
+                parsed.plain.append((fields, fields[0...2].joined(separator: " ")))
             }
         }
-        parsed.kept = plain.compactMap { fields, line in
-            guard !fields.contains(where: { revoked.contains(String($0)) }) else { return nil }
+        return parsed
+    }
+
+    private static func kept(_ parsed: Parsed) -> [Kept] {
+        parsed.plain.compactMap { fields, line in
+            guard !fields.contains(where: { parsed.revokedFields.contains(String($0)) }) else { return nil }
             let host = fields[0]
-            // ponytail: name is the first pattern of the input line (output order is checked in entries).
-            let name = host.hasPrefix("|1|") ? nil : String(host.split(separator: ",", omittingEmptySubsequences: false)[0])
+            // The label is the first pattern that is not a negation; none (or hashed) means nil.
+            let name = host.hasPrefix("|1|") ? nil
+                : host.split(separator: ",").first { !$0.hasPrefix("!") }.map(String.init)
             return Kept(name: name, host: String(host), line: line)
         }
-        return parsed
+    }
+
+    private static func isNumeric(_ f: Substring) -> Bool {
+        let digits = f.hasPrefix("+") || f.hasPrefix("-") ? f.dropFirst() : f
+        return !digits.isEmpty && digits.utf8.allSatisfy { $0 >= 0x30 && $0 <= 0x39 }
     }
 
     private static func isKeyType(_ f: Substring) -> Bool {
         ["ssh-", "ecdsa-", "sk-", "rsa-"].contains { f.lowercased().hasPrefix($0) }
     }
 
-    public static func entries(file: URL, runner: Running, environment: ChildEnvironment) async -> [KnownHostEntry] {
-        guard let data = read(file), let parsed = parse(data), !parsed.kept.isEmpty else { return [] }
+    /// `revocationFiles` contribute only their `@revoked` lines. A missing one is skipped; one that
+    /// exists but cannot be read safely, or holds an unusable `@revoked` line, gives [].
+    public static func entries(file: URL, revocationFiles: [URL] = [], runner: Running,
+                               environment: ChildEnvironment) async -> [KnownHostEntry] {
+        guard let data = read(file), var parsed = parse(data, offer: true) else { return [] }
+        for extra in revocationFiles {
+            var st = stat()
+            if lstat(extra.path, &st) != 0, errno == ENOENT { continue }
+            guard let d = read(extra), let p = parse(d, offer: false) else { return [] }
+            parsed.revokedLines += p.revokedLines
+            parsed.revokedFields.formUnion(p.revokedFields)
+        }
+        let kept = kept(parsed)
+        guard !kept.isEmpty else { return [] }
         // Revocation by meaning: the revoked keys are fingerprinted the same way, so any spelling
         // ssh-keygen accepts for a key is caught. A failed or short run loses revocations: fail closed.
         var revokedFingerprints = Set<Fingerprint>()
@@ -104,11 +140,12 @@ public enum KnownHosts {
             guard let found = await fingerprints(parsed.revokedLines.map { ($0.host, $0.line) }, runner, environment) else { return [] }
             revokedFingerprints = Set(found.map(\.0))
         }
-        guard let found = await fingerprints(parsed.kept.map { ($0.host, $0.line) }, runner, environment) else { return [] }
+        guard let found = await fingerprints(kept.map { ($0.host, $0.line) }, runner, environment) else { return [] }
         var seen = Set<Fingerprint>()
         var entries: [KnownHostEntry] = []
-        for ((fingerprint, type), item) in zip(found, parsed.kept) {
-            guard !revokedFingerprints.contains(fingerprint), seen.insert(fingerprint).inserted else { continue }
+        for ((fingerprint, type), item) in zip(found, kept) {
+            guard !type.hasSuffix("-CERT"), !revokedFingerprints.contains(fingerprint),
+                  seen.insert(fingerprint).inserted else { continue }
             entries.append(KnownHostEntry(name: item.name, fingerprint: fingerprint, type: type))
         }
         return entries

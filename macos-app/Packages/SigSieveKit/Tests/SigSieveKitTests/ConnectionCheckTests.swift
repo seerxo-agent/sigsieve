@@ -9,9 +9,12 @@ private let baseProfile = Profile(server: HostInput("web")!, agent: .secretive, 
 private let baseTmp = TestDirectory.make()
 private let baseStamp = FileStamp(path: "/cfg/config", size: 10, modified: Date(timeIntervalSince1970: 1000))
 
+private let baseKnownHostsStamp = FileStamp(path: "/Users/test/.ssh/known_hosts", size: 5, modified: Date(timeIntervalSince1970: 1000))
+private let baseSystemKnownHostsStamp = FileStamp(path: "/etc/ssh/ssh_known_hosts2", size: -1, modified: .distantPast)
+
 private func makeInputs(profile: Profile = baseProfile, home: String = "/Users/test", cliPath: String = "/opt/x/sigsieve",
                         version: String = "sigsieve 1.0.0", tmpdir: URL = baseTmp,
-                        stamps: [FileStamp] = [baseStamp]) throws -> CheckInputs {
+                        stamps: [FileStamp] = [baseStamp, baseKnownHostsStamp, baseSystemKnownHostsStamp]) throws -> CheckInputs {
     let cli = CLIInfo(path: URL(filePath: cliPath), version: version)
     let env = try ChildEnvironment.make(
         home: home, cliDirectory: URL(filePath: cliPath).deletingLastPathComponent().path(percentEncoded: false),
@@ -162,7 +165,8 @@ private let passing = CheckResult(doctor: StepResult(outcome: .passed, lines: []
 }
 
 private enum Change: CaseIterable {
-    case home, forwardedKeys, mode, destinations, server, agent, cliPath, cliVersion, tmpdir, configStampSize, configStampDate
+    case home, forwardedKeys, mode, destinations, server, agent, cliPath, cliVersion, tmpdir, configStampSize, configStampDate, knownHostsDeleted, knownHostsModified, knownHostsUnreadable,
+         systemKnownHostsCreated
 
     func apply(to i: CheckInputs) throws -> CheckInputs {
         var p = i.profile
@@ -178,9 +182,18 @@ private enum Change: CaseIterable {
         case .cliPath: path = "/opt/y/sigsieve"
         case .cliVersion: version = "sigsieve 1.0.1"
         case .tmpdir: tmp = TestDirectory.make()
-        case .configStampSize: stamps = [FileStamp(path: baseStamp.path, size: 11, modified: baseStamp.modified)]
+        case .configStampSize: stamps[0] = FileStamp(path: baseStamp.path, size: 11, modified: baseStamp.modified)
         case .configStampDate:
-            stamps = [FileStamp(path: baseStamp.path, size: baseStamp.size, modified: Date(timeIntervalSince1970: 2000))]
+            stamps[0] = FileStamp(path: baseStamp.path, size: baseStamp.size, modified: Date(timeIntervalSince1970: 2000))
+        // The files the destination picker reads: deleting, changing or hiding one closes the gate.
+        case .knownHostsDeleted:
+            stamps[1] = FileStamp(path: baseKnownHostsStamp.path, size: -1, modified: .distantPast)
+        case .knownHostsUnreadable:
+            stamps[1] = FileStamp(path: baseKnownHostsStamp.path, size: -2, modified: baseKnownHostsStamp.modified)
+        case .knownHostsModified:
+            stamps[1] = FileStamp(path: baseKnownHostsStamp.path, size: 6, modified: baseKnownHostsStamp.modified)
+        case .systemKnownHostsCreated:
+            stamps[2] = FileStamp(path: baseSystemKnownHostsStamp.path, size: 0, modified: Date(timeIntervalSince1970: 3000))
         }
         return try makeInputs(profile: p, home: home, cliPath: path, version: version, tmpdir: tmp, stamps: stamps)
     }

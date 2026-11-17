@@ -33,12 +33,23 @@ public enum SSHConfigAliases {
     }
 
     public static func currentStamps(for stamps: [FileStamp]) -> [FileStamp] {
-        stamps.map { s in
-            guard let (size, modified) = statAny(s.path) else {
-                return FileStamp(path: s.path, size: -1, modified: .distantPast)
-            }
-            return FileStamp(path: s.path, size: size, modified: modified)
+        self.stamps(for: stamps.map(\.path))
+    }
+
+    /// Stamps of the given paths as they are now (see `stampValue`).
+    public static func stamps(for paths: [String]) -> [FileStamp] {
+        paths.map { path in
+            let (size, modified) = stampValue(path)
+            return FileStamp(path: path, size: size, modified: modified)
         }
+    }
+
+    /// What a stamp records: size and mtime; size -1 when the path is missing (or cannot be
+    /// stat'ed), -2 with the mtime when it exists but this user cannot read it (a chmod alone
+    /// changes neither size nor mtime, and unreadable is not the same as missing).
+    static func stampValue(_ path: String) -> (Int64, Date) {
+        guard let (size, modified) = statAny(path) else { return (-1, .distantPast) }
+        return access(path, R_OK) == 0 ? (size, modified) : (-2, modified)
     }
 
     /// Size and mtime of a regular file or directory (symlinks followed), else nil.
@@ -67,7 +78,7 @@ public enum SSHConfigAliases {
         /// a symlinked include that is retargeted must still be noticed.
         mutating func stamp(_ path: String) {
             guard stamped.insert(path).inserted else { return }
-            let (size, modified) = SSHConfigAliases.statAny(path) ?? (-1, .distantPast)
+            let (size, modified) = SSHConfigAliases.stampValue(path)
             stamps.append(FileStamp(path: path, size: size, modified: modified))
         }
 

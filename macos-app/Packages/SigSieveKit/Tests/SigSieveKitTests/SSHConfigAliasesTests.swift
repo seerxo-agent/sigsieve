@@ -223,3 +223,23 @@ private struct Fixture {
     #expect(d.aliases.map(\.value) == ["a"] && d.skippedIncludes == [])
     #expect(d.stamps.contains { $0.path.hasSuffix("/dir") })
 }
+
+@Test func stampOfAFileChangesWhenItIsCreatedChangedHiddenOrDeleted() throws {
+    let path = TestDirectory.make().appending(path: "known_hosts").path
+    func stamp() -> FileStamp { SSHConfigAliases.stamps(for: [path])[0] }
+    let missing = stamp()
+    #expect(missing.size == -1)
+    try Data("a".utf8).write(to: URL(filePath: path))
+    let created = stamp()
+    #expect(created != missing)
+    try Data("ab".utf8).write(to: URL(filePath: path))
+    let changed = stamp()
+    #expect(changed != created)
+    chmod(path, 0)
+    let hidden = stamp()
+    // Unreadable is not missing: a revocation file that appears unreadable changes what the picker shows.
+    #expect(hidden != changed); #expect(hidden != missing); #expect(hidden.size == -2)
+    chmod(path, 0o600)
+    unlink(path)
+    #expect(stamp() == missing)
+}

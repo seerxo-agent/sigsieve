@@ -44,7 +44,7 @@ private func file(_ text: String) throws -> URL {
     host-a ssh-ed25519 AAAAC3Nza...A
     @revoked host-b ssh-ed25519 AAAAC3Nza...B
     @cert-authority *.example ssh-ed25519 AAAAC3Nza...C
-      @REVOKED host-d ssh-ed25519 AAAAC3Nza...D
+      @revoked host-d ssh-ed25519 AAAAC3Nza...D
     |1|c2FsdA==|aGFzaA== ssh-ed25519 AAAAC3Nza...E
     """
     let kept = KnownHosts.selectableLines(text)
@@ -54,9 +54,9 @@ private func file(_ text: String) throws -> URL {
 }
 
 @Test func aKeyRevokedAnywhereIsNotOfferedFromAnUnmarkedLine() {
-    let text = "host-a ssh-ed25519 KEYX\n@revoked * ssh-ed25519 KEYX\nhost-c ssh-ed25519 KEYY\n@Weird host-d ssh-ed25519 KEYZ"
+    let text = "host-a ssh-ed25519 KEYX\n@revoked * ssh-ed25519 KEYX\nhost-c ssh-ed25519 KEYY"
     let kept = KnownHosts.selectableLines(text)
-    #expect(!kept.contains("KEYX")); #expect(!kept.contains("KEYZ")); #expect(kept.contains("KEYY"))
+    #expect(!kept.contains("KEYX")); #expect(kept.contains("KEYY"))
 }
 
 @Test func entriesAreFingerprintedFromStdinNotFromTheFile() async throws {
@@ -212,11 +212,11 @@ private func file(_ text: String) throws -> URL {
     #expect(await KnownHosts.entries(file: f, runner: runner, environment: env()).map(\.name) == ["host-b"])
 }
 
-private func throwawayBlob() throws -> (blob: String, fingerprint: String) {
+private func throwawayBlob(type: String = "ed25519") throws -> (blob: String, fingerprint: String) {
     let dir = TestDirectory.make()
     let p = Process()
     p.executableURL = URL(filePath: "/usr/bin/ssh-keygen")
-    p.arguments = ["-t", "ed25519", "-N", "", "-f", dir.appending(path: "k").path, "-q"]
+    p.arguments = ["-t", type, "-N", "", "-f", dir.appending(path: "k").path, "-q"]
     try p.run(); p.waitUntilExit()
     let parts = try String(contentsOf: dir.appending(path: "k.pub"), encoding: .utf8).split(separator: " ")
     let q = Process(), pipe = Pipe()
@@ -375,5 +375,118 @@ private func rsaPair() throws -> (blob: String, alt: String, fingerprint: String
     for shape in ["host ssh-ed25519 BLOBX\r junk", "host ssh-ed25519 BLOBX\0junk",
                   "host ssh-ed25519 BLOBX \u{301}junk", "host ssh-ed25519 BLOB\u{0C}X"] {
         #expect(!KnownHosts.selectableLines(shape + "\n" + rev).contains("BLOB"), "\(shape.debugDescription)")
+    }
+}
+
+@Test func unknownMarkersAndDoubleMarkersFailClosed() {
+    #expect(KnownHosts.selectableLines("host ssh-ed25519 KEYA\n@Weird h ssh-ed25519 KEYZ") == "")
+    // ssh compares markers case-sensitively: "@REVOKED" is not a marker it knows.
+    #expect(KnownHosts.selectableLines("host ssh-ed25519 KEYA\n@REVOKED h ssh-ed25519 KEYZ") == "")
+    #expect(KnownHosts.selectableLines("host ssh-ed25519 KEYA\n@cert-authority @revoked h ssh-ed25519 KEYZ") == "")
+    #expect(KnownHosts.selectableLines("host ssh-ed25519 KEYA\n@revoked h @x ssh-ed25519 KEYZ") == "")
+    #expect(KnownHosts.selectableLines("host ssh-ed25519 KEYA\n@cert-authority *.x ssh-ed25519 KEYZ") == "host ssh-ed25519 KEYA")
+}
+
+@Test func onlyAllowlistedTypesAreOffered() {
+    let ok = ["ssh-ed25519", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "ssh-rsa"]
+    for t in ok { #expect(KnownHosts.selectableLines("h \(t) KEYA") == "h \(t) KEYA", "\(t)") }
+    for t in ["webauthn-sk-ecdsa-sha2-nistp256@openssh.com", "sk-ssh-ed25519@openssh.com", "ssh-dss",
+              "ssh-ed25519-cert-v01@openssh.com", "KEYA", "SSH-ED25519", "rsa-sha2-256"] {
+        #expect(KnownHosts.selectableLines("h \(t) KEYA") == "", "\(t)")
+    }
+    #expect(KnownHosts.selectableLines("ssh-ed25519 KEYA ssh-ed25519") == "")
+}
+
+@Test func aLineWhoseHostIsItsBlobIsNotOffered() {
+    #expect(KnownHosts.selectableLines("KEYA ssh-ed25519 KEYA\nh ssh-ed25519 KEYB") == "h ssh-ed25519 KEYB")
+}
+
+@Test func nameLabelSkipsNegationsAndCanBeNil() async throws {
+    let f = try file("!bad,good ssh-ed25519 KEYA\n!only ssh-ed25519 KEYB\n")
+    let runner = FakeRunner(stdout: out(a43, "!bad,good", "ED25519") + "\n" + out(b43, "!only", "ED25519") + "\n")
+    #expect(await KnownHosts.entries(file: f, runner: runner, environment: env()).map(\.name) == ["good", nil])
+}
+
+@Test func allDigitHostsAreNotSentToSshKeygen() {
+    #expect(KnownHosts.selectableLines("123 ssh-ed25519 KEYA\n-7 ssh-ed25519 KEYA\n+1 ssh-ed25519 KEYA\nh1 ssh-ed25519 KEYB\n1a ssh-ed25519 KEYC")
+            == "h1 ssh-ed25519 KEYB\n1a ssh-ed25519 KEYC")
+}
+
+@Test func revokedLineWithDigitHostFailsClosed() async throws {
+    for host in ["123", "-7", "+1"] {
+        #expect(KnownHosts.selectableLines("host-a ssh-ed25519 KEYA\n@revoked \(host) ssh-ed25519 KEYB") == "", "\(host)")
+        let f = try file("host-a ssh-ed25519 KEYA\n@revoked \(host) ssh-ed25519 KEYB\n")
+        // Even a runner that answers every line in full does not get a say: the file is refused first.
+        let runner = FakeRunner(first: [out(b43, host, "ED25519") + "\n"], then: out(a43, "host-a", "ED25519") + "\n")
+        #expect(await KnownHosts.entries(file: f, runner: runner, environment: env()).isEmpty)
+        #expect(runner.calls.isEmpty)
+    }
+}
+
+@Test func certOutputTypeIsNotOffered() async throws {
+    let f = try file("host-a ssh-ed25519 KEYA\nhost-b ssh-ed25519 KEYB\n")
+    let runner = FakeRunner(stdout: out(a43, "host-a", "ED25519-CERT") + "\n" + out(b43, "host-b", "ED25519") + "\n")
+    #expect(await KnownHosts.entries(file: f, runner: runner, environment: env()).map(\.name) == ["host-b"])
+}
+
+/// An `sk-ecdsa-sha2-nistp256@openssh.com` public blob built from a throwaway P-256 key
+/// (type, curve, point, application "ssh:"), as a webauthn key in known_hosts carries.
+private func throwawaySKBlob() throws -> String {
+    var raw = Data(base64Encoded: try throwawayBlob(type: "ecdsa").blob)!
+    var fields: [Data] = []
+    while raw.count >= 4 {
+        let n = raw.prefix(4).reduce(0) { $0 << 8 | Int($1) }
+        fields.append(raw.dropFirst(4).prefix(n)); raw = raw.dropFirst(4 + n)
+    }
+    let out = [Data("sk-ecdsa-sha2-nistp256@openssh.com".utf8), fields[1], fields[2], Data("ssh:".utf8)]
+        .reduce(into: Data()) { d, f in d += withUnsafeBytes(of: UInt32(f.count).bigEndian) { Data($0) } + f }
+    return out.base64EncodedString()
+}
+
+@Test func realSshKeygenBareKeyAndWebauthnShapesAreNotOffered() async throws {
+    let k = try throwawayBlob()
+    #expect(try await realEntries(Array("ssh-ed25519 \(k.blob) ssh-ed25519\n".utf8)).isEmpty)
+    let wa = "webauthn-sk-ecdsa-sha2-nistp256@openssh.com"
+    let sk = "\(wa) \(try throwawaySKBlob()) \(wa)\n"
+    // Real ssh-keygen does fingerprint this line, so only the type allowlist keeps it out.
+    let probe = TestDirectory.make().appending(path: "probe"); try Data(sk.utf8).write(to: probe)
+    let q = Process(), pipe = Pipe()
+    q.executableURL = URL(filePath: "/usr/bin/ssh-keygen")
+    q.arguments = ["-l", "-E", "sha256", "-f", probe.path]; q.standardOutput = pipe
+    try q.run(); q.waitUntilExit()
+    #expect(q.terminationStatus == 0)
+    #expect(String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).contains("SHA256:"))
+    #expect(try await realEntries(Array(sk.utf8)).isEmpty)
+    #expect(try await realEntries(Array(("good ssh-ed25519 \(k.blob)\n" + sk).utf8)).map(\.name) == ["good"])
+}
+
+@Test func revocationFilesRevokeButAreNotOffered() async throws {
+    let k1 = try throwawayBlob(), k2 = try throwawayBlob()
+    let main = TestDirectory.make().appending(path: "known_hosts")
+    try Data("a ssh-ed25519 \(k1.blob)\nb ssh-ed25519 \(k2.blob)\n".utf8).write(to: main)
+    let second = TestDirectory.make().appending(path: "kh2")
+    try Data("@revoked * ssh-ed25519 \(k1.blob)\nplain ssh-ed25519 \(try throwawayBlob().blob)\n".utf8).write(to: second)
+    let missing = TestDirectory.make().appending(path: "nope")
+    let entries = await KnownHosts.entries(file: main, revocationFiles: [missing, second], runner: ProcessRunner(), environment: env())
+    #expect(entries.map(\.name) == ["b"])
+    #expect(entries.map(\.fingerprint.value) == [k2.fingerprint])
+}
+
+@Test func unusableRevocationFileGivesNoEntries() async throws {
+    let k = try throwawayBlob()
+    let main = TestDirectory.make().appending(path: "known_hosts")
+    try Data("a ssh-ed25519 \(k.blob)\n".utf8).write(to: main)
+    let dir = TestDirectory.make()
+    let unreadable = dir.appending(path: "unreadable")
+    try Data("x".utf8).write(to: unreadable)
+    chmod(unreadable.path, 0)
+    let fifo = dir.appending(path: "fifo"); mkfifo(fifo.path, 0o600)
+    let unclean = dir.appending(path: "unclean")
+    try Data("@revoked * ssh-ed25519 AA\u{0C}AA\n".utf8).write(to: unclean)
+    let oversized = dir.appending(path: "oversized")
+    try Data(repeating: 0x23, count: KnownHosts.maxFileBytes + 1).write(to: oversized)
+    for bad in [unreadable, fifo, dir, unclean, oversized] {
+        let runner = FakeRunner(stdout: out(a43, "a", "ED25519") + "\n")
+        #expect(await KnownHosts.entries(file: main, revocationFiles: [bad], runner: runner, environment: env()).isEmpty, "\(bad.lastPathComponent)")
     }
 }

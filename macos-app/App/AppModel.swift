@@ -70,6 +70,12 @@ final class AppModel: ObservableObject {
     // MARK: Derived state
 
     var rootConfig: URL { URL(filePath: home).appending(path: ".ssh/config") }
+    /// Files the picker reads besides ~/.ssh/known_hosts; only their @revoked lines count.
+    var revocationFiles: [String] { ["/etc/ssh/ssh_known_hosts", "/etc/ssh/ssh_known_hosts2", home + "/.ssh/known_hosts2"] }
+    /// Every file the picker reads. A change to any of them invalidates a passed check.
+    var knownHostsStamps: [FileStamp] {
+        SSHConfigAliases.stamps(for: [knownHostsFile.path] + revocationFiles)
+    }
     var knownHostsFile: URL { URL(filePath: home).appending(path: ".ssh/known_hosts") }
 
     var servers: [HostInput] {
@@ -137,7 +143,7 @@ final class AppModel: ObservableObject {
               let env = try? ChildEnvironment.make(home: home, cliDirectory: Self.directory(of: info),
                                                    tmpdir: tmp, agent: profile.agent)
         else { return nil }
-        return CheckInputs(profile: profile, cli: info, environment: env, configStamps: discovery.stamps)
+        return CheckInputs(profile: profile, cli: info, environment: env, configStamps: discovery.stamps + knownHostsStamps)
     }
 
     /// Also requires a finished check: after a reset the gate stays closed
@@ -243,7 +249,8 @@ final class AppModel: ObservableObject {
         guard let tmp = verifiedTmp,
               let env = try? ChildEnvironment.make(home: home, cliDirectory: "/usr/bin", tmpdir: tmp, agent: .secretive)
         else { knownHosts = []; return }
-        knownHosts = await KnownHosts.entries(file: knownHostsFile, runner: runner, environment: env)
+        knownHosts = await KnownHosts.entries(file: knownHostsFile, revocationFiles: revocationFiles.map { URL(filePath: $0) },
+                                              runner: runner, environment: env)
     }
 
     // MARK: Gate bookkeeping

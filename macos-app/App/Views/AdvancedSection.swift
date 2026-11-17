@@ -78,6 +78,8 @@ struct AdvancedSection: View {
             Text("Add a host key").font(.subheadline)
             Text("SigSieve does not verify that these host keys belong to the server.")
                 .font(.caption).foregroundStyle(.secondary)
+            Text("Listed keys were found in your local known_hosts files. Custom UserKnownHostsFile, GlobalKnownHostsFile, KnownHostsCommand and RevokedHostKeys settings are not read.")
+                .font(.caption).foregroundStyle(.secondary)
             List(model.knownHosts, id: \.self) { entry in
                 KnownHostRow(entry: entry)
             }
