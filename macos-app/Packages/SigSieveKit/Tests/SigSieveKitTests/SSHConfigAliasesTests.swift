@@ -101,7 +101,8 @@ private struct Fixture {
     let f = Fixture()
     f.write(".ssh/config", "Host a\n" + String(repeating: "# pad\n", count: 200_000))
     let d = SSHConfigAliases.discover(config: f.config, home: f.home)
-    #expect(d.aliases == [] && d.stamps == [])
+    #expect(d.aliases == [])
+    #expect(d.stamps.map { URL(fileURLWithPath: $0.path).lastPathComponent } == ["config"])
 }
 
 @Test func stampsCoverEveryFileRead() {
@@ -109,8 +110,9 @@ private struct Fixture {
     f.write(".ssh/inc", "Host b\n")
     f.write(".ssh/config", "Include inc\nInclude nothere\nHost a\n")
     let d = SSHConfigAliases.discover(config: f.config, home: f.home)
-    #expect(d.stamps.count == 2)
-    #expect(d.stamps.map { URL(fileURLWithPath: $0.path).lastPathComponent }.sorted() == ["config", "inc"])
+    // The missing include target is stamped too (size -1), so creating it is noticed.
+    #expect(d.stamps.map { URL(fileURLWithPath: $0.path).lastPathComponent }.sorted() == ["config", "inc", "nothere"])
+    #expect(d.stamps.first { $0.path.hasSuffix("nothere") }?.size == -1)
     #expect(SSHConfigAliases.currentStamps(for: d.stamps) == d.stamps)
 }
 
@@ -130,4 +132,71 @@ private struct Fixture {
     let now = SSHConfigAliases.currentStamps(for: d.stamps)
     #expect(now.map(\.size) == [-1])
     #expect(now.map(\.modified) == [.distantPast])
+}
+
+@Test func addingAFileToAGlobbedDirectoryChangesStamps() {
+    let f = Fixture()
+    f.write(".ssh/conf.d/a", "Host a\n")
+    f.write(".ssh/config", "Include conf.d/*\n")
+    let d = SSHConfigAliases.discover(config: f.config, home: f.home)
+    #expect(SSHConfigAliases.currentStamps(for: d.stamps) == d.stamps)
+    f.write(".ssh/conf.d/new", "Host n\n")
+    #expect(SSHConfigAliases.currentStamps(for: d.stamps) != d.stamps)
+}
+
+@Test func creatingAMissingIncludeTargetChangesStamps() {
+    let f = Fixture()
+    f.write(".ssh/config", "Include later\n")
+    let d = SSHConfigAliases.discover(config: f.config, home: f.home)
+    #expect(SSHConfigAliases.currentStamps(for: d.stamps) == d.stamps)
+    f.write(".ssh/later", "Host l\n")
+    #expect(SSHConfigAliases.currentStamps(for: d.stamps) != d.stamps)
+}
+
+@Test func retargetedSymlinkIncludeIsNoticed() throws {
+    let f = Fixture()
+    f.write(".ssh/real1", "Host r1\n")
+    f.write(".ssh/real2", "Host r2 more names here\n")
+    let link = f.home.appending(path: ".ssh/link").path
+    try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: f.home.appending(path: ".ssh/real1").path)
+    f.write(".ssh/config", "Include real1\nInclude link\n")
+    let d = SSHConfigAliases.discover(config: f.config, home: f.home)
+    #expect(d.stamps.contains { $0.path.hasSuffix("/link") })
+    try FileManager.default.removeItem(atPath: link)
+    try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: f.home.appending(path: ".ssh/real2").path)
+    #expect(SSHConfigAliases.currentStamps(for: d.stamps) != d.stamps)
+}
+
+@Test func globOverManyFilesStopsAtTheFileCap() {
+    let f = Fixture()
+    for i in 0..<300 { f.write(".ssh/conf.d/h\(String(format: "%03d", i))", "Host h\(String(format: "%03d", i))\n") }
+    f.write(".ssh/config", "Host first\nInclude conf.d/*\n")
+    let d = SSHConfigAliases.discover(config: f.config, home: f.home)
+    #expect(d.aliases.count == 256) // config + 255 included files
+    #expect(d.aliases.first?.value == "first" && d.aliases[1].value == "h000")
+    #expect(d.skippedIncludes == ["conf.d/* (limit reached)"])
+}
+
+@Test func manyIncludeDirectivesAreCapped() {
+    let f = Fixture()
+    f.write(".ssh/conf.d/a", "Host a\n")
+    f.write(".ssh/config", String(repeating: "Include conf.d/*\n", count: 2000))
+    let d = SSHConfigAliases.discover(config: f.config, home: f.home)
+    #expect(d.aliases.map(\.value) == ["a"])
+    #expect(d.skippedIncludes == ["conf.d/* (limit reached)"])
+    let g = Fixture()
+    g.write(".ssh/config", (0..<2000).map { "Include missing\($0)\n" }.joined())
+    let e = SSHConfigAliases.discover(config: g.config, home: g.home)
+    #expect(e.stamps.count <= 1025)
+    #expect(e.skippedIncludes.count == 1)
+}
+
+@Test func trailingCommentEndsTheArguments() {
+    #expect(Fixture().aliases("Host a # note b\nHost c #d\nHost \"#e\"\n") == ["a", "c", "#e"])
+}
+
+@Test func leadingBOMIsStripped() {
+    let f = Fixture()
+    f.write(".ssh/config", "\u{FEFF}Host bom\n")
+    #expect(SSHConfigAliases.discover(config: f.config, home: f.home).aliases.map(\.value) == ["bom"])
 }
