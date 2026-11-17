@@ -1,0 +1,29 @@
+macos-app/Packages/SigSieveKit/Sources/SigSieveKit/ProcessExecution/ChildEnvironment.swift
+  s_63ebb2a1e1ff37::t_2251ac3a94e60c 127-128,149
+macos-app/Packages/SigSieveKit/Sources/SigSieveKit/Connection/CommandBuilder.swift
+  s_63ebb2a1e1ff37::t_9befe2c5db4d8e 35-38,49-52,55-59
+macos-app/Packages/SigSieveKit/Tests/SigSieveKitTests/CLILocatorTests.swift
+  s_63ebb2a1e1ff37::t_309945984548b0 121-136
+macos-app/Packages/SigSieveKit/Tests/SigSieveKitTests/ChildEnvironmentTests.swift
+  s_63ebb2a1e1ff37::t_309945984548b0 79,81-82
+macos-app/Packages/SigSieveKit/Sources/SigSieveKit/ProcessExecution/CLILocator.swift
+  s_63ebb2a1e1ff37::t_2251ac3a94e60c 13-14,47
+macos-app/Packages/SigSieveKit/Tests/SigSieveKitTests/CommandBuilderTests.swift
+  s_63ebb2a1e1ff37::t_3cca8c67d370a2 18-19,21,132-134,137-138,191-205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "493f395012f93d060c4719f0a9fac5f983fe3576",
+  "prompts": {},
+  "sessions": {
+    "s_63ebb2a1e1ff37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e9e90eb-9ef2-40e7-84a4-ada9eadcfa7f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
