@@ -76,7 +76,9 @@ Without `SIGSIEVE_TEST_CLI` the tests that need the CLI are skipped. With
 
 ## CI
 
-`.github/workflows/macos-app.yml` runs on changes under `macos-app/`. On
+`.github/workflows/macos-app.yml` runs on pushes and pull requests that change
+`macos-app/`, the workflow itself, or the CLI it builds (`src/`, `Cargo.toml`,
+`Cargo.lock`, `rust-toolchain.toml`). On
 `macos-26` it selects Xcode 26.6 by path (the job fails on any other version),
 checks the project opens under it, builds the CLI with Rust 1.99.1, runs the
 package tests against that CLI, builds the app and lints its `Info.plist`. It

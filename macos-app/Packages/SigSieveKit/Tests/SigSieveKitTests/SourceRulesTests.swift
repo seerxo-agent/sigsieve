@@ -95,3 +95,11 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     let view = try String(contentsOf: app.appending(path: "Views/CheckSection.swift"), encoding: .utf8)
     #expect(view.contains("if model.discovery.untracked {\n                Text(\"Some Include files cannot be tracked; SigSieve checks again when you connect.\")"))
 }
+
+/// F3: a change to the CLI must run the app's integration tests, on push and on pull request.
+@Test func ciRunsOnCLIChanges() throws {
+    let workflow = appRoot.deletingLastPathComponent().appending(path: ".github/workflows/macos-app.yml")
+    let text = try String(contentsOf: workflow, encoding: .utf8)
+    let paths = "paths: ['macos-app/**', '.github/workflows/macos-app.yml', 'src/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml']"
+    #expect(text.contains("  pull_request:\n    \(paths)\n  push:\n    \(paths)\n"))
+}

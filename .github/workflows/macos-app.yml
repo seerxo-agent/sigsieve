@@ -2,9 +2,9 @@ name: macOS app
 
 on:
   pull_request:
-    paths: ['macos-app/**', '.github/workflows/macos-app.yml']
+    paths: ['macos-app/**', '.github/workflows/macos-app.yml', 'src/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml']
   push:
-    paths: ['macos-app/**', '.github/workflows/macos-app.yml']
+    paths: ['macos-app/**', '.github/workflows/macos-app.yml', 'src/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml']
 
 permissions:
   contents: read
