@@ -50,7 +50,9 @@ public enum KnownHosts {
         var plain: [(fields: [Substring], line: String)] = []
         for var raw in data.split(separator: 0x0A, omittingEmptySubsequences: true) {
             if raw.last == 0x0D { raw = raw.dropLast() }
-            let clean = raw.allSatisfy { ($0 >= 0x20 && $0 <= 0x7E) || $0 == 0x09 }
+            // '"' is unclean: ssh-keygen skips a quoted host field (it may hold spaces) while ssh
+            // reads the host up to the first space, so such a line means different things to each.
+            let clean = raw.allSatisfy { (($0 >= 0x20 && $0 <= 0x7E) && $0 != 0x22) || $0 == 0x09 }
             guard clean else {
                 if raw.lowercasedASCIIContains("@revoked") { return nil }
                 continue
@@ -62,14 +64,21 @@ public enum KnownHosts {
             if first.hasPrefix("@") {
                 // "@revoked <hosts> <type> <blob>"; every non-type field after the hosts counts, so a
                 // malformed revoked line errs towards revoking more.
-                if first.lowercased() == "@revoked" {
+                if first.lowercased().hasPrefix("@revoked") {
+                    // "@revoked*" and a revoked line without host, type and blob are malformed
+                    // revocations: they cannot be applied, so the file is refused.
+                    guard first.lowercased() == "@revoked", fields.count >= 4 else { return nil }
                     for f in fields.dropFirst(2) where !isKeyType(f) { revoked.insert(String(f)) }
-                    if fields.count >= 2 { parsed.revokedLines.append((String(fields[1]), fields.dropFirst().joined(separator: " "))) }
+                    parsed.revokedLines.append((String(fields[1]), fields[1...3].joined(separator: " ")))
                 }
-            } else if fields.count >= 3, !isKeyType(first) {
+            } else if fields.count >= 3, !isKeyType(first), !fields[1].lowercased().hasSuffix("-cert-v01@openssh.com") {
+                // Certificate lines are not offered (a cert of K still revokes K, in the revoked run).
                 // A line starting with a key type is a bare key, not a host line; ssh-keygen would
                 // fingerprint it whatever follows, so it is never offered.
-                plain.append((fields, line))
+                // ssh-keygen gets exactly "host type blob" and never the raw line: it tokenises
+                // differently from ssh (quoted fields, trailing comments), so what it fingerprints
+                // must be built from the fields this code and ssh agree on.
+                plain.append((fields, fields[0...2].joined(separator: " ")))
             }
         }
         parsed.kept = plain.compactMap { fields, line in

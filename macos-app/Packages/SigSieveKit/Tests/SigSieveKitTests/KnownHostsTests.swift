@@ -304,3 +304,76 @@ private func realEntries(_ bytes: [UInt8]) async throws -> [KnownHostEntry] {
     #expect(dropped.map(\.fingerprint.value) == [gfp])
     #expect(try await realEntries(Array("@revoked h\u{e9} ssh-ed25519 \(b)\ngood ssh-ed25519 \(g)\n".utf8)).isEmpty)
 }
+
+/// An RSA key and the same key with a non-minimal exponent mpint (a leading zero byte).
+private func rsaPair() throws -> (blob: String, alt: String, fingerprint: String) {
+    let dir = TestDirectory.make()
+    let p = Process()
+    p.executableURL = URL(filePath: "/usr/bin/ssh-keygen")
+    p.arguments = ["-t", "rsa", "-b", "2048", "-N", "", "-f", dir.appending(path: "r").path, "-q"]
+    try p.run(); p.waitUntilExit()
+    let blob = String(try String(contentsOf: dir.appending(path: "r.pub"), encoding: .utf8).split(separator: " ")[1])
+    let raw = [UInt8](Data(base64Encoded: blob)!)
+    func field(_ at: Int) -> ArraySlice<UInt8> {
+        let n = Int(raw[at]) << 24 | Int(raw[at + 1]) << 16 | Int(raw[at + 2]) << 8 | Int(raw[at + 3])
+        return raw[(at + 4)..<(at + 4 + n)]
+    }
+    let t = field(0), e = field(4 + t.count), n = field(8 + t.count + e.count)
+    func enc(_ f: [UInt8]) -> [UInt8] { withUnsafeBytes(of: UInt32(f.count).bigEndian) { Array($0) } + f }
+    let alt = enc(Array(t)) + enc([0] + Array(e)) + enc(Array(n))
+    let q = Process(), pipe = Pipe()
+    q.executableURL = URL(filePath: "/usr/bin/ssh-keygen")
+    q.arguments = ["-l", "-E", "sha256", "-f", dir.appending(path: "r.pub").path]
+    q.standardOutput = pipe
+    try q.run(); q.waitUntilExit()
+    let fp = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).split(separator: " ")[1]
+    return (blob, Data(alt).base64EncodedString(), String(fp))
+}
+
+@Test func quotedHostFieldCannotHideARevokedRsaKey() async throws {
+    let r = try rsaPair(), k2 = try throwawayBlob()
+    let text = "@revoked *,\"x ssh-rsa \(r.blob) \" ssh-ed25519 \(k2.blob) *,\"x\nhost ssh-rsa \(r.alt)\n"
+    #expect(try await realEntries(Array(text.utf8)).isEmpty)
+    // Plain RSA alt-exponent against an honest revocation of the canonical form: layer 2 never sees the blob match.
+    let honest = "@revoked * ssh-rsa \(r.blob)\nhost ssh-rsa \(r.alt)\n"
+    #expect(!(try await realEntries(Array(honest.utf8))).contains { $0.fingerprint.value == r.fingerprint })
+}
+
+@Test func quotedHostFieldCannotMisattributeAName() async throws {
+    let k1 = try throwawayBlob(), k2 = try throwawayBlob()
+    let text = "real.example.com,\"x ssh-ed25519 \(k1.blob) \" ssh-ed25519 \(k2.blob) real.example.com,\"x\n"
+    #expect(try await realEntries(Array(text.utf8)).isEmpty)
+}
+
+@Test func commentedLineIsListedAndSendsOnlyHostTypeBlob() async throws {
+    let k = try throwawayBlob()
+    let entries = try await realEntries(Array("b ssh-ed25519 \(k.blob) mycomment\n".utf8))
+    #expect(entries.map(\.name) == ["b"]); #expect(entries.map(\.fingerprint.value) == [k.fingerprint])
+    #expect(KnownHosts.selectableLines("b ssh-ed25519 \(k.blob) mycomment") == "b ssh-ed25519 \(k.blob)")
+}
+
+@Test func certLinesAreNotOfferedButStillRevoke() async throws {
+    let k = try throwawayBlob()
+    let cert = "h ssh-ed25519-cert-v01@openssh.com AAAA"
+    #expect(KnownHosts.selectableLines(cert) == "")
+    // A revoked cert line is still sent to the revocation run.
+    let f = try file("good ssh-ed25519 KEYA\n@revoked h ssh-ed25519-cert-v01@openssh.com AAAA\n")
+    let runner = FakeRunner(first: [out(b43, "h", "ED25519-CERT") + "\n"], then: out(a43, "good", "ED25519") + "\n")
+    #expect(await KnownHosts.entries(file: f, runner: runner, environment: env()).count == 1)
+    #expect(runner.calls.first?.stdin == "h ssh-ed25519-cert-v01@openssh.com AAAA")
+    _ = k
+}
+
+@Test func malformedRevokedMarkersFailClosed() {
+    #expect(KnownHosts.selectableLines("host ssh-ed25519 KEYA\n@revoked* h ssh-ed25519 KEYB") == "")
+    #expect(KnownHosts.selectableLines("host ssh-ed25519 KEYA\n@revoked h ssh-ed25519") == "")
+    #expect(KnownHosts.selectableLines("host ssh-ed25519 KEYA\n@revoked *,\"x ssh-ed25519 KEYB\"") == "")
+}
+
+@Test func textLayerAloneDropsTheOddByteShapes() {
+    let rev = "@revoked * ssh-ed25519 BLOBX\n"
+    for shape in ["host ssh-ed25519 BLOBX\r junk", "host ssh-ed25519 BLOBX\0junk",
+                  "host ssh-ed25519 BLOBX \u{301}junk", "host ssh-ed25519 BLOB\u{0C}X"] {
+        #expect(!KnownHosts.selectableLines(shape + "\n" + rev).contains("BLOB"), "\(shape.debugDescription)")
+    }
+}
