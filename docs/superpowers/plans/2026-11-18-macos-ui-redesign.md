@@ -4,7 +4,7 @@
 
 **Goal:** Replace the 380 pt menu bar panel with a resizable main window (sidebar of servers, detail pane, fixed bottom bar), a separate Settings window and a small menu bar status panel. Behaviour, gate and security rules stay as they are.
 
-**Architecture:** The views are new SwiftUI files under `macos-app/App/Views/` on top of the existing `AppModel`. `AppModel` gains a few small additions: `setForwardedKeys`, `checkFinishedAt` and a remembered selection. The logic that decides which forwarded keys show as "Not in the agent", and how a sheet's selection becomes the new key list, is a pure additive helper in SigSieveKit with unit tests. No existing Kit file changes.
+**Architecture:** The views are new SwiftUI files under `macos-app/App/Views/` on top of the existing `AppModel`. `AppModel` gains a few small additions: server-guarded `setForwardedKeys` and `setMode`, `checkFinishedAt`, a remembered selection, and a check reset when a forwarded key appears in or vanishes from the agent. The logic that decides which forwarded keys show as "Not in the agent", and how a sheet's selection becomes the new key list, is a pure additive helper in SigSieveKit with unit tests. No existing Kit file changes.
 
 **Tech Stack:** SwiftUI and AppKit, macOS 13.0 deployment target, Swift Testing, Xcode 26.6. The project uses file-system-synchronized groups, so new files under `App/` need no `project.pbxproj` edit.
 
@@ -63,6 +63,9 @@
       /// The new forwardedKeys after a sheet's Save: kept keys in their current order, then
       /// newly selected agent keys in agent order. Fingerprints not in the agent are kept iff selected.
       public static func applying(selection: Set<Fingerprint>, to current: [Fingerprint], agentKeys: [AgentKey]) -> [Fingerprint]
+      /// The forwarded fingerprints the agent currently holds. AppModel compares this set at check
+      /// time and after each agent refresh; any difference clears the check.
+      public static func present(forwarded: [Fingerprint], agentKeys: [AgentKey]) -> Set<Fingerprint>
   }
   ```
 
@@ -75,13 +78,14 @@
   - `deselectedRemoved`: current `[F1, F2]`, selection `{F2}` gives `[F2]`.
   - `missingKeyKeptOnlyIfSelected`: current `[F9]`, where F9 is not in the agent. Selection `{F9}` gives `[F9]`; selection `{}` gives `[]`.
   - `openAndSaveKeepsMissingKeys`: current `[F1, F9]`, agent `[K1]` (F9 missing). `applying(selection: Set(current), to: current, agentKeys:)` returns `[F1, F9]` exactly: opening Edit Keys and pressing Save without changes never drops a missing key (owner condition).
+  - `presentIsIntersectionByFingerprint`: forwarded `[F1, F2]`, agent `[K1, K3]` gives `{F1}`; agent `[]` gives `{}`; a K3 with K1's comment does not add F1's absence back.
   - `selectionOfUnknownFingerprintIgnored`: current `[]`, agent `[K1]`, selection `{F9}` gives `[]`. Only keys the sheet showed can be added.
 
 - [ ] **Step 2: Run** `swift test --package-path macos-app/Packages/SigSieveKit --filter ForwardedKeysTests`. Expected: build FAIL, because `ForwardedKeys` is not defined.
 
 - [ ] **Step 3: Implement** the two functions in `ForwardedKeys.swift`. Use a dictionary from fingerprint to `AgentKey`. Never compare comments or types.
 
-- [ ] **Step 4: Run** the same command. Expected: 9 tests pass. Then run the full suite: `SIGSIEVE_TEST_CLI="$PWD/target/release/sigsieve" swift test --package-path macos-app/Packages/SigSieveKit` from the repo root, after `cargo build --release --locked`. Expected: all pass, only the fish test skipped.
+- [ ] **Step 4: Run** the same command. Expected: 10 tests pass. Then run the full suite: `SIGSIEVE_TEST_CLI="$PWD/target/release/sigsieve" swift test --package-path macos-app/Packages/SigSieveKit` from the repo root, after `cargo build --release --locked`. Expected: all pass, only the fish test skipped.
 
 - [ ] **Step 5: Commit** with the message `macos-app: ForwardedKeys helper for missing-key rows and sheet saves`.
 
@@ -95,7 +99,13 @@
 - Consumes: `ForwardedKeys.rows`, `ForwardedKeys.applying` (Task 1).
 - Produces:
   - `var forwardedRows: [ForwardedKeyRow]` is `ForwardedKeys.rows(forwarded: selectedProfile?.forwardedKeys ?? [], agentKeys: agentKeys)`.
-  - `func setForwardedKeys(selection: Set<Fingerprint>)` is `edit { $0.forwardedKeys = ForwardedKeys.applying(selection: selection, to: $0.forwardedKeys, agentKeys: agentKeys) }`.
+  - `@discardableResult func setForwardedKeys(selection: Set<Fingerprint>, for server: HostInput) -> Bool`: first `guard selectedServer == server else { return false }`, then `edit { $0.forwardedKeys = ForwardedKeys.applying(selection: selection, to: $0.forwardedKeys, agentKeys: agentKeys) }` and `return true`. A draft started for one server is never applied to another (owner condition 2).
+  - `@discardableResult func setMode(_ mode: ProtectionMode, for server: HostInput) -> Bool`: same guard, then the existing `setMode(mode)`.
+  - Agent-presence invalidation (owner condition 4). Today `currentInputs` does not include the agent's keys, so a forwarded key vanishing from the agent does not clear a passed check. Add `private var checkedKeyPresence: Set<Fingerprint>?`:
+    - In `runCheck()`, right after `checked = (inputs, rootConfigExists)`: `checkedKeyPresence = ForwardedKeys.present(forwarded: inputs.profile.forwardedKeys, agentKeys: agentKeys)`.
+    - `resetCheck()` sets it to `nil`.
+    - In `refreshAgent()`, right after `agentState = state`: `if checkState != .idle, let p = checkedKeyPresence, ForwardedKeys.present(forwarded: selectedProfile?.forwardedKeys ?? [], agentKeys: agentKeys) != p { resetCheck() }`.
+    - In `connect()`, insert `await refreshAgent()` directly after the existing `verifyTmpdir()`, so the existing `guard canConnect` sees a reset made from the agent's current keys. This only tightens the gate; no existing line changes.
   - `@Published private(set) var checkFinishedAt: Date?` is set to `Date()` everywhere `checkState = .finished(...)` is assigned. It is set to `nil` in `resetCheck()` and wherever `checkState` becomes `.idle`.
   - Selection memory uses UserDefaults key `"selectedServer"` (`static let selectedServerKey`):
     - `selectedServer.didSet` writes `selectedServer?.value`, or removes the key when nil.
@@ -103,14 +113,17 @@
   - Keep `toggleKey` until Task 5 removes its last caller, then delete it in Task 5.
 
 - [ ] **Step 1: Write the failing source-rule test** `@Test func keyEditsAndCheckTimeFollowTheGate()` in `SourceRulesTests.swift`. It reads `AppModel.swift` and expects these exact strings:
-  - `func setForwardedKeys(selection: Set<Fingerprint>) {\n        edit { $0.forwardedKeys = ForwardedKeys.applying(selection: selection, to: $0.forwardedKeys, agentKeys: agentKeys) }`
+  - `func setForwardedKeys(selection: Set<Fingerprint>, for server: HostInput) -> Bool {\n        guard selectedServer == server else { return false }\n        edit { $0.forwardedKeys = ForwardedKeys.applying(selection: selection, to: $0.forwardedKeys, agentKeys: agentKeys) }`
+  - `func setMode(_ mode: ProtectionMode, for server: HostInput) -> Bool {\n        guard selectedServer == server else { return false }`
+  - Inside `resetCheck()`: `checkedKeyPresence = nil`; in `refreshAgent()`: `ForwardedKeys.present(forwarded: selectedProfile?.forwardedKeys ?? [], agentKeys: agentKeys) != p { resetCheck() }`
+  - In `connect()`'s body, `verifyTmpdir()\n        await refreshAgent()` appears before `guard canConnect`.
   - Inside the `resetCheck()` body: `checkFinishedAt = nil`
   - The count of `checkState = .finished(` equals the count of `checkFinishedAt = Date()`.
   - `if let stored = defaults.string(forKey: Self.selectedServerKey), let host = HostInput(stored), servers.contains(host)`
 
 - [ ] **Step 2: Run** `swift test --package-path macos-app/Packages/SigSieveKit --filter SourceRulesTests`. Expected: the new test FAILS.
 
-- [ ] **Step 3: Implement** the four additions. `save()` already calls `inputsChanged()`, so a Save that changes the list resets a passed check (AC1). A Save that does not change it keeps the check, because the inputs are equal.
+- [ ] **Step 3: Implement** the additions. `save()` already calls `inputsChanged()`, so a Save that changes the list resets a passed check (AC1). A Save that does not change it keeps the check, because the inputs are equal.
 
 - [ ] **Step 3a:** In the same test file, add `@Test func forwardedKeysHelperGrantsNothing()`: none of `ConnectionCheck.swift`, `CommandBuilder.swift` or `AppModel.swift`'s `currentInputs` body mention `ForwardedKeys`.
 
@@ -143,7 +156,8 @@
 
 Layout, texts, order and states are exactly the spec's sections "Sidebar", "Detail pane" and "Bottom bar". Points the spec leaves open are decided here:
 
-- Key rows. Remove calls `model.setForwardedKeys(selection: Set(current).subtracting([fp]))`, an immediate and explicit single action. A `.notInAgent` row shows `fp.short`, then "Not in the agent" in `.secondary`, then copy and Remove. It shows no comment and no type.
+- Key rows have no Remove button (owner condition 1): every change to forwarded keys goes through Edit Keys and Save. A row shows the copy-fingerprint button only. A `.notInAgent` row shows `fp.short`, then "Not in the agent" in `.secondary`, then copy. It shows no comment and no type.
+- The binding section's host-key Remove and the Add buttons in Add Host Key and Add Server keep today's immediate behaviour (explicit single actions, as now; each resets the check through `save()`). This is the documented exception to Save-only editing.
 - The agent `Menu` options use the existing `agentOptions` logic, copied from `AdvancedSection` into `ServerHeader` (Task 5 deletes the original).
 - Header truncation: the agent name uses `.lineLimit(1).truncationMode(.middle)` with `.help(fullName)`, and the key count is a separate `Text` with `.layoutPriority(1)`. This covers Review Focus 4.
 - The check time is formatted as `checkFinishedAt.formatted(date: .omitted, time: .shortened)`.
@@ -152,7 +166,7 @@ Layout, texts, order and states are exactly the spec's sections "Sidebar", "Deta
 - [ ] **Step 1: Write the failing source-rule tests:**
   - `@Test func warningsAreOutsideDetails()`. In `CheckResultView.swift`, the index of `"SigSieve checks again when it connects"` and of the prefix `"If the server's host key is not in known_hosts, OpenSSH refuses the connection.` (a prefix match; the sentence continues) are both less than the index of `DisclosureGroup("Details"`. `ProtectionLine.swift` contains `Text("Forwarded key can sign for any server while connected")` and `"Identity filtering only"` and `"Destination binding"`. (AC3)
   - `@Test func noVisibilityWording()`. For every file under `App/`, the file text contains none of the substrings ` sees `, `cannot see`, `hidden from`, `stay hidden`.
-  - `@Test func missingKeysAreLabelled()`. `ForwardedKeysGroup.swift` contains `case .notInAgent(` and `"Not in the agent"`. (AC2)
+  - `@Test func missingKeysAreLabelled()`. `ForwardedKeysGroup.swift` contains `case .notInAgent(` and `"Not in the agent"`, and does not contain `setForwardedKeys(` or `Button("Remove")`. (AC1, AC2)
   - Move the `untracked` pin in `connectRechecksWhenIncludesAreUntracked` from `Views/CheckSection.swift` to `Views/CheckResultView.swift`, adjusting only indentation.
   - Move the binding caption pins that stay on the main screen to `Views/BindingSection.swift`: `"SigSieve does not verify that these host keys belong to the server."`, plus the destination-binding caption and the three limit lines, each as an exact `Text("…")`. The known_hosts list pins move in Task 4.
 
@@ -177,17 +191,17 @@ Layout, texts, order and states are exactly the spec's sections "Sidebar", "Deta
 
 **Interfaces:**
 - Consumes:
-  - `model.agentKeys`, `model.keyQuery` / `KeyFilter`, `model.forwardedRows`, `model.setForwardedKeys(selection:)`
-  - `model.setMode`, `model.knownHosts`, `model.knownHostsError`, `model.addKnownHost`, `model.addDestination`, `model.addServer`
+  - `model.agentKeys`, `KeyFilter`, `model.forwardedRows`, `model.setForwardedKeys(selection:for:)`
+  - `model.setMode(_:for:)`, `model.knownHosts`, `model.knownHostsError`, `model.addKnownHost`, `model.addDestination`, `model.addServer`
 
 Behaviour, per the spec's "Sheets":
 
 - **EditKeysSheet**
   - Holds `@State var draft: Set<Fingerprint>`, initialised once in `.onAppear` from the profile's `forwardedKeys`.
   - Rows are checkboxes bound to `draft`. The "Not in the agent" section comes first and lists `.notInAgent` fingerprints. Then comes the searchable `List` of `agentKeys` (search uses its own `@State` query, not `model.keyQuery`).
-  - Cancel calls `dismiss()` only. Save calls `model.setForwardedKeys(selection: draft)` and then `dismiss()`. Nothing touches the model before Save (AC1).
+  - Holds `let server: HostInput`, passed in by `MainWindow` when the sheet opens. Cancel calls `dismiss()` only. Save calls `model.setForwardedKeys(selection: draft, for: server)` and then `dismiss()`. Nothing touches the model before Save (AC1). `.onChange(of: model.selectedServer)` only dismisses, discarding the draft.
 - **ProtectionSheet**
-  - `@State var draft: ProtectionMode`, shown as two radio rows with full texts. Save calls `model.setMode(draft)`. Cancel dismisses.
+  - `@State var draft: ProtectionMode`, shown as two radio rows with full texts. Holds `let server: HostInput` the same way. Save calls `model.setMode(draft, for: server)`. Cancel dismisses.
 - **AddHostKeySheet**
   - Contains the existing `knownHostsPicker`, `KnownHostRow` and `manualEntry` content, copied from `AdvancedSection.swift` with their texts and the `await model.addKnownHost(entry)` call unchanged. Copied, not moved: the old panel must still compile until Task 5 deletes the originals; rename private types if they clash. Each Add saves at once, as today.
   - "Done" closes it.
@@ -196,7 +210,7 @@ Behaviour, per the spec's "Sheets":
 
 - [ ] **Step 1: Update the source-rule tests:**
   - `knownHostsPickerWiringAndWording` now reads `Views/AddHostKeySheet.swift` instead of `Views/AdvancedSection.swift`. It keeps every assertion except the "SigSieve does not verify…" pin, which Task 3 moved to `BindingSection.swift`. If the sheet also shows that sentence, keep the pin there too.
-  - Add `@Test func sheetsSaveOnlyOnSave()`. `EditKeysSheet.swift` contains exactly one `model.setForwardedKeys(`, and it comes after `Button("Save")`. `ProtectionSheet.swift` contains exactly one `model.setMode(`, and it comes after `Button("Save")`. Neither file contains `.onDisappear` or `.onChange` calling the model, so closing the sheet with Esc or the window's close button saves nothing, exactly like Cancel.
+  - Add `@Test func sheetsSaveOnlyOnSave()`. `EditKeysSheet.swift` contains exactly one `model.setForwardedKeys(`, it comes after `Button("Save")` and it passes `for: server`. `ProtectionSheet.swift` contains exactly one `model.setMode(`, after `Button("Save")`, passing `for: server`. Neither file contains `.onDisappear` or `.onChange` calling the model, so closing the sheet with Esc or the window's close button saves nothing, exactly like Cancel.
   - In the same test, `EditKeysSheet.swift` initialises `draft` from `forwardedKeys` (all saved fingerprints, including missing ones), not from `agentKeys`.
 
 - [ ] **Step 2: Run** the `SourceRulesTests` filter. Expected: FAIL.
@@ -259,14 +273,15 @@ Decisions:
 - Modify: `macos-app/README.md`, section "Manual checklist".
 
 - [ ] **Step 1:** Append these manual checks to the checklist, after item 7, with the status "not run":
-  - **M1 (AC1).** After a passed check, open Edit Keys, untick a key and press Cancel. The result and Connect are unchanged. Open the sheet again, untick and press Save. The result clears and Connect is disabled. Open the sheet again, change nothing and press Save. The result stays.
-  - **M2 (AC2).** Use a throwaway OpenSSH agent (as in item 1) holding one synthetic key; forward it and run a check. `ssh-add -d` that key and reopen the window: the result is cleared, the row reads "Not in the agent" with no comment, and Edit Keys lists it ticked. `ssh-add` the same key file again and reopen: the row shows the key normally. Then add a second synthetic key with the same comment: it does not match the forwarded row, because the match is by fingerprint, not by name.
+  - **M1 (AC1).** After a passed check, open Edit Keys, untick a key and press Cancel. The result and Connect are unchanged. Open the sheet again, untick and press Save. The result clears and Connect is disabled. Run Check again until it passes. Open the sheet, change nothing and press Save: the passed result, its time and an enabled Connect all stay.
+  - **M2 (AC2).** Use a throwaway OpenSSH agent (as in item 1) holding one synthetic key; forward it and run a check. `ssh-add -d` that key and reopen the window: the result is cleared (by the agent-presence check from Task 2) and Connect is disabled, the row reads "Not in the agent" with no comment, and Edit Keys lists it ticked. `ssh-add` the same key file again and reopen: the row shows the key normally. Then add a second synthetic key with the same comment: it does not match the forwarded row, because the match is by fingerprint, not by name.
   - **M3 (AC3).** In filtering mode, "Forwarded key can sign for any server while connected" is visible before any check. After a pass, every warning is visible while Details is closed.
   - **M4a.** With the window open, SigSieve is in the Dock and in ⌘Tab. After closing the window it is in neither, and the menu bar icon stays.
   - **M4b.** "Open SigSieve" works with the window closed, behind other windows, and when it is already in front.
   - **M4c.** ⌘, and the menu's "Settings…" open one Settings window. Closing Settings leaves the main window and the Dock state unchanged.
   - **M4d.** Quit and relaunch: the last selected server is selected again, and its check is "Not checked".
   - **M4e.** Quit, run `defaults write dev.sigsieve.macos selectedServer no-such-server.invalid`, and relaunch. Nothing is selected and there is no error. Repeat with the value `-bad`.
+- [ ] **Step 1a:** Add **M2b**: after a passed check, `ssh-add -d` the forwarded key without reopening the window, then press Connect in Terminal. No Terminal opens; the result is cleared and Connect is disabled.
 - [ ] **Step 2:** Mark items 1, 2 and 7 for re-run on the new UI. Extend M1 with two more cases: close the sheet with Esc without Save (nothing changes), and open Edit Keys while a key is "Not in the agent", press Save without changes, and confirm the row is still there. Extend M3: read every warning in the real window with Details closed, in light and dark mode.
 - [ ] **Step 2a: Full verification on the final commit.** From the repo root: `cargo build --release --locked`, then `SIGSIEVE_TEST_CLI="$PWD/target/release/sigsieve" swift test --package-path macos-app/Packages/SigSieveKit` (expected: all pass, only the fish test skipped, integration tests ran), then the Release `xcodebuild` and `plutil -lint` from Task 5. Record the counts in the task report. Earlier CI runs do not count for these commits; a new CI run needs a push, which needs fresh owner approval.
 - [ ] **Step 3: Commit** with the message `macos-app: manual checks for the redesigned window`.

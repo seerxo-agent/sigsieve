@@ -45,11 +45,20 @@ The owner asked for it simple: drafts 2 and 3 were rejected as "çok karmaşık"
 
 ## Non-goals
 
-- No change to the Rust CLI, SigSieveKit, the check gate, profile storage format
-  or any security rule **(owner)**. The freeze is lifted for the UI layer only,
+- No change to the Rust CLI, the check gate, profile storage format or any
+  security rule, and no change to any existing SigSieveKit file **(owner)**. The
+  one approved exception (2026-11-18) is a new display helper,
+  `Profiles/ForwardedKeys.swift`: it only builds the displayed key list and
+  matches saved fingerprints to the agent's keys by SHA256 fingerprint. It never
+  treats a missing key as usable, never reinterprets the policy and never
+  authorises a connection. The freeze is lifted for the UI layer only,
   and the release blockers are unchanged **(owner)**.
 - No new features. Every control maps to an `AppModel` operation that exists
-  today. The one exception is `setForwardedKeys`, below.
+  today. The exceptions are the server-guarded `setForwardedKeys` and `setMode`
+  (a sheet's draft is applied only to the server it was opened for), and a
+  check reset when a forwarded key vanishes from or reappears in the agent: the
+  gate's inputs do not include the agent's keys, so without it a passed check
+  would outlive the key it was made with **(owner)**.
 
 ## Anti-goals: the redesign has failed if
 
@@ -182,8 +191,9 @@ Top to bottom:
 4. **Keys**: the existing heading "Keys sessions on this server may use
    (forwarded agent)". Below it is a bordered group with one row per forwarded
    key: comment (or "(no comment)"), type and short fingerprint in monospace, a
-   copy-fingerprint button and a **Remove** button. Rows are not toggles, so a
-   row click does nothing. The key badge is a neutral grey `key` symbol.
+   copy-fingerprint button. There is no Remove on the row: every change to the
+   forwarded keys goes through "Edit Keys…" and Save **(owner)**. Rows are not
+   toggles, so a row click does nothing. The key badge is a neutral grey `key` symbol.
    - Then the "Edit Keys…" link.
    - Then the existing captions "\(n) forwarded to this server · applies to new
      connections" and "Login uses \(agent), unfiltered."
@@ -191,14 +201,17 @@ Top to bottom:
      "Edit Keys…" link stays.
    - A forwarded fingerprint that is not in the agent's current key list (agent
      unreachable or empty, or the key removed from it) still gets a row: short
-     fingerprint, "Not in the agent" (new text) in secondary text, copy and
-     Remove **(builder call)**. Today such keys are invisible; the redesign
+     fingerprint, "Not in the agent" (new text) in secondary text, and copy
+     **(builder call)**. Today such keys are invisible; the redesign
      must never hide part of the forwarding policy.
 5. **Binding section**, only in binding mode:
    - The existing policy problem text, when there is one.
    - The heading "Onward servers the key may log in to". The list shows the
      name, type, short fingerprint and "· from your known_hosts" where that
-     applies, with a Remove button. "Add Host Key…" opens a sheet.
+     applies, with a Remove button. "Add Host Key…" opens a sheet. Host-key
+     Remove and the Add buttons in the Add Host Key and Add Server sheets keep
+     today's immediate save: they are explicit single actions, and each clears
+     the check. This is the only exception to Save-only editing **(owner)**.
    - The existing caption "Destination binding names the servers the forwarded
      key may log in to onward from this server, for example github.com. It does
      not protect the login to this server itself."
