@@ -458,15 +458,13 @@ final class AppModel: ObservableObject {
     @discardableResult
     func setForwardedKeys(selection: Set<Fingerprint>, for server: HostInput) -> Bool {
         guard selectedServer == server else { return false }
-        edit { $0.forwardedKeys = ForwardedKeys.applying(selection: selection, to: $0.forwardedKeys, agentKeys: agentKeys) }
-        return true
+        return edit { $0.forwardedKeys = ForwardedKeys.applying(selection: selection, to: $0.forwardedKeys, agentKeys: agentKeys) }
     }
 
     @discardableResult
     func setMode(_ mode: ProtectionMode, for server: HostInput) -> Bool {
         guard selectedServer == server else { return false }
-        setMode(mode)
-        return true
+        return edit { $0.mode = mode }
     }
 
     func setAgent(_ agent: AgentChoice) {
@@ -503,12 +501,14 @@ final class AppModel: ObservableObject {
         return true
     }
 
-    private func edit(_ change: (inout Profile) -> Void) {
-        guard canEdit, var p = selectedProfile else { return }
+    /// False when nothing could be edited or the save failed.
+    @discardableResult
+    private func edit(_ change: (inout Profile) -> Void) -> Bool {
+        guard canEdit, var p = selectedProfile else { return false }
         change(&p)
         var next = profiles
         if let i = next.firstIndex(where: { $0.server == p.server }) { next[i] = p } else { next.append(p) }
-        _ = save(next)
+        return save(next)
     }
 
     /// On failure the in-memory list stays as last saved and edits are disabled.

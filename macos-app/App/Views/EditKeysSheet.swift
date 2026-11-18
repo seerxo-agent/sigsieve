@@ -6,17 +6,19 @@ struct EditKeysSheet: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
     let server: HostInput
+    let profile: Profile
     @State private var draft: Set<Fingerprint>
     @State private var query = ""
 
     /// The draft starts as all saved fingerprints, including the ones missing from the agent.
     init(server: HostInput, profile: Profile) {
         self.server = server
+        self.profile = profile
         _draft = State(initialValue: Set(profile.forwardedKeys))
     }
 
     var body: some View {
-        let missing = model.forwardedRows.compactMap { row -> Fingerprint? in
+        let missing = ForwardedKeys.rows(forwarded: profile.forwardedKeys, agentKeys: model.agentKeys).compactMap { row -> Fingerprint? in
             if case .notInAgent(let fingerprint) = row { return fingerprint }
             return nil
         }

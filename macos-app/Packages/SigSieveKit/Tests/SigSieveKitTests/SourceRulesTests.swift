@@ -86,6 +86,7 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
         let at = try #require(src.range(of: call))
         #expect(save.lowerBound < at.lowerBound, "\(file): \(call) only after Save")
         #expect(src[at.upperBound...].prefix(while: { $0 != "\n" }).contains("for: server"), "\(file) passes for: server")
+        #expect(src.contains("if \(call)") && src.contains(", for: server) { dismiss() }"), "\(file): dismiss only when the save succeeded")
         #expect(!src.contains(".onDisappear"))
         // The whole closure body, brace-matched, so a multi-line closure is checked too.
         for r in src.ranges(of: ".onChange(of: model.selectedServer)") {
@@ -99,7 +100,14 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
         }
         #expect(src.contains(".onChange(of: model.selectedServer) { _ in dismiss() }"), "\(file): onChange is exactly a dismiss")
     }
+    let appModel = try String(contentsOf: appRoot.appending(path: "App/AppModel.swift"), encoding: .utf8)
+    #expect(appModel.contains("return edit { $0.forwardedKeys = ForwardedKeys.applying("))
+    #expect(appModel.contains("return edit { $0.mode = mode }"))
+    #expect(appModel.contains("private func edit(_ change: (inout Profile) -> Void) -> Bool {"))
+    #expect(appModel.contains("return save(next)"))
     let edit = try String(contentsOf: views.appending(path: "EditKeysSheet.swift"), encoding: .utf8)
+    #expect(edit.contains("ForwardedKeys.rows(forwarded: profile.forwardedKeys, agentKeys: model.agentKeys)"))
+    #expect(!edit.contains("model.forwardedRows"))
     #expect(edit.contains("_draft = State(initialValue: Set(profile.forwardedKeys))"))
     #expect(!edit.contains("draft = Set(model.agentKeys"))
     let prot = try String(contentsOf: views.appending(path: "ProtectionSheet.swift"), encoding: .utf8)
@@ -171,7 +179,7 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
         let e = try #require(model.range(of: next, range: s.upperBound..<model.endIndex), "no \(next) after \(head)")
         return String(model[s.upperBound..<e.lowerBound])
     }
-    #expect(model.contains("func setForwardedKeys(selection: Set<Fingerprint>, for server: HostInput) -> Bool {\n        guard selectedServer == server else { return false }\n        edit { $0.forwardedKeys = ForwardedKeys.applying(selection: selection, to: $0.forwardedKeys, agentKeys: agentKeys) }"))
+    #expect(model.contains("func setForwardedKeys(selection: Set<Fingerprint>, for server: HostInput) -> Bool {\n        guard selectedServer == server else { return false }\n        return edit { $0.forwardedKeys = ForwardedKeys.applying(selection: selection, to: $0.forwardedKeys, agentKeys: agentKeys) }"))
     #expect(model.contains("func setMode(_ mode: ProtectionMode, for server: HostInput) -> Bool {\n        guard selectedServer == server else { return false }"))
     #expect(try body("private func resetCheck() {", to: "// MARK: Check and connect").contains("checkedKeyPresence = nil"))
     #expect(try body("private func resetCheck() {", to: "// MARK: Check and connect").contains("checkFinishedAt = nil"))
