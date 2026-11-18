@@ -56,9 +56,9 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(minWidth: 600, idealWidth: 640, maxWidth: 820)
-        // Short panes still fit the three sidebar items with normal bottom padding.
-        .frame(minHeight: 220, alignment: .top)
-        // The window is exactly as tall as the current pane; switching panes may change it.
+        // One height for every pane (the tallest without errors), so switching panes never resizes
+        // the window; it grows only when a pane shows more (an error, the unsaved caption).
+        .frame(minHeight: 270, alignment: .top)
         .fixedSize(horizontal: false, vertical: true)
         .background(alignment: .leading) {
             // Full-height sidebar material behind the traffic lights; no separate title-bar strip.
@@ -112,6 +112,9 @@ struct SettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // No square keyboard focus ring over the rounded selection (macOS 13 has no focusEffectDisabled).
+                .focusable(false)
+                .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
         // Items start below the traffic lights.
