@@ -6,8 +6,14 @@ struct EditKeysSheet: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
     let server: HostInput
-    @State private var draft = Set<Fingerprint>()
+    @State private var draft: Set<Fingerprint>
     @State private var query = ""
+
+    /// The draft starts as all saved fingerprints, including the ones missing from the agent.
+    init(server: HostInput, profile: Profile) {
+        self.server = server
+        _draft = State(initialValue: Set(profile.forwardedKeys))
+    }
 
     var body: some View {
         let missing = model.forwardedRows.compactMap { row -> Fingerprint? in
@@ -52,8 +58,7 @@ struct EditKeysSheet: View {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Save") {
-                    model.setForwardedKeys(selection: draft, for: server)
-                    dismiss()
+                    if model.setForwardedKeys(selection: draft, for: server) { dismiss() }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!model.canEdit)
@@ -61,8 +66,6 @@ struct EditKeysSheet: View {
         }
         .padding(20)
         .frame(width: 460, height: 460)
-        // All saved fingerprints, including the ones missing from the agent.
-        .onAppear { draft = Set(model.selectedProfile?.forwardedKeys ?? []) }
         .onChange(of: model.selectedServer) { _ in dismiss() }
     }
 

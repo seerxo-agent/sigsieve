@@ -113,8 +113,11 @@ final class AppModel: ObservableObject {
 
     /// The saved profile, or the empty one a server without a profile has: no key forwarded.
     var selectedProfile: Profile? {
-        guard let s = selectedServer else { return nil }
-        return profiles.first { $0.server == s } ?? .empty(for: s, agent: defaultAgent)
+        selectedServer.map(profile(for:))
+    }
+
+    func profile(for server: HostInput) -> Profile {
+        profiles.first { $0.server == server } ?? .empty(for: server, agent: defaultAgent)
     }
 
     func agentName(for agent: AgentChoice) -> String {

@@ -5,10 +5,14 @@ import SwiftUI
 /// The main window: servers in the sidebar, the selected server's detail, and a fixed bottom bar.
 struct MainWindow: View {
     @EnvironmentObject var model: AppModel
-    @State private var showEditKeys = false
-    @State private var showProtection = false
+    @State private var editKeys: SheetTarget?
+    @State private var protection: SheetTarget?
     @State private var showAddHostKey = false
     @State private var showAddServer = false
+
+    private func target() -> SheetTarget? {
+        model.selectedServer.map { SheetTarget(server: $0, profile: model.profile(for: $0)) }
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -21,8 +25,8 @@ struct MainWindow: View {
                         VStack(alignment: .leading, spacing: 20) {
                             BlockingErrors()
                             ServerHeader()
-                            ProtectionLine { showProtection = true }
-                            ForwardedKeysGroup { showEditKeys = true }
+                            ProtectionLine { protection = target() }
+                            ForwardedKeysGroup { editKeys = target() }
                             if model.selectedProfile?.mode == .binding {
                                 BindingSection { showAddHostKey = true }
                             }
@@ -46,15 +50,18 @@ struct MainWindow: View {
             }
         }
         .frame(minWidth: 640, minHeight: 460)
-        .sheet(isPresented: $showEditKeys) {
-            if let server = model.selectedServer { EditKeysSheet(server: server) }
-        }
-        .sheet(isPresented: $showProtection) {
-            if let server = model.selectedServer { ProtectionSheet(server: server) }
-        }
+        .sheet(item: $editKeys) { EditKeysSheet(server: $0.server, profile: $0.profile) }
+        .sheet(item: $protection) { ProtectionSheet(server: $0.server, profile: $0.profile) }
         .sheet(isPresented: $showAddHostKey) { AddHostKeySheet() }
         .sheet(isPresented: $showAddServer) { AddServerSheet() }
     }
+}
+
+/// The server and its saved profile as they were when a sheet was opened; the sheet only ever gets this one.
+private struct SheetTarget: Identifiable {
+    let id = UUID()
+    let server: HostInput
+    let profile: Profile
 }
 
 private struct Sidebar: View {

@@ -87,13 +87,28 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
         #expect(save.lowerBound < at.lowerBound, "\(file): \(call) only after Save")
         #expect(src[at.upperBound...].prefix(while: { $0 != "\n" }).contains("for: server"), "\(file) passes for: server")
         #expect(!src.contains(".onDisappear"))
-        for line in src.split(separator: "\n") where line.contains(".onChange") {
-            #expect(!line.contains("model.set"), "onChange must not save")
+        // The whole closure body, brace-matched, so a multi-line closure is checked too.
+        for r in src.ranges(of: ".onChange(of: model.selectedServer)") {
+            var depth = 0, body = "", started = false
+            for c in src[r.upperBound...] {
+                if c == "{" { depth += 1; started = true; continue }
+                if c == "}" { depth -= 1; if started && depth == 0 { break } }
+                if started { body.append(c) }
+            }
+            #expect(!body.contains("model."), "\(file): onChange must only dismiss")
         }
+        #expect(src.contains(".onChange(of: model.selectedServer) { _ in dismiss() }"), "\(file): onChange is exactly a dismiss")
     }
     let edit = try String(contentsOf: views.appending(path: "EditKeysSheet.swift"), encoding: .utf8)
-    #expect(edit.contains("forwardedKeys"))
+    #expect(edit.contains("_draft = State(initialValue: Set(profile.forwardedKeys))"))
     #expect(!edit.contains("draft = Set(model.agentKeys"))
+    let prot = try String(contentsOf: views.appending(path: "ProtectionSheet.swift"), encoding: .utf8)
+    #expect(prot.contains("_draft = State(initialValue: profile.mode)"))
+    let main = try String(contentsOf: views.appending(path: "MainWindow.swift"), encoding: .utf8)
+    #expect(main.contains("EditKeysSheet(server: $0.server, profile: $0.profile)"))
+    #expect(main.contains("ProtectionSheet(server: $0.server, profile: $0.profile)"))
+    #expect(!main.contains("EditKeysSheet(server: model.") && !main.contains("ProtectionSheet(server: model."))
+    #expect(main.contains("SheetTarget(server: $0, profile: model.profile(for: $0))"))
 }
 
 /// F2: when some Include files are untracked, connect() re-runs the whole check through the Kit
