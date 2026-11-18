@@ -52,6 +52,9 @@ struct StatusRow: View {
 
     static func describe(_ e: CLIError) -> String {
         switch e {
+        // Only when the lookup ended with an error other than CLIError (AppModel.locateCLI).
+        case .notFound(let searched) where searched.isEmpty:
+            "SigSieve CLI not found: the search stopped before any location was checked."
         case .notFound(let searched) where searched.count == 1:
             "The CLI path set in Settings does not exist: \(searched[0])"
         case .notFound(let searched):
