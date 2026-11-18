@@ -103,3 +103,16 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     let paths = "paths: ['macos-app/**', '.github/workflows/macos-app.yml', 'src/**', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml']"
     #expect(text.contains("  pull_request:\n    \(paths)\n  push:\n    \(paths)\n"))
 }
+
+/// F5: the Release app has hardened runtime and no injected get-task-allow; still ad hoc signed.
+@Test func releaseSigningHygiene() throws {
+    let project = try String(contentsOf: appRoot.appending(path: "SigSieve.xcodeproj/project.pbxproj"), encoding: .utf8)
+    let start = try #require(project.range(of: "5C1A00000000000000000A04 /* Release */ = {"))
+    let end = try #require(project.range(of: "name = Release;", range: start.upperBound..<project.endIndex))
+    let release = project[start.upperBound..<end.lowerBound]
+    for line in ["ENABLE_HARDENED_RUNTIME = YES;", "CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;",
+                 "CODE_SIGN_IDENTITY = \"-\";", "DEVELOPMENT_TEAM = \"\";"] {
+        #expect(release.contains(line), "Release lacks \(line)")
+    }
+    #expect(!project.contains("CODE_SIGN_ENTITLEMENTS"))
+}
