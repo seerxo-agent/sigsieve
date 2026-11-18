@@ -6,8 +6,27 @@ struct SigSieveApp: App {
     @StateObject private var model = AppModel()
 
     var body: some Scene {
+        // The first scene opens at launch.
+        Window("SigSieve", id: "main") {
+            MainWindow()
+                .environmentObject(model)
+        }
+        .defaultSize(width: 820, height: 600)
+        .commands {
+            CommandGroup(replacing: .appSettings) { SettingsCommand() }
+        }
+
+        // A Window, not a Settings scene: opening that one needs SettingsLink (macOS 14).
+        Window("Settings", id: "settings") {
+            SettingsView()
+                .environmentObject(model)
+        }
+        // No title-bar strip; the window takes its size from SettingsView (height fits the pane).
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+
         MenuBarExtra {
-            MenuWindow()
+            MenuStatusView()
                 .environmentObject(model)
         } label: {
             Image(nsImage: MenuBarIcon.image(error: model.hasBlockingError))
@@ -17,53 +36,25 @@ struct SigSieveApp: App {
     }
 }
 
-/// One window: status row, server picker, key list, Advanced, Check, footer.
-struct MenuWindow: View {
-    @EnvironmentObject var model: AppModel
-    @State private var showSettings = false
+/// ⌘, opens the Settings window. A view, because openWindow comes from the environment.
+private struct SettingsCommand: View {
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            StatusRow()
-            Divider()
-            if showSettings {
-                SettingsView()
-            } else if model.selectedServer == nil {
-                ServerPicker()
-            } else {
-                // Fixed maximum height; the lists inside keep their own fixed heights.
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ServerPicker()
-                        KeyList()
-                        AdvancedSection()
-                        CheckSection()
-                    }
-                    .padding(.trailing, 8)
-                }
-                .frame(height: 600)
-            }
-            Divider()
-            FooterView(showSettings: $showSettings)
-        }
-        .padding(12)
-        .frame(width: 380)
-        .onAppear { Task { await model.refresh() } }
-        // onAppear is not guaranteed to fire on every reopen of a .window MenuBarExtra;
-        // its panel becomes key each time it opens. This app has no other window.
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
-            Task { await model.refresh() }
-        }
+        Button("Settings…") { openWindow(id: "settings") }
+            .keyboardShortcut(",")
     }
 }
 
-/// `key.horizontal` as a template; for a blocking error, `key.horizontal.fill`
+/// The fingerprint mark as a template; for a blocking error, the same mark
 /// with a dot badge drawn into the same template image.
 enum MenuBarIcon {
     @MainActor
     static func image(error: Bool) -> NSImage {
-        let name = error ? "key.horizontal.fill" : "key.horizontal"
-        guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: "SigSieve") else { return NSImage() }
+        // The app's fingerprint mark as a template glyph (Assets: MenuBarIcon, source Icon/MenuBarIcon.svg).
+        guard let symbol = NSImage(named: "MenuBarIcon")?.copy() as? NSImage else { return NSImage() }
+        symbol.size = NSSize(width: 18, height: 18)
+        symbol.accessibilityDescription = "SigSieve"
         guard error else {
             symbol.isTemplate = true
             return symbol

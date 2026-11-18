@@ -1,51 +1,25 @@
 import SigSieveKit
 import SwiftUI
 
-/// Agent, key count and CLI version; each blocking error in red.
-struct StatusRow: View {
-    @EnvironmentObject var model: AppModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(agentSummary)
-                Spacer()
-                Text(cliSummary).foregroundStyle(.secondary)
-            }
-            .font(.callout)
-            ForEach(blockingErrors, id: \.self) { message in
-                Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private var agentSummary: String {
+/// Status strings shared by the main window, the menu bar panel and Settings.
+@MainActor
+enum StatusText {
+    /// "· N keys", "· no keys", or why the agent is not reachable.
+    static func agentState(_ model: AppModel) -> String {
         switch model.agentState {
-        case .keys(let k): "\(model.agentName) · \(k.count) key\(k.count == 1 ? "" : "s")"
-        case .empty: "\(model.agentName) · no keys"
+        case .keys(let k): "· \(k.count) key\(k.count == 1 ? "" : "s")"
+        case .empty: "· no keys"
         case .unreachable(let why): "Agent not reachable: \(why)"
         }
     }
 
-    private var cliSummary: String {
-        switch model.cli {
-        case .success(let info): info.version
-        case .failure: "CLI error"
-        case nil: "CLI …"
-        }
-    }
-
-    private var blockingErrors: [String] {
+    static func blockingErrors(_ model: AppModel) -> [String] {
         var errors: [String] = []
         if let p = model.cliSettingProblem { errors.append(p) }
-        if case .failure(let e) = model.cli { errors.append(Self.describe(e)) }
+        if case .failure(let e) = model.cli { errors.append(describe(e)) }
         if case .failure(let e) = model.tmpdir { errors.append("Blocked: \(e.description). There is no fallback to /tmp.") }
         if let e = model.storeError {
-            errors.append("Profiles file \(model.store.file.path): \(Self.describe(e)). Editing is disabled.")
+            errors.append("Profiles file \(model.store.file.path): \(describe(e)). Editing is disabled.")
         }
         return errors
     }

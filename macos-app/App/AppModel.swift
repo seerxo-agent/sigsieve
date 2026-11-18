@@ -23,10 +23,16 @@ final class AppModel: ObservableObject {
     /// `knownHostsStamps` taken just before `knownHosts` was read; an Add compares them with now.
     private var knownHostsLoadedStamps: [FileStamp] = []
     @Published private(set) var profiles: [Profile] = []
-    @Published var selectedServer: HostInput? { didSet { if oldValue != selectedServer { inputsChanged(agentMayDiffer: true) } } }
-    @Published var keyQuery = ""
+    @Published var selectedServer: HostInput? {
+        didSet {
+            if let v = selectedServer?.value { defaults.set(v, forKey: Self.selectedServerKey) } else { defaults.removeObject(forKey: Self.selectedServerKey) }
+            if oldValue != selectedServer { inputsChanged(agentMayDiffer: true) }
+        }
+    }
     @Published var serverQuery = ""
     @Published private(set) var checkState: CheckState = .idle
+    /// When the last check finished; nil whenever the check is idle.
+    @Published private(set) var checkFinishedAt: Date?
     @Published private(set) var storeError: ProfileStoreError?
     /// A refused CLI path setting (ruling 1). The refused text is never used.
     @Published private(set) var cliPathError: String?
@@ -47,9 +53,13 @@ final class AppModel: ObservableObject {
     private var waitingTask: Task<Void, Never>?
     private var removedStale = false
     private var refreshing = false
+    private var restoredSelection = false
+    /// Which forwarded keys were in the agent when the last check started.
+    private var checkedKeyPresence: Set<Fingerprint>?
 
     private static let agentKey = "defaultAgent"
     private static let cliPathKey = "cliPath"
+    static let selectedServerKey = "selectedServer"
 
     init() {
         let stored = defaults.data(forKey: Self.agentKey).flatMap { try? JSONDecoder().decode(AgentChoice.self, from: $0) }
@@ -98,12 +108,13 @@ final class AppModel: ObservableObject {
         return []
     }
 
-    var filteredKeys: [AgentKey] { KeyFilter.filter(agentKeys, query: keyQuery) }
-
     /// The saved profile, or the empty one a server without a profile has: no key forwarded.
     var selectedProfile: Profile? {
-        guard let s = selectedServer else { return nil }
-        return profiles.first { $0.server == s } ?? .empty(for: s, agent: defaultAgent)
+        selectedServer.map(profile(for:))
+    }
+
+    func profile(for server: HostInput) -> Profile {
+        profiles.first { $0.server == server } ?? .empty(for: server, agent: defaultAgent)
     }
 
     func agentName(for agent: AgentChoice) -> String {
@@ -181,6 +192,14 @@ final class AppModel: ObservableObject {
         await locateCLI()
         await refreshAgent()
         if !(await reloadKnownHostsIfChanged()) { await loadKnownHosts() }
+        if !restoredSelection {
+            restoredSelection = true
+            if selectedServer == nil {
+                if let stored = defaults.string(forKey: Self.selectedServerKey), let host = HostInput(stored), servers.contains(host) {
+                    selectedServer = host
+                }
+            }
+        }
         inputsChanged()
     }
 
@@ -237,16 +256,23 @@ final class AppModel: ObservableObject {
     }
 
     private func refreshAgent() async {
-        guard let tmp = verifiedTmp else { agentState = .unreachable("the temporary directory failed verification"); return }
         let agent = selectedProfile?.agent ?? defaultAgent
-        do {
-            let env = try ChildEnvironment.make(home: home, cliDirectory: "/usr/bin", tmpdir: tmp, agent: agent)
-            let state = await AgentKeys.list(runner: runner, environment: env)
-            // A slower answer for an agent that is no longer selected must not overwrite the current one.
-            if agent == (selectedProfile?.agent ?? defaultAgent) { agentState = state }
-        } catch {
-            agentState = .unreachable("the agent socket \(agent.socketPath(home: home)) cannot be used")
+        if let tmp = verifiedTmp {
+            do {
+                let env = try ChildEnvironment.make(home: home, cliDirectory: "/usr/bin", tmpdir: tmp, agent: agent)
+                let state = await AgentKeys.list(runner: runner, environment: env)
+                // A slower answer for an agent that is no longer selected must not overwrite the current one.
+                guard agent == (selectedProfile?.agent ?? defaultAgent) else { return }
+                agentState = state
+            } catch {
+                agentState = .unreachable("the agent socket \(agent.socketPath(home: home)) cannot be used")
+            }
+        } else {
+            agentState = .unreachable("the temporary directory failed verification")
         }
+        // Every path above leaves agentKeys current for the selected agent (empty when unreachable).
+        if checkState != .idle, let p = checkedKeyPresence,
+           ForwardedKeys.present(forwarded: selectedProfile?.forwardedKeys ?? [], agentKeys: agentKeys) != p { resetCheck() }
     }
 
     private func loadKnownHosts() async {
@@ -311,6 +337,8 @@ final class AppModel: ObservableObject {
         waitingTask?.cancel()
         waitingTask = nil
         checkState = .idle
+        checkFinishedAt = nil
+        checkedKeyPresence = nil
         gate = CheckGate()
     }
 
@@ -319,11 +347,13 @@ final class AppModel: ObservableObject {
     func runCheck() async {
         connectError = nil
         verifyTmpdir()  // ruling 6: re-verified before each check
+        await refreshAgent()  // the key snapshot below must match the agent now
         rediscover()
         inputsChanged()
-        guard let inputs = currentInputs else { checkState = .idle; return }
+        guard let inputs = currentInputs else { checkState = .idle; checkFinishedAt = nil; return }
         resetCheck()
         checked = (inputs, rootConfigExists)
+        checkedKeyPresence = ForwardedKeys.present(forwarded: inputs.profile.forwardedKeys, agentKeys: agentKeys)
         checkState = .running(.checking)
         let runner = self.runner
         waitingTask = Task { [weak self] in
@@ -340,8 +370,10 @@ final class AppModel: ObservableObject {
             // A result for inputs that are no longer current is never shown.
             if self.currentInputs == inputs, !self.sshConfigChanged() {
                 self.checkState = .finished(result)
+                self.checkFinishedAt = Date()
             } else {
                 self.checkState = .idle
+                self.checkFinishedAt = nil
             }
             self.checkTask = nil
         }
@@ -353,6 +385,7 @@ final class AppModel: ObservableObject {
     func connect() async {
         connectError = nil
         verifyTmpdir()
+        await refreshAgent()
         if sshConfigChanged() {
             rediscover()
             resetCheck()
@@ -369,6 +402,7 @@ final class AppModel: ObservableObject {
             // gate: run the whole check again for these inputs and launch only if that passes.
             checkState = .running(.checking)
             var recheckGate = gate
+            let presenceBefore = checkedKeyPresence
             let passed = await ConnectionCheck.recheckBeforeConnect(inputs, runner: runner, gate: &recheckGate)
             verifyTmpdir()
             guard let now = currentInputs, now == inputs, !sshConfigChanged(), let nowTmp = verifiedTmp else {
@@ -379,8 +413,17 @@ final class AppModel: ObservableObject {
                 }
                 return
             }
+            // An agent refresh during the re-check may have reset the check (a forwarded key left the agent).
+            guard presenceBefore != nil, checkedKeyPresence == presenceBefore else {
+                if checkTask == nil {
+                    resetCheck()
+                    connectError = "The agent's keys changed during the check before connecting. Check again."
+                }
+                return
+            }
             gate = recheckGate
-            if let result = recheckGate.result { checkState = .finished(result) }
+            checkedKeyPresence = ForwardedKeys.present(forwarded: now.profile.forwardedKeys, agentKeys: agentKeys)
+            if let result = recheckGate.result { checkState = .finished(result); checkFinishedAt = Date() }
             guard passed else { return }
             inputs = now
             tmp = nowTmp
@@ -395,13 +438,23 @@ final class AppModel: ObservableObject {
 
     // MARK: Profile edits (saved immediately)
 
-    func toggleKey(_ fp: Fingerprint) {
-        edit { p in
-            if let i = p.forwardedKeys.firstIndex(of: fp) { p.forwardedKeys.remove(at: i) } else { p.forwardedKeys.append(fp) }
-        }
+    /// The forwarded-key rows for the selected server: agent keys, then saved keys the agent lacks.
+    var forwardedRows: [ForwardedKeyRow] {
+        ForwardedKeys.rows(forwarded: selectedProfile?.forwardedKeys ?? [], agentKeys: agentKeys)
     }
 
-    func setMode(_ mode: ProtectionMode) { edit { $0.mode = mode } }
+    /// A draft started for one server is never applied to another.
+    @discardableResult
+    func setForwardedKeys(selection: Set<Fingerprint>, for server: HostInput) -> Bool {
+        guard selectedServer == server else { return false }
+        return edit { $0.forwardedKeys = ForwardedKeys.applying(selection: selection, to: $0.forwardedKeys, agentKeys: agentKeys) }
+    }
+
+    @discardableResult
+    func setMode(_ mode: ProtectionMode, for server: HostInput) -> Bool {
+        guard selectedServer == server else { return false }
+        return edit { $0.mode = mode }
+    }
 
     func setAgent(_ agent: AgentChoice) {
         edit { $0.agent = agent }
@@ -417,8 +470,6 @@ final class AppModel: ObservableObject {
             }
         }
     }
-
-    func removeDestination(_ d: Destination) { edit { $0.destinations.removeAll { $0 == d } } }
 
     func removeHostKey(_ fp: Fingerprint) {
         edit { p in
@@ -437,12 +488,14 @@ final class AppModel: ObservableObject {
         return true
     }
 
-    private func edit(_ change: (inout Profile) -> Void) {
-        guard canEdit, var p = selectedProfile else { return }
+    /// False when nothing could be edited or the save failed.
+    @discardableResult
+    private func edit(_ change: (inout Profile) -> Void) -> Bool {
+        guard canEdit, var p = selectedProfile else { return false }
         change(&p)
         var next = profiles
         if let i = next.firstIndex(where: { $0.server == p.server }) { next[i] = p } else { next.append(p) }
-        _ = save(next)
+        return save(next)
     }
 
     /// On failure the in-memory list stays as last saved and edits are disabled.
