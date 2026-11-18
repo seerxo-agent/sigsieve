@@ -81,7 +81,7 @@
 
 - [ ] **Step 3: Implement** the two functions in `ForwardedKeys.swift`. Use a dictionary from fingerprint to `AgentKey`. Never compare comments or types.
 
-- [ ] **Step 4: Run** the same command. Expected: 8 tests pass. Then run the full suite: `SIGSIEVE_TEST_CLI="$PWD/target/release/sigsieve" swift test --package-path macos-app/Packages/SigSieveKit` from the repo root, after `cargo build --release --locked`. Expected: all pass, only the fish test skipped.
+- [ ] **Step 4: Run** the same command. Expected: 9 tests pass. Then run the full suite: `SIGSIEVE_TEST_CLI="$PWD/target/release/sigsieve" swift test --package-path macos-app/Packages/SigSieveKit` from the repo root, after `cargo build --release --locked`. Expected: all pass, only the fish test skipped.
 
 - [ ] **Step 5: Commit** with the message `macos-app: ForwardedKeys helper for missing-key rows and sheet saves`.
 
