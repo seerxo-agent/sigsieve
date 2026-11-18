@@ -1,0 +1,25 @@
+macos-app/App/Resources/Assets.xcassets/MenuBarIcon.imageset/Contents.json
+  s_63ebb2a1e1ff37::t_d30cec5ae8ea45 1-9
+macos-app/Icon/MenuBarIcon.svg
+  s_63ebb2a1e1ff37::t_d30cec5ae8ea45 1
+macos-app/App/SigSieveApp.swift
+  s_63ebb2a1e1ff37::t_d486152e3265c9 57
+  s_63ebb2a1e1ff37::t_457ff5f6c376fe 54-56
+  s_63ebb2a1e1ff37::t_25548c30ce2f4a 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8a6b82e2daab59d6b9b0f1d6bee922037193b872",
+  "prompts": {},
+  "sessions": {
+    "s_63ebb2a1e1ff37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e9e90eb-9ef2-40e7-84a4-ada9eadcfa7f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
