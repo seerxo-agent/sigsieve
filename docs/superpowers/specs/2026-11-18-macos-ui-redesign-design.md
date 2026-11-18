@@ -117,8 +117,8 @@ protection line, the key list, the check result, and a bottom bar.
 │ staging    │                                              │
 │ build-box  │ Keys sessions on this server may use (fwd)   │
 │            │ ┌──────────────────────────────────────────┐ │
-│            │ │ Development Key  ECDSA · SHA256:…  Remove│ │
-│            │ │ Backup Key       ED25519 · SHA256:… Remove│ │
+│            │ │ Development Key  ECDSA · SHA256:…     ⧉  │ │
+│            │ │ Backup Key       ED25519 · SHA256:…   ⧉  │ │
 │            │ └──────────────────────────────────────────┘ │
 │            │ Edit Keys…                                   │
 │            │ 2 forwarded … · Login uses Secretive, unf.   │
