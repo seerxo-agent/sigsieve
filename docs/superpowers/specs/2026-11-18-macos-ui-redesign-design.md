@@ -124,7 +124,6 @@ protection line, the key list, the check result, and a bottom bar.
 │            │ 2 forwarded … · Login uses Secretive, unf.   │
 │            │                                              │
 │            │ ✓ Check passed · 16:53                       │
-│            │ Forwarded key can sign for any server while… │
 │            │ SigSieve checks again when it connects       │
 │            │ ▸ Details                                    │
 │ + Add      ├──────────────────────────────────────────────┤
@@ -155,11 +154,18 @@ protection line, the key list, the check result, and a bottom bar.
 - One row per server from the existing `model.filteredServers` source (aliases
   plus saved profiles), selected through `model.selectedServer`. The sidebar
   uses `.searchable`, bound to `serverQuery`.
-- Rows show the server name only. **No per-server check dots (builder call).**
+- Rows show the server name. Only the selected row also shows the current check
+  state at its trailing edge, with the menu bar's logic (`canConnect` first): a
+  green dot "Check passed", a small spinner "Checking…", a red dot "Check
+  failed", otherwise a hollow grey ring "Not checked" (the text is its help and
+  accessibility label). **Other rows show no indicator (owner, 2026-11-19).**
   The app keeps one check at a time, and changing the selected server clears it.
   This is existing gate behaviour and is not to be changed. A dot on another
   server would show a result the gate no longer honours, which breaks the first
-  anti-goal. Mockup 1 showed dots; this document drops them.
+  anti-goal.
+- Sidebar content sits 10 pt from the sidebar edges; rows have 5×8 pt padding,
+  the selected row's name is semibold, and "+ Add Server" lines up with the row
+  text (owner, 2026-11-19).
 - "+ Add Server" at the bottom opens a small sheet with the existing field and
   its error text. It calls `addServer`.
 - "Include not read: …" (verbatim, existing) appears as a caption under the
@@ -223,9 +229,10 @@ Top to bottom:
 6. **Check result**, only when `checkState` is `.finished` and, for a pass, only
    when `canConnect`, as today:
    - A pass shows the line "Check passed · HH:mm" in green with
-     `checkmark.circle.fill`. Below it, in filtering mode, is "Forwarded key can
-     sign for any server while connected" at body size. Then comes "SigSieve
-     checks again when it connects" in secondary text.
+     `checkmark.circle.fill`. Below it is "SigSieve checks again when it
+     connects" in secondary text. The pass does not repeat "Forwarded key can
+     sign for any server while connected": that warning is shown once, in the
+     protection line, at all times in filtering mode **(owner, 2026-11-19)**.
    - A failure shows the existing title (for example "sigsieve connect --dry-run
      failed") in red with `xmark.octagon.fill`. Below it are the CLI hint and
      then the existing known_hosts paragraph.

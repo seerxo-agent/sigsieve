@@ -40,15 +40,7 @@ private struct PassedResult: View {
             Label(title, systemImage: "checkmark.circle.fill")
                 .font(.headline)
                 .foregroundStyle(.green)
-            // A passed check exists only without a policyProblem, so binding here always has a host key.
-            if model.selectedProfile?.mode != .binding {
-                Label {
-                    Text("Forwarded key can sign for any server while connected")
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-                }
-            }
+            // The filtering warning is not repeated here: ProtectionLine shows it at all times (owner 2026-11-19).
             CLIWarnings(lines: lines)
             Text("SigSieve checks again when it connects")
                 .foregroundStyle(.secondary)

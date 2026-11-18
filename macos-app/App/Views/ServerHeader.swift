@@ -63,9 +63,18 @@ struct ServerHeader: View {
             .pickerStyle(.inline)
             .labelsHidden()
         } label: {
-            Text(model.agentName).lineLimit(1).truncationMode(.middle)
+            // A plain label, so the agent name starts at the title's leading edge (no menu-button inset).
+            HStack(spacing: 3) {
+                Text(model.agentName).lineLimit(1).truncationMode(.middle)
+                Image(systemName: "chevron.down")
+                    .font(.points(9, .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
         .fixedSize(horizontal: false, vertical: true)
         .help(model.agentName)
         .disabled(!model.canEdit)

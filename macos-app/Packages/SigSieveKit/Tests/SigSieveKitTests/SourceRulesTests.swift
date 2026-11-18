@@ -328,8 +328,9 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     let recheck = try #require(result.range(of: "\"SigSieve checks again when it connects\""))
     let knownHosts = try #require(result.range(of: "\"If the server's host key is not in known_hosts, OpenSSH refuses the connection."))
     #expect(recheck.lowerBound < details.lowerBound && knownHosts.lowerBound < details.lowerBound)
-    let filtering = try #require(result.range(of: "Text(\"Forwarded key can sign for any server while connected\")"))
-    #expect(filtering.lowerBound < details.lowerBound)
+    // The filtering warning is shown once, in ProtectionLine; a pass does not repeat it (owner 2026-11-19).
+    let warning = "Forwarded key can sign for any server while connected"
+    #expect(!result.contains(warning), "CheckResultView.swift repeats the filtering warning")
     // CLI warnings (`sigsieve: warning: …`) are shown above Details in both results, word for word.
     let cliWarning = try #require(result.range(of: "$0.label == \"sigsieve\" && $0.value.hasPrefix(\"warning:\")"))
     #expect(cliWarning.lowerBound < details.lowerBound)
@@ -343,6 +344,11 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     for text in ["Text(\"Forwarded key can sign for any server while connected\")", "\"Identity filtering only\"", "\"Destination binding\""] {
         #expect(protection.contains(text), "ProtectionLine.swift lacks \(text)")
     }
+    // Always visible in filtering mode: under `if !binding`, never inside a DisclosureGroup.
+    let notBinding = try #require(protection.range(of: "if !binding {"))
+    let shown = try #require(protection.range(of: "Text(\"\(warning)\")"))
+    #expect(notBinding.lowerBound < shown.lowerBound)
+    #expect(!protection.contains("DisclosureGroup"))
 }
 
 /// The body of `private struct <name>: View` up to the next top-level declaration.

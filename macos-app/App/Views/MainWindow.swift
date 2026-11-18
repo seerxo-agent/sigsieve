@@ -150,7 +150,16 @@ private struct Sidebar: View {
 
     var body: some View {
         List(model.filteredServers, id: \.self, selection: selection) { server in
-            Text(server.value).lineLimit(1).truncationMode(.middle)
+            let selected = server == model.selectedServer
+            HStack(spacing: 8) {
+                Text(server.value).fontWeight(selected ? .semibold : .regular)
+                    .lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 0)
+                // Only the selected server: SigSieve keeps one check, for the selected server only.
+                if selected { CheckIndicator() }
+            }
+            .padding(.vertical, 5).padding(.horizontal, 8)
+            .listRowInsets(EdgeInsets())
         }
         .listStyle(.sidebar)
         .searchable(text: $model.serverQuery, placement: .sidebar)
@@ -165,8 +174,40 @@ private struct Sidebar: View {
                     .buttonStyle(.borderless)
                     .disabled(model.storeError != nil)
             }
-            .padding(12)
+            // 10 pt sidebar inset + the rows' 8 pt text padding, so the button lines up with the row text.
+            .padding(.horizontal, 18).padding(.top, 6).padding(.bottom, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// The current check state of the selected server, as in the menu bar: the gate first, so a
+/// pass that no longer opens it reads as not checked.
+private struct CheckIndicator: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        let state = self.state
+        Group {
+            if state.running {
+                ProgressView().controlSize(.small).scaleEffect(0.6).frame(width: 10, height: 10)
+            } else if let color = state.color {
+                Circle().fill(color).frame(width: 8, height: 8)
+            } else {
+                Circle().strokeBorder(Color.gray, lineWidth: 1.3).frame(width: 8, height: 8)
+            }
+        }
+        .help(state.text)
+        .accessibilityElement()
+        .accessibilityLabel(state.text)
+    }
+
+    private var state: (text: String, color: Color?, running: Bool) {
+        if model.canConnect { return ("Check passed", .green, false) }
+        switch model.checkState {
+        case .running: return ("Checking…", nil, true)
+        case .finished(let result) where !result.passed: return ("Check failed", .red, false)
+        case .idle, .finished: return ("Not checked", nil, false)
         }
     }
 }
