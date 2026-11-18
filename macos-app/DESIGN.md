@@ -144,7 +144,8 @@ Settings.
   launcher**, so a passing check describes the connection that follows
   **(builder call; found in review)**. The launcher starts the CLI with
   `/usr/bin/env -i` and exactly these variables; the copyable command shows
-  the same `env -i …` prefix, so pasting it into any terminal reproduces it.
+  the same `env -i …` prefix, so pasting it into sh, bash or zsh reproduces
+  it. fish and csh/tcsh are not supported.
 - One documented difference: `TERM`. The Terminal launcher and the copyable
   command also pass `TERM`, taken from the terminal they run in
   (`TERM="$TERM"`), because the interactive session needs a terminal type.
@@ -320,7 +321,7 @@ line: "SigSieve checks again when it connects" **(owner)**.
 - It is opened with `NSWorkspace` in Terminal. No AppleScript and no
   Automation permission **(builder call)**.
 - The same command is shown in the window as copyable text, quoted the same
-  way, so it can be pasted into any terminal.
+  way, so it can be used in sh, bash or zsh.
 
 ### Disconnect (phase 2)
 
