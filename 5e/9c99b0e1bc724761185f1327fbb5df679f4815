@@ -1,0 +1,21 @@
+macos-app/README.md
+  s_63ebb2a1e1ff37::t_23f4bb7518d47a 68,71-73
+macos-app/Packages/SigSieveKit/Sources/SigSieveKit/ProcessExecution/ProcessRunner.swift
+  s_63ebb2a1e1ff37::t_23f4bb7518d47a 184-188,190
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5e9c99b0e1bc724761185f1327fbb5df679f4815",
+  "prompts": {},
+  "sessions": {
+    "s_63ebb2a1e1ff37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e9e90eb-9ef2-40e7-84a4-ada9eadcfa7f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
