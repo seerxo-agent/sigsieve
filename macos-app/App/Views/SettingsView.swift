@@ -56,7 +56,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(minWidth: 600, idealWidth: 640, maxWidth: 820)
-        // One height for every pane (the tallest without errors), so switching panes never resizes
+        // One height for every pane (a little above the tallest without errors), so switching panes never resizes
         // the window; it grows only when a pane shows more (an error, the unsaved caption).
         .frame(minHeight: 270, alignment: .top)
         .fixedSize(horizontal: false, vertical: true)
@@ -114,6 +114,9 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
                 // No square keyboard focus ring over the rounded selection (macOS 13 has no focusEffectDisabled).
                 .focusable(false)
+                // Keyboard pane switching without the focus loop: ⌘1, ⌘2, ⌘3.
+                .keyboardShortcut(KeyEquivalent(Character(String(Pane.allCases.firstIndex(of: p)! + 1))), modifiers: .command)
+                .help("\(p.rawValue) (⌘\(Pane.allCases.firstIndex(of: p)! + 1))")
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
