@@ -1,0 +1,19 @@
+docs/superpowers/specs/2026-11-18-macos-ui-redesign-design.md
+  s_63ebb2a1e1ff37::t_5f40c1f62485b9 357-358
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "654e72bf2056c80afe3c0dc859992480c096cd7f",
+  "prompts": {},
+  "sessions": {
+    "s_63ebb2a1e1ff37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e9e90eb-9ef2-40e7-84a4-ada9eadcfa7f",
+        "model": "unknown"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
