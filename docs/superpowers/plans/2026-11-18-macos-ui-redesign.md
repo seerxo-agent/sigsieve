@@ -12,6 +12,7 @@
 
 ## Global Constraints
 
+- Owner limit on the Kit exception (2026-11-18): `ForwardedKeys.swift` only builds the displayed key list and matches saved fingerprints to the agent's keys by SHA256 fingerprint. It never treats a missing key as usable, never reinterprets the policy and never authorises a connection; nothing in the gate, `CheckInputs` or `CommandBuilder` may call it.
 - No change to the Rust CLI or to any existing file under `macos-app/Packages/SigSieveKit/Sources/`. The only Kit change is one new file, `Profiles/ForwardedKeys.swift`, plus its test file.
 - `MACOSX_DEPLOYMENT_TARGET = 13.0` stays. No API newer than macOS 13 without an `if #available` fallback. No `SettingsLink`.
 - Every existing user-facing security text keeps its exact wording, as listed in the spec, "Detail pane".
@@ -73,6 +74,7 @@
   - `newKeysAppendInAgentOrder`: current `[F2]`, agent `[K1, K2, K3]`, selection `{F3, F2, F1}` gives `[F2, F1, F3]`.
   - `deselectedRemoved`: current `[F1, F2]`, selection `{F2}` gives `[F2]`.
   - `missingKeyKeptOnlyIfSelected`: current `[F9]`, where F9 is not in the agent. Selection `{F9}` gives `[F9]`; selection `{}` gives `[]`.
+  - `openAndSaveKeepsMissingKeys`: current `[F1, F9]`, agent `[K1]` (F9 missing). `applying(selection: Set(current), to: current, agentKeys:)` returns `[F1, F9]` exactly: opening Edit Keys and pressing Save without changes never drops a missing key (owner condition).
   - `selectionOfUnknownFingerprintIgnored`: current `[]`, agent `[K1]`, selection `{F9}` gives `[]`. Only keys the sheet showed can be added.
 
 - [ ] **Step 2: Run** `swift test --package-path macos-app/Packages/SigSieveKit --filter ForwardedKeysTests`. Expected: build FAIL, because `ForwardedKeys` is not defined.
@@ -109,6 +111,8 @@
 - [ ] **Step 2: Run** `swift test --package-path macos-app/Packages/SigSieveKit --filter SourceRulesTests`. Expected: the new test FAILS.
 
 - [ ] **Step 3: Implement** the four additions. `save()` already calls `inputsChanged()`, so a Save that changes the list resets a passed check (AC1). A Save that does not change it keeps the check, because the inputs are equal.
+
+- [ ] **Step 3a:** In the same test file, add `@Test func forwardedKeysHelperGrantsNothing()`: none of `ConnectionCheck.swift`, `CommandBuilder.swift` or `AppModel.swift`'s `currentInputs` body mention `ForwardedKeys`.
 
 - [ ] **Step 4: Run** the full Kit suite and then `xcodebuild -project macos-app/SigSieve.xcodeproj -scheme SigSieve -configuration Debug -derivedDataPath macos-app/build build`. Expected: tests pass and the build reports `** BUILD SUCCEEDED **`.
 
@@ -192,7 +196,8 @@ Behaviour, per the spec's "Sheets":
 
 - [ ] **Step 1: Update the source-rule tests:**
   - `knownHostsPickerWiringAndWording` now reads `Views/AddHostKeySheet.swift` instead of `Views/AdvancedSection.swift`. It keeps every assertion except the "SigSieve does not verify…" pin, which Task 3 moved to `BindingSection.swift`. If the sheet also shows that sentence, keep the pin there too.
-  - Add `@Test func sheetsSaveOnlyOnSave()`. `EditKeysSheet.swift` contains exactly one `model.setForwardedKeys(`, and it comes after `Button("Save")`. `ProtectionSheet.swift` contains exactly one `model.setMode(`, and it comes after `Button("Save")`.
+  - Add `@Test func sheetsSaveOnlyOnSave()`. `EditKeysSheet.swift` contains exactly one `model.setForwardedKeys(`, and it comes after `Button("Save")`. `ProtectionSheet.swift` contains exactly one `model.setMode(`, and it comes after `Button("Save")`. Neither file contains `.onDisappear` or `.onChange` calling the model, so closing the sheet with Esc or the window's close button saves nothing, exactly like Cancel.
+  - In the same test, `EditKeysSheet.swift` initialises `draft` from `forwardedKeys` (all saved fingerprints, including missing ones), not from `agentKeys`.
 
 - [ ] **Step 2: Run** the `SourceRulesTests` filter. Expected: FAIL.
 
@@ -262,6 +267,7 @@ Decisions:
   - **M4c.** ⌘, and the menu's "Settings…" open one Settings window. Closing Settings leaves the main window and the Dock state unchanged.
   - **M4d.** Quit and relaunch: the last selected server is selected again, and its check is "Not checked".
   - **M4e.** Quit, run `defaults write dev.sigsieve.macos selectedServer no-such-server.invalid`, and relaunch. Nothing is selected and there is no error. Repeat with the value `-bad`.
-- [ ] **Step 2:** Mark items 1, 2 and 7 for re-run on the new UI.
+- [ ] **Step 2:** Mark items 1, 2 and 7 for re-run on the new UI. Extend M1 with two more cases: close the sheet with Esc without Save (nothing changes), and open Edit Keys while a key is "Not in the agent", press Save without changes, and confirm the row is still there. Extend M3: read every warning in the real window with Details closed, in light and dark mode.
+- [ ] **Step 2a: Full verification on the final commit.** From the repo root: `cargo build --release --locked`, then `SIGSIEVE_TEST_CLI="$PWD/target/release/sigsieve" swift test --package-path macos-app/Packages/SigSieveKit` (expected: all pass, only the fish test skipped, integration tests ran), then the Release `xcodebuild` and `plutil -lint` from Task 5. Record the counts in the task report. Earlier CI runs do not count for these commits; a new CI run needs a push, which needs fresh owner approval.
 - [ ] **Step 3: Commit** with the message `macos-app: manual checks for the redesigned window`.
 - [ ] **Step 4: Stop.** The owner runs the manual checks on their Mac, in the same way and under the same limits as on 2026-11-18: a test key, `.invalid` servers, and `touch` only. Do not push. A push to PR #74 needs fresh owner approval.
