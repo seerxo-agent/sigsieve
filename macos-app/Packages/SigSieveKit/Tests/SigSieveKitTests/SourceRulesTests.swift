@@ -344,11 +344,56 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     for text in ["Text(\"Forwarded key can sign for any server while connected\")", "\"Identity filtering only\"", "\"Destination binding\""] {
         #expect(protection.contains(text), "ProtectionLine.swift lacks \(text)")
     }
-    // Always visible in filtering mode: under `if !binding`, never inside a DisclosureGroup.
-    let notBinding = try #require(protection.range(of: "if !binding {"))
-    let shown = try #require(protection.range(of: "Text(\"\(warning)\")"))
-    #expect(notBinding.lowerBound < shown.lowerBound)
+    // Always visible in filtering mode: inside the `if !binding` body, never inside a DisclosureGroup.
+    let notBinding = try #require(braceBody(after: "if !binding {", in: protection), "ProtectionLine lacks if !binding")
+    #expect(notBinding.contains("Text(\"\(warning)\")"), "the filtering warning is not inside if !binding")
     #expect(!protection.contains("DisclosureGroup"))
+    // The detail shows ProtectionLine for every selected server: not in a DisclosureGroup and not
+    // in a branch on the check (before and after Check).
+    let main = try String(contentsOf: views.appending(path: "MainWindow.swift"), encoding: .utf8)
+    #expect(main.components(separatedBy: "ProtectionLine {").count == 2, "MainWindow shows ProtectionLine exactly once")
+    let line = try #require(main.range(of: "ProtectionLine {"))
+    for header in enclosingHeaders(of: line.lowerBound, in: main) {
+        for word in ["DisclosureGroup", "checkState", "canConnect", "result", "checkFinishedAt"] {
+            #expect(!header.contains(word), "ProtectionLine sits inside \"\(header)\"")
+        }
+    }
+}
+
+/// The source line that opens each block enclosing `index`, innermost first. For a `} else {`
+/// block the line of the matching `if` is included too, so an else branch counts as conditioned.
+private func enclosingHeaders(of index: String.Index, in src: String) -> [String] {
+    func line(at i: String.Index) -> String {
+        let start = src[..<i].lastIndex(of: "\n").map(src.index(after:)) ?? src.startIndex
+        let end = src[i...].firstIndex(of: "\n") ?? src.endIndex
+        return String(src[start..<end])
+    }
+    /// The `{` matching the `}` at `close`.
+    func opener(ofClose close: String.Index) -> String.Index? {
+        var depth = 0, i = close
+        while i > src.startIndex {
+            i = src.index(before: i)
+            if src[i] == "}" { depth += 1 }
+            if src[i] == "{" { if depth == 0 { return i }; depth -= 1 }
+        }
+        return nil
+    }
+    var headers: [String] = [], depth = 0, i = index
+    while i > src.startIndex {
+        i = src.index(before: i)
+        if src[i] == "}" { depth += 1; continue }
+        guard src[i] == "{" else { continue }
+        if depth > 0 { depth -= 1; continue }
+        var h = line(at: i)
+        headers.append(h)
+        // Follow `} else if … {` / `} else {` back to the `if` that the branch belongs to.
+        var at = i
+        while h.trimmingCharacters(in: .whitespaces).hasPrefix("}"),
+              let close = src[..<at].lastIndex(of: "}"), let open = opener(ofClose: close) {
+            h = line(at: open); headers.append(h); at = open
+        }
+    }
+    return headers
 }
 
 /// The body of `private struct <name>: View` up to the next top-level declaration.
