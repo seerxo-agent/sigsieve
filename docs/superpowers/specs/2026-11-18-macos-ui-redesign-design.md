@@ -346,6 +346,14 @@ check.
    (including when already open); opening and closing Settings; restoring the
    last selected server, including when it no longer exists.
 
+## Removed from the approved mockup
+
+- **Address line in the header** (mockup: "deploy@203.0.113.7 · Secretive").
+  Removed during Task 3 by controller ruling: the app holds only the server
+  alias, and resolving the real user and host would need `ssh -G`, which App
+  code may not run. The header shows the server name and the agent. The owner
+  reviews this during visual acceptance (2026-11-18).
+
 ## New user-facing texts (need owner approval)
 
 - "Check before connecting."
