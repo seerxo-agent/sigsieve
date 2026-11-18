@@ -31,8 +31,9 @@ struct SettingsView: View {
                         }
                     }
                     if model.defaultAgent != .openssh(socket: socket) {
-                        Text("Not saved yet. The default agent is unchanged.")
+                        Text("Not saved yet. The default agent is still \(model.agentName(for: model.defaultAgent)).")
                             .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     if let socketError {
                         Text(socketError).font(.caption).foregroundStyle(.red)

@@ -291,7 +291,8 @@ no tabs **(owner decision 2026-11-19)**:
   already the default). Choosing OpenSSH saves nothing; it only reveals the
   row "Agent socket path" with a text field and "Use". While OpenSSH is chosen
   but the default is not that socket, the caption "Not saved yet. The default
-  agent is unchanged." shows. The existing socket error texts are unchanged.
+  agent is still Secretive." (or "OpenSSH agent (/path)", the active default;
+  wraps, never truncates; text owner-approved 2026-11-19) shows. The existing socket error texts are unchanged.
   The section footer is "Existing servers keep their own agent."
 - **SigSieve CLI.** The row "Path (optional, absolute)" with the field (prompt
   "Found automatically when empty") and "Save", the existing error, then

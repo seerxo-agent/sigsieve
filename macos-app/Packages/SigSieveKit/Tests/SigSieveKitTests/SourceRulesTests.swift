@@ -120,6 +120,8 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     }
     #expect(try action("Use") == "useAgent(.openssh(socket: socket))")
     #expect(try action("Save") == "Task { await model.setCLIPath(cliPath) }")
+    #expect(src.contains("\"Not saved yet. The default agent is still \\(model.agentName(for: model.defaultAgent)).\""), "caption names the active agent")
+    #expect(!src.contains("Not saved yet. The default agent is unchanged."), "old caption removed")
     for text in ["Enter the agent socket path to use the OpenSSH agent. The default agent is unchanged.",
                  "The agent socket must be an absolute path (starting with /) without control characters. The default agent is unchanged.",
                  "Existing servers keep their own agent."] {
