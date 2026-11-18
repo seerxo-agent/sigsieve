@@ -86,6 +86,8 @@ private final class Job: @unchecked Sendable {
     private var started = false
     private var finished = false
     private var ownsGroup = false
+    /// Set as soon as termination is observed; no signal is sent after that (F6).
+    private var exited = false
 
     init(executable: URL, arguments: [String], environment: [String: String], stdin: Data?, timeout: Duration) {
         process.executableURL = executable
@@ -109,6 +111,10 @@ private final class Job: @unchecked Sendable {
         process.standardError = err
         process.standardInput = stdin == nil ? FileHandle.nullDevice : inp
 
+        process.terminationHandler = { [weak self] _ in
+            guard let self else { return }
+            self.lock.lock(); self.exited = true; self.lock.unlock()
+        }
         lock.lock()
         if cancelled { lock.unlock(); throw CancellationError() }
         do { try process.run() } catch {
@@ -150,6 +156,7 @@ private final class Job: @unchecked Sendable {
         DispatchQueue.global().asyncAfter(deadline: .now() + .nanoseconds(Self.nanoseconds(timeout)), execute: timer)
 
         process.waitUntilExit()
+        lock.lock(); exited = true; lock.unlock()
         // Normally the pipes reach EOF with the child. After a timeout or cancel a
         // descendant in another session (setsid) can still hold them: give the
         // SIGKILL grace plus a second, then stop reading instead of blocking forever.
@@ -177,17 +184,24 @@ private final class Job: @unchecked Sendable {
 
     /// SIGTERM now, SIGKILL after 2 s, to the whole group when the child leads one.
     ///
-    /// Accepted risk (security review F6, owner acceptance): `finished` is set only after the pipes
-    /// are drained, so the delayed SIGKILL (or a late cancel or timeout) can run after the child was
-    /// reaped. If every descendant had left the group (setsid) and the pid was reused for another
-    /// group in that window, the signal could reach an unrelated process group of the same user.
-    /// Window: from the CLI's exit until the delayed SIGKILL, a cancel or the step timeout fires,
-    /// while such a descendant keeps the pipes open. For the delayed SIGKILL alone it is typically
-    /// under a second; a late timeout or cancel can widen it up to the step timeout.
-    /// Impact: a signal could reach an unrelated process group of the same user. Accepted because
-    /// it needs a child that calls setsid, keeps the pipes open and outlives the CLI, plus pid
-    /// wraparound inside that window; the real CLI does neither during a check, and descendants
-    /// that hold the pipes are abandoned after a timeout or cancel (`abandon()`).
+    /// Security review F6: never signal a reaped process. Every signal goes through `send`, which
+    /// checks `exited` and calls kill/killpg under one lock; `exited` is set under that lock by the
+    /// termination handler and again after `waitUntilExit()` returns: Apple's `Process` API
+    /// documents no ordering between the two, so neither alone is relied on. Closed: our own
+    /// check-then-kill window (the lock is held across the syscall), a timeout or cancel that
+    /// arrives after we observed a normal exit, and the old window of up to the step timeout
+    /// (150 s) while a descendant held the pipes. This narrows the risk; it does not remove it.
+    /// Residual (accepted): Foundation reaps on its own queue outside our lock, so the remaining
+    /// window lasts from Foundation reaping the child until our termination handler takes the
+    /// lock; its length depends on thread scheduling and system load. Reuse within it needs the
+    /// kernel to wrap the pid space (PID_MAX 99999) inside that window and, for killpg, a new
+    /// group leader with that id. Closing it needs our own spawn and reaping (waitpid under this
+    /// lock), which the plan's rule against direct spawn APIs forbids (see macos-app/README.md);
+    /// that is an owner decision, not opened now.
+    /// Impact: a same-user signal only, no privilege gain, no cross-user effect.
+    /// Trade-off: a same-group descendant still alive after the leader is reaped is no longer
+    /// killed at timeout or cancel; it is abandoned after the bounded drain (`abandon()`), like
+    /// the already-accepted setsid case.
     private func terminate() {
         let pid = process.processIdentifier
         send(SIGTERM, pid)
@@ -197,16 +211,17 @@ private final class Job: @unchecked Sendable {
             lock.unlock()
             // Once the run is over the group id may belong to something else.
             if done { return }
-            // Also after the leader is gone: a descendant that ignored SIGTERM may still hold the pipes.
+            // A leader that ignored SIGTERM; `send` skips it once the leader was reaped (F6).
             send(SIGKILL, pid)
         }
     }
 
     private func send(_ signal: Int32, _ pid: pid_t) {
+        // Checked and sent under one lock, so it never follows our own observation of the exit.
         lock.lock()
-        let group = ownsGroup
-        lock.unlock()
-        _ = group ? killpg(pid, signal) : kill(pid, signal)
+        defer { lock.unlock() }
+        guard !exited else { return }
+        _ = ownsGroup ? killpg(pid, signal) : kill(pid, signal)
     }
 
     private static func nanoseconds(_ d: Duration) -> Int {

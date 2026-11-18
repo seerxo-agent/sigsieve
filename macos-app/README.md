@@ -62,16 +62,27 @@ audit is still outstanding.
 
 ## Accepted risks (for external review)
 
-- **Delayed kill after the child exits (review F6).** When a check times out or is
-  cancelled, the app sends SIGTERM and, 2 seconds later, SIGKILL to the CLI's
-  process group. If the CLI had exited, every descendant had left the group and
-  macOS reused the pid for another group in that window, the signal could
-  reach an unrelated process group of the same user. It needs a descendant that
-  calls `setsid`, keeps the output pipes open and outlives the CLI, plus pid
-  reuse in the window from the CLI's exit until the kill, a cancel or the step
-  timeout fires (typically under a second for the delayed kill alone, up to the
-  step timeout otherwise); the real CLI does neither during a check. See
-  `ProcessRunner.terminate()`.
+- **Signal after the CLI is reaped (review F6).** On a timeout or cancel the app
+  sends SIGTERM and, 2 seconds later, SIGKILL to the CLI's process group. The
+  app never signals once it has seen the CLI exit: the exit flag is checked
+  and the signal sent under one lock. The flag is set both in the
+  `terminationHandler` and after `waitUntilExit()` returns, because Apple's
+  `Process` API documents no ordering between the two. This closes our own
+  check-then-kill window, a timeout or cancel that arrives after we observed
+  a normal exit, and the earlier window of up to the step timeout (150 s). It
+  narrows the risk; it does not remove it. Residual: Foundation reaps the CLI
+  on its own queue outside that lock, so the remaining window lasts from
+  Foundation reaping the child until our termination handler takes the lock;
+  its length depends on thread scheduling and system load. Reuse inside it
+  needs the kernel to wrap the pid space (PID_MAX 99999) within that window
+  and, for `killpg`, a new group leader with that id. Closing it needs our own
+  reaping (`posix_spawn` plus `waitpid` under the signalling lock), which
+  conflicts with the plan rule "posix_spawn appears nowhere"; that redesign is
+  an owner decision and is not opened now. Impact: a same-user signal only, no
+  privilege gain, no cross-user effect. Trade-off: a same-group descendant
+  still alive after the CLI is reaped is no longer killed at timeout or
+  cancel; it is abandoned after the bounded pipe drain, like the
+  already-accepted `setsid` case. See `ProcessRunner.terminate()`.
 - **SSH config change detection on some filesystems.** A passed check is
   invalidated when a file it depended on changes, using size, times, inode and
   ctime. On filesystems with whole-second times (HFS+, FAT, exFAT) a same-size

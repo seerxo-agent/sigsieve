@@ -235,3 +235,70 @@ func refusesAnyOtherExecutable(_ path: String) async throws {
     await #expect(throws: RunError.timedOut) { try await task.value }
     #expect(ContinuousClock.now - started < .seconds(60))   // the stray sleeps 90 s
 }
+
+/// F6 probe: the leader exits 0 at once; a same-group descendant keeps stdout open past the
+/// timeout. Once the leader is reaped its pid/pgid must never be signalled, so the descendant
+/// (the sentinel for "a signal reached the old group") is still alive when run() returns.
+@Test func aReapedLeaderIsNeverSignalled() async throws {
+    let pidFile = dir().appending(path: "pid")
+    let cli = try script("#!/bin/sh\n/bin/sleep 30 &\necho $! > '\(pidFile.path)'\nexit 0\n")
+    let task = Task { try await run(cli, timeout: .seconds(1)) }
+    let sentinel = try await readPid(pidFile)
+    defer { kill(sentinel, SIGKILL) }
+    _ = try? await task.value
+    try await Task.sleep(for: .seconds(3))   // past the delayed SIGKILL too
+    #expect(isAlive(sentinel))
+}
+
+/// F6, timer path: the leader exits about when the timeout fires, while a same-group descendant
+/// ignores SIGTERM and holds stdout. Whoever wins, the delayed SIGKILL comes after the leader is
+/// gone, so it must never be sent and the descendant survives every round.
+/// 10 rounds, two at a time: each round holds three global-queue threads for about 4 s, and ten
+/// at once starve unrelated runs elsewhere in the suite.
+@Test func aTimeoutRacingANormalExitNeverSignalsAfterTheReap() async throws {
+    for _ in 0..<5 {
+        try await withThrowingTaskGroup(of: Void.self) { pair in
+            for _ in 0..<2 {
+                pair.addTask {
+                    let pidFile = dir().appending(path: "pid")
+                    let cli = try script("#!/bin/sh\n(trap '' TERM; exec /bin/sleep 30) &\necho $! > '\(pidFile.path)'\n/bin/sleep 0.95\nexit 0\n")
+                    let task = Task { try await run(cli, timeout: .seconds(1)) }
+                    let sentinel = try await readPid(pidFile)
+                    defer { kill(sentinel, SIGKILL) }
+                    await #expect(throws: RunError.timedOut) { try await task.value }
+                    try await Task.sleep(for: .milliseconds(500))   // the delayed SIGKILL (timeout + 2 s) precedes the return (timeout + 3 s)
+                    #expect(isAlive(sentinel))
+                }
+            }
+            try await pair.waitForAll()
+        }
+    }
+}
+
+/// F6 trade-off: after the leader is reaped, a same-group descendant holding the pipes is not
+/// killed; the call still ends as timedOut within the bounded drain, and the descendant lives on.
+@Test func aReapedLeaderWithAPipeHolderStillReturns() async throws {
+    let pidFile = dir().appending(path: "pid")
+    let cli = try script("#!/bin/sh\n/bin/sleep 90 &\necho $! > '\(pidFile.path)'\nexit 0\n")
+    let started = ContinuousClock.now
+    let task = Task { try await run(cli, timeout: .seconds(1)) }
+    let descendant = try await readPid(pidFile)
+    defer { kill(descendant, SIGKILL) }
+    await #expect(throws: RunError.timedOut) { try await task.value }
+    #expect(ContinuousClock.now - started < .seconds(60))   // the descendant sleeps 90 s
+    #expect(isAlive(descendant))
+}
+
+/// F6, cancel path: cancelling after the leader was reaped sends neither SIGTERM nor the delayed SIGKILL.
+@Test func cancelAfterTheLeaderIsReapedSignalsNothing() async throws {
+    let pidFile = dir().appending(path: "pid")
+    let cli = try script("#!/bin/sh\n/bin/sleep 30 &\necho $! > '\(pidFile.path)'\nexit 0\n")
+    let task = Task { try await run(cli, timeout: .seconds(60)) }
+    let sentinel = try await readPid(pidFile)
+    defer { kill(sentinel, SIGKILL) }
+    try await Task.sleep(for: .seconds(1))   // the leader has exited and been reaped
+    task.cancel()
+    await #expect(throws: CancellationError.self) { try await task.value }
+    try await Task.sleep(for: .seconds(3))   // past the delayed SIGKILL
+    #expect(isAlive(sentinel))
+}
