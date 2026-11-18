@@ -244,7 +244,7 @@ Top to bottom:
   field is needed for agents with 500 keys. Each row has a checkbox, the comment
   and the fingerprint. Cancel discards the changes and **Save** stores them.
   - This changes behaviour: today each click is saved immediately. The new model
-    method is `setForwardedKeys(_:)`, one `edit` call that replaces the list.
+    method is `setForwardedKeys(selection:)`, one `edit` call that replaces the list.
   - Forwarded fingerprints that are not in the agent appear at the top of the
     sheet under "Not in the agent", checked, so they are kept unless the user
     unticks them. Save never drops a key the user did not see **(builder

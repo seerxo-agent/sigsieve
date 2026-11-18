@@ -150,7 +150,7 @@ Layout, texts, order and states are exactly the spec's sections "Sidebar", "Deta
 - The detail `ScrollView` holds sections 1–6. The bottom bar sits outside it in a `VStack`, with `Divider()` above it.
 
 - [ ] **Step 1: Write the failing source-rule tests:**
-  - `@Test func warningsAreOutsideDetails()`. In `CheckResultView.swift`, the index of `"SigSieve checks again when it connects"` and of `"If the server's host key is not in known_hosts, OpenSSH refuses the connection.` are both less than the index of `DisclosureGroup("Details"`. `ProtectionLine.swift` contains `Text("Forwarded key can sign for any server while connected")` and `"Identity filtering only"` and `"Destination binding"`. (AC3)
+  - `@Test func warningsAreOutsideDetails()`. In `CheckResultView.swift`, the index of `"SigSieve checks again when it connects"` and of the prefix `"If the server's host key is not in known_hosts, OpenSSH refuses the connection.` (a prefix match; the sentence continues) are both less than the index of `DisclosureGroup("Details"`. `ProtectionLine.swift` contains `Text("Forwarded key can sign for any server while connected")` and `"Identity filtering only"` and `"Destination binding"`. (AC3)
   - `@Test func noVisibilityWording()`. For every file under `App/`, the file text contains none of the substrings ` sees `, `cannot see`, `hidden from`, `stay hidden`.
   - `@Test func missingKeysAreLabelled()`. `ForwardedKeysGroup.swift` contains `case .notInAgent(` and `"Not in the agent"`. (AC2)
   - Move the `untracked` pin in `connectRechecksWhenIncludesAreUntracked` from `Views/CheckSection.swift` to `Views/CheckResultView.swift`, adjusting only indentation.
