@@ -1,7 +1,7 @@
 # SigSieve for macOS: UI redesign
 
-Status: draft for owner approval (2026-11-18). No SwiftUI code is written until
-the owner approves this document.
+Status: design direction approved by the owner (2026-11-18), with the four
+acceptance conditions below. Next: the implementation plan.
 
 Decisions the owner made are marked **(owner)**. Choices made while writing this
 document, which the owner can overrule, are marked **(builder call)**. The
@@ -176,6 +176,9 @@ Top to bottom:
    strings, moved here.
 3. **Protection line**: a shield symbol, "Identity filtering only" or
    "Destination binding", and a "Change…" link that opens the Protection sheet.
+   In filtering mode, the line "Forwarded key can sign for any server while
+   connected" sits directly under it at all times, not only after a check
+   (acceptance condition 3).
 4. **Keys**: the existing heading "Keys sessions on this server may use
    (forwarded agent)". Below it is a bordered group with one row per forwarded
    key: comment (or "(no comment)"), type and short fingerprint in monospace, a
@@ -308,6 +311,27 @@ explicitly, since a window that is already key does not become key again.
   corners, in the System Settings style.
 - Spacing is generous: about 20 pt padding in the detail pane and 20 pt between
   sections.
+
+## Acceptance conditions (owner, 2026-11-18)
+
+The plan turns each into explicit acceptance criteria with a test or a manual
+check.
+
+1. **Save and Check.** Unsaved changes in a sheet change nothing: the profile,
+   the check result and Connect stay as they were until Save. Save goes through
+   `edit`; if any input the gate compares changed, the earlier passed check is
+   cleared and Connect is disabled until a new check passes.
+2. **Missing keys.** A forwarded key that disappears from the agent stays in
+   the profile, but is never shown as usable: no comment or type, "Not in the
+   agent", secondary style. When it reappears it is matched to the profile by
+   its SHA256 fingerprint only, never by comment or type.
+3. **Warnings.** No security warning is inside the collapsed "Details". In
+   filtering mode, the fact that identity filtering is not destination binding
+   is visible at all times (protection line plus its warning line).
+4. **Window lifecycle.** Tested manually on macOS: Dock and ⌘Tab presence with
+   the window open and absent after closing it; reopening from the menu bar
+   (including when already open); opening and closing Settings; restoring the
+   last selected server, including when it no longer exists.
 
 ## New user-facing texts (need owner approval)
 
