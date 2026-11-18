@@ -29,7 +29,6 @@ final class AppModel: ObservableObject {
             if oldValue != selectedServer { inputsChanged(agentMayDiffer: true) }
         }
     }
-    @Published var keyQuery = ""
     @Published var serverQuery = ""
     @Published private(set) var checkState: CheckState = .idle
     /// When the last check finished; nil whenever the check is idle.
@@ -108,8 +107,6 @@ final class AppModel: ObservableObject {
         if case .keys(let k) = agentState { return k }
         return []
     }
-
-    var filteredKeys: [AgentKey] { KeyFilter.filter(agentKeys, query: keyQuery) }
 
     /// The saved profile, or the empty one a server without a profile has: no key forwarded.
     var selectedProfile: Profile? {
@@ -440,14 +437,6 @@ final class AppModel: ObservableObject {
     }
 
     // MARK: Profile edits (saved immediately)
-
-    func toggleKey(_ fp: Fingerprint) {
-        edit { p in
-            if let i = p.forwardedKeys.firstIndex(of: fp) { p.forwardedKeys.remove(at: i) } else { p.forwardedKeys.append(fp) }
-        }
-    }
-
-    func setMode(_ mode: ProtectionMode) { edit { $0.mode = mode } }
 
     /// The forwarded-key rows for the selected server: agent keys, then saved keys the agent lacks.
     var forwardedRows: [ForwardedKeyRow] {

@@ -1,38 +1,7 @@
 import SigSieveKit
 import SwiftUI
 
-/// Agent, key count and CLI version; each blocking error in red.
-struct StatusRow: View {
-    @EnvironmentObject var model: AppModel
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(StatusText.agentSummary(model))
-                Spacer()
-                Text(cliSummary).foregroundStyle(.secondary)
-            }
-            .font(.callout)
-            ForEach(StatusText.blockingErrors(model), id: \.self) { message in
-                Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private var cliSummary: String {
-        switch model.cli {
-        case .success(let info): info.version
-        case .failure: "CLI error"
-        case nil: "CLI …"
-        }
-    }
-}
-
-/// Status strings shared by the main window and the old panel.
+/// Status strings shared by the main window, the menu bar panel and Settings.
 @MainActor
 enum StatusText {
     /// The agent name and its state, as one line.

@@ -2,19 +2,6 @@ import AppKit
 import SigSieveKit
 import SwiftUI
 
-/// Footer: Settings and Quit.
-struct FooterView: View {
-    @Binding var showSettings: Bool
-
-    var body: some View {
-        HStack {
-            Button(showSettings ? "Done" : "Settings…") { showSettings.toggle() }
-            Spacer()
-            Button("Quit") { NSApplication.shared.terminate(nil) }
-        }
-    }
-}
-
 /// Default agent, optional CLI path, and what was resolved.
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
@@ -23,39 +10,44 @@ struct SettingsView: View {
     @State private var socketError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Settings").font(.headline)
-
-            Text("Default agent for new servers").font(.subheadline)
-            Picker("", selection: Binding(
-                get: { model.defaultAgent == .secretive ? 0 : 1 },
-                set: { $0 == 0 ? useAgent(.secretive) : useAgent(.openssh(socket: socket)) })) {
-                Text("Secretive").tag(0)
-                Text("OpenSSH agent").tag(1)
-            }
-            .pickerStyle(.radioGroup)
-            .labelsHidden()
-            HStack {
-                TextField("Agent socket path", text: $socket)
-                    .textFieldStyle(.roundedBorder)
-                Button("Use") { useAgent(.openssh(socket: socket)) }
-            }
-            if let socketError {
-                Text(socketError).font(.caption).foregroundStyle(.red)
-            }
-
-            Text("SigSieve CLI path (optional, absolute)").font(.subheadline)
-            HStack {
-                TextField("Found automatically when empty", text: $cliPath)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { Task { await model.setCLIPath(cliPath) } }
-                Button("Save") { Task { await model.setCLIPath(cliPath) } }
-            }
-            if let error = model.cliPathError {
-                Text(error).font(.caption).foregroundStyle(.red)
+        Form {
+            Section {
+                Picker("", selection: Binding(
+                    get: { model.defaultAgent == .secretive ? 0 : 1 },
+                    set: { $0 == 0 ? useAgent(.secretive) : useAgent(.openssh(socket: socket)) })) {
+                    Text("Secretive").tag(0)
+                    Text("OpenSSH agent").tag(1)
+                }
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
+                HStack {
+                    TextField("Agent socket path", text: $socket)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Use") { useAgent(.openssh(socket: socket)) }
+                }
+                if let socketError {
+                    Text(socketError).font(.caption).foregroundStyle(.red)
+                }
+                Text("Existing servers keep their own agent.").font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Text("Default agent for new servers").font(.headline)
             }
 
-            Group {
+            Section {
+                HStack {
+                    TextField("Found automatically when empty", text: $cliPath)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { Task { await model.setCLIPath(cliPath) } }
+                    Button("Save") { Task { await model.setCLIPath(cliPath) } }
+                }
+                if let error = model.cliPathError {
+                    Text(error).font(.caption).foregroundStyle(.red)
+                }
+            } header: {
+                Text("SigSieve CLI path (optional, absolute)").font(.headline)
+            }
+
+            Section {
                 switch model.cli {
                 case .success(let info):
                     row("CLI", info.path.path(percentEncoded: false))
@@ -68,6 +60,8 @@ struct SettingsView: View {
                 row("Profiles file", model.store.file.path)
             }
         }
+        .padding(20)
+        .frame(width: 480)
         .onAppear {
             cliPath = model.cliPathSetting
             if case .openssh(let s) = model.defaultAgent { socket = s }

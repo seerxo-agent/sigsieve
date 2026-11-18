@@ -303,3 +303,33 @@ private func view(_ name: String, in text: String) -> String? {
         #expect(binding.contains(text), "BindingSection.swift lacks \(text)")
     }
 }
+
+/// The text after `head` up to its matching closing brace.
+private func braceBody(after head: String, in src: String) -> String? {
+    guard let r = src.range(of: head) else { return nil }
+    var depth = 1, body = ""
+    for c in src[r.upperBound...] {
+        if c == "{" { depth += 1 }
+        if c == "}" { depth -= 1; if depth == 0 { return body } }
+        body.append(c)
+    }
+    return nil
+}
+
+/// The menu bar says "Check passed" only when the gate is open, and never starts a check or a connection.
+@Test func menuBarNeverClaimsReadyWithoutGate() throws {
+    let src = try String(contentsOf: appRoot.appending(path: "App/Views/MenuStatusView.swift"), encoding: .utf8)
+    #expect(src.components(separatedBy: "\"Check passed").count == 2, "exactly one \"Check passed")
+    let branch = try #require(braceBody(after: "if model.canConnect {", in: src), "no if model.canConnect branch")
+    #expect(branch.contains("\"Check passed"), "\"Check passed is outside the canConnect branch")
+    #expect(!src.contains("runCheck("))
+    #expect(!src.contains("connect("))
+}
+
+/// "Open SigSieve" brings the main window forward and refreshes, even when it is already key.
+@Test func refreshOnOpen() throws {
+    let src = try String(contentsOf: appRoot.appending(path: "App/Views/MenuStatusView.swift"), encoding: .utf8)
+    let open = try #require(src.range(of: "openWindow(id: \"main\")"))
+    let refresh = try #require(src.range(of: "await model.refresh()"))
+    #expect(open.lowerBound < refresh.lowerBound)
+}

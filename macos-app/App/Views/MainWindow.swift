@@ -50,10 +50,57 @@ struct MainWindow: View {
             }
         }
         .frame(minWidth: 640, minHeight: 460)
+        // Dock and ⌘Tab only while this window is open. The policy goes back on willClose of
+        // this NSWindow, not on onDisappear, so a sheet, a minimise or a column swap never drops it.
+        .background(WindowEvents(
+            onBecomeKey: {
+                NSApp.setActivationPolicy(.regular)
+                Task { await model.refresh() }
+            },
+            onClose: { NSApp.setActivationPolicy(.accessory) }))
+        .onAppear {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+            Task { await model.refresh() }
+        }
         .sheet(item: $editKeys) { EditKeysSheet(server: $0.server, profile: $0.profile) }
         .sheet(item: $protection) { ProtectionSheet(server: $0.server, profile: $0.profile) }
         .sheet(isPresented: $showAddHostKey) { AddHostKeySheet() }
         .sheet(isPresented: $showAddServer) { AddServerSheet() }
+    }
+}
+
+/// Calls back when the NSWindow that hosts this view becomes key or is about to close. The
+/// observers take that window as their object, so Settings, the menu bar panel and sheets
+/// (each its own NSWindow) never trigger them.
+private struct WindowEvents: NSViewRepresentable {
+    let onBecomeKey: () -> Void
+    let onClose: () -> Void
+
+    func makeNSView(context: Context) -> Observer { Observer() }
+
+    func updateNSView(_ view: Observer, context: Context) {
+        view.onBecomeKey = onBecomeKey
+        view.onClose = onClose
+    }
+
+    final class Observer: NSView {
+        var onBecomeKey: () -> Void = {}
+        var onClose: () -> Void = {}
+
+        // Selector observers: delivered on the main thread that posts window notifications,
+        // and removed automatically when this view is deallocated.
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            let center = NotificationCenter.default
+            center.removeObserver(self)
+            guard let window else { return }
+            center.addObserver(self, selector: #selector(becameKey), name: NSWindow.didBecomeKeyNotification, object: window)
+            center.addObserver(self, selector: #selector(willClose), name: NSWindow.willCloseNotification, object: window)
+        }
+
+        @objc private func becameKey(_ note: Notification) { onBecomeKey() }
+        @objc private func willClose(_ note: Notification) { onClose() }
     }
 }
 
