@@ -256,20 +256,23 @@ final class AppModel: ObservableObject {
     }
 
     private func refreshAgent() async {
-        guard let tmp = verifiedTmp else { agentState = .unreachable("the temporary directory failed verification"); return }
         let agent = selectedProfile?.agent ?? defaultAgent
-        do {
-            let env = try ChildEnvironment.make(home: home, cliDirectory: "/usr/bin", tmpdir: tmp, agent: agent)
-            let state = await AgentKeys.list(runner: runner, environment: env)
-            // A slower answer for an agent that is no longer selected must not overwrite the current one.
-            if agent == (selectedProfile?.agent ?? defaultAgent) {
+        if let tmp = verifiedTmp {
+            do {
+                let env = try ChildEnvironment.make(home: home, cliDirectory: "/usr/bin", tmpdir: tmp, agent: agent)
+                let state = await AgentKeys.list(runner: runner, environment: env)
+                // A slower answer for an agent that is no longer selected must not overwrite the current one.
+                guard agent == (selectedProfile?.agent ?? defaultAgent) else { return }
                 agentState = state
-                if checkState != .idle, let p = checkedKeyPresence,
-                   ForwardedKeys.present(forwarded: selectedProfile?.forwardedKeys ?? [], agentKeys: agentKeys) != p { resetCheck() }
+            } catch {
+                agentState = .unreachable("the agent socket \(agent.socketPath(home: home)) cannot be used")
             }
-        } catch {
-            agentState = .unreachable("the agent socket \(agent.socketPath(home: home)) cannot be used")
+        } else {
+            agentState = .unreachable("the temporary directory failed verification")
         }
+        // Every path above leaves agentKeys current for the selected agent (empty when unreachable).
+        if checkState != .idle, let p = checkedKeyPresence,
+           ForwardedKeys.present(forwarded: selectedProfile?.forwardedKeys ?? [], agentKeys: agentKeys) != p { resetCheck() }
     }
 
     private func loadKnownHosts() async {
@@ -344,6 +347,7 @@ final class AppModel: ObservableObject {
     func runCheck() async {
         connectError = nil
         verifyTmpdir()  // ruling 6: re-verified before each check
+        await refreshAgent()  // the key snapshot below must match the agent now
         rediscover()
         inputsChanged()
         guard let inputs = currentInputs else { checkState = .idle; checkFinishedAt = nil; return }
@@ -398,6 +402,7 @@ final class AppModel: ObservableObject {
             // gate: run the whole check again for these inputs and launch only if that passes.
             checkState = .running(.checking)
             var recheckGate = gate
+            let presenceBefore = checkedKeyPresence
             let passed = await ConnectionCheck.recheckBeforeConnect(inputs, runner: runner, gate: &recheckGate)
             verifyTmpdir()
             guard let now = currentInputs, now == inputs, !sshConfigChanged(), let nowTmp = verifiedTmp else {
@@ -408,7 +413,16 @@ final class AppModel: ObservableObject {
                 }
                 return
             }
+            // An agent refresh during the re-check may have reset the check (a forwarded key left the agent).
+            guard presenceBefore != nil, checkedKeyPresence == presenceBefore else {
+                if checkTask == nil {
+                    resetCheck()
+                    connectError = "The agent's keys changed during the check before connecting. Check again."
+                }
+                return
+            }
             gate = recheckGate
+            checkedKeyPresence = ForwardedKeys.present(forwarded: now.profile.forwardedKeys, agentKeys: agentKeys)
             if let result = recheckGate.result { checkState = .finished(result); checkFinishedAt = Date() }
             guard passed else { return }
             inputs = now

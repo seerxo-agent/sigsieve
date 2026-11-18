@@ -161,3 +161,36 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     let e = try #require(model.range(of: "var canConnect: Bool {", range: s.upperBound..<model.endIndex))
     #expect(!model[s.upperBound..<e.lowerBound].contains("ForwardedKeys"))
 }
+
+/// Fix round 1: the agent-presence reset also holds on the connect re-check path, the check
+/// snapshot is taken from a fresh agent answer, and every refreshAgent path compares presence.
+@Test func agentPresenceResetHoldsOnEveryPath() throws {
+    let model = try String(contentsOf: appRoot.appending(path: "App/AppModel.swift"), encoding: .utf8)
+    func body(_ head: String, to next: String) throws -> String {
+        let s = try #require(model.range(of: head), "AppModel lacks \(head)")
+        let e = try #require(model.range(of: next, range: s.upperBound..<model.endIndex))
+        return String(model[s.upperBound..<e.lowerBound])
+    }
+    // 1. connect(): a reset during the re-check stops before the result is shown or launched.
+    let connect = try body("func connect() async {", to: "// MARK: Profile edits")
+    func at(_ s: String) throws -> String.Index { try #require(connect.range(of: s), "connect() lacks \(s)").lowerBound }
+    let snap = try at("let presenceBefore = checkedKeyPresence")
+    let recheck = try at("await ConnectionCheck.recheckBeforeConnect(")
+    let guardPresence = try at("guard presenceBefore != nil, checkedKeyPresence == presenceBefore else {")
+    let keep = try at("gate = recheckGate")
+    let reset = try at("checkedKeyPresence = ForwardedKeys.present(forwarded: now.profile.forwardedKeys, agentKeys: agentKeys)")
+    let show = try at("checkState = .finished(result); checkFinishedAt = Date()")
+    #expect(snap < recheck && recheck < guardPresence && guardPresence < keep && keep < reset && reset < show)
+    // 2. runCheck(): fresh agent answer before the inputs and the snapshot.
+    let run = try body("func runCheck() async {", to: "/// Ruling 7")
+    let fresh = try #require(run.range(of: "await refreshAgent()"))
+    let read = try #require(run.range(of: "guard let inputs = currentInputs"))
+    #expect(fresh.lowerBound < read.lowerBound)
+    // 3. refreshAgent(): the comparison runs after the unreachable and catch paths too.
+    let agent = try body("private func refreshAgent() async {", to: "private func loadKnownHosts")
+    let tmpFail = try #require(agent.range(of: "agentState = .unreachable(\"the temporary directory failed verification\")"))
+    let catchPath = try #require(agent.range(of: "cannot be used\")"))
+    let compare = try #require(agent.range(of: "ForwardedKeys.present(forwarded: selectedProfile?.forwardedKeys ?? [], agentKeys: agentKeys) != p { resetCheck() }"))
+    #expect(tmpFail.lowerBound < compare.lowerBound && catchPath.lowerBound < compare.lowerBound)
+    #expect(try #require(agent.range(of: "guard agent == (selectedProfile?.agent ?? defaultAgent) else { return }")).lowerBound < compare.lowerBound)
+}
