@@ -124,3 +124,40 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     let general = try #require(row.range(of: "case .notFound(let searched):\n            \"SigSieve CLI not found. Searched:"))
     #expect(empty.lowerBound < general.lowerBound)
 }
+
+/// Sheet saves are server-guarded, a passed check dies when a forwarded key leaves the agent,
+/// the finish time follows every finished state, and the selected server is remembered.
+@Test func keyEditsAndCheckTimeFollowTheGate() throws {
+    let model = try String(contentsOf: appRoot.appending(path: "App/AppModel.swift"), encoding: .utf8)
+    func body(_ head: String, to next: String) throws -> String {
+        let s = try #require(model.range(of: head), "AppModel lacks \(head)")
+        let e = try #require(model.range(of: next, range: s.upperBound..<model.endIndex), "no \(next) after \(head)")
+        return String(model[s.upperBound..<e.lowerBound])
+    }
+    #expect(model.contains("func setForwardedKeys(selection: Set<Fingerprint>, for server: HostInput) -> Bool {\n        guard selectedServer == server else { return false }\n        edit { $0.forwardedKeys = ForwardedKeys.applying(selection: selection, to: $0.forwardedKeys, agentKeys: agentKeys) }"))
+    #expect(model.contains("func setMode(_ mode: ProtectionMode, for server: HostInput) -> Bool {\n        guard selectedServer == server else { return false }"))
+    #expect(try body("private func resetCheck() {", to: "// MARK: Check and connect").contains("checkedKeyPresence = nil"))
+    #expect(try body("private func resetCheck() {", to: "// MARK: Check and connect").contains("checkFinishedAt = nil"))
+    #expect(try body("private func refreshAgent() async {", to: "private func loadKnownHosts").contains("ForwardedKeys.present(forwarded: selectedProfile?.forwardedKeys ?? [], agentKeys: agentKeys) != p { resetCheck() }"))
+    let connect = try body("func connect() async {", to: "// MARK: Profile edits")
+    let refresh = try #require(connect.range(of: "verifyTmpdir()\n        await refreshAgent()"))
+    let gate = try #require(connect.range(of: "guard canConnect"))
+    #expect(refresh.lowerBound < gate.lowerBound)
+    #expect(model.components(separatedBy: "checkState = .finished(").count == model.components(separatedBy: "checkFinishedAt = Date()").count)
+    #expect(model.contains("if let stored = defaults.string(forKey: Self.selectedServerKey), let host = HostInput(stored), servers.contains(host)"))
+}
+
+/// The key-list helper only shapes the UI's selection; the check and the command never see it.
+@Test func forwardedKeysHelperGrantsNothing() throws {
+    let kit = kitRoot.appending(path: "Sources/SigSieveKit")
+    for name in ["Check/ConnectionCheck.swift", "Command/CommandBuilder.swift"] {
+        let found = try FileManager.default.enumerator(at: kit, includingPropertiesForKeys: nil)!.compactMap { $0 as? URL }
+            .filter { $0.lastPathComponent == (name as NSString).lastPathComponent }
+        #expect(!found.isEmpty, "\(name) not found")
+        for url in found { #expect(!(try String(contentsOf: url, encoding: .utf8)).contains("ForwardedKeys"), "\(url.lastPathComponent) mentions ForwardedKeys") }
+    }
+    let model = try String(contentsOf: appRoot.appending(path: "App/AppModel.swift"), encoding: .utf8)
+    let s = try #require(model.range(of: "var currentInputs: CheckInputs? {"))
+    let e = try #require(model.range(of: "var canConnect: Bool {", range: s.upperBound..<model.endIndex))
+    #expect(!model[s.upperBound..<e.lowerBound].contains("ForwardedKeys"))
+}
