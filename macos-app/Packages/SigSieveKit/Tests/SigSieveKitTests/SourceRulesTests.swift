@@ -120,7 +120,7 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
 /// F7: an empty search list gets its own message, never "Searched: " followed by nothing.
 @Test func emptyCLISearchListHasItsOwnMessage() throws {
     let row = try String(contentsOf: appRoot.appending(path: "App/Views/StatusRow.swift"), encoding: .utf8)
-    let empty = try #require(row.range(of: "case .notFound(let searched) where searched.isEmpty:\n            \"SigSieve CLI not found: the search stopped before any location was checked.\""))
+    let empty = try #require(row.range(of: "case .notFound(let searched) where searched.isEmpty:\n            \"SigSieve CLI lookup was interrupted before it finished.\""))
     let general = try #require(row.range(of: "case .notFound(let searched):\n            \"SigSieve CLI not found. Searched:"))
     #expect(empty.lowerBound < general.lowerBound)
 }
