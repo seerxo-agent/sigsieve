@@ -372,8 +372,11 @@ final class AppModel: ObservableObject {
             let passed = await ConnectionCheck.recheckBeforeConnect(inputs, runner: runner, gate: &recheckGate)
             verifyTmpdir()
             guard let now = currentInputs, now == inputs, !sshConfigChanged(), let nowTmp = verifiedTmp else {
-                resetCheck()
-                connectError = "The inputs changed during the check before connecting. Check again."
+                // A check the user started meanwhile is left alone; this stale re-check only stops.
+                if checkTask == nil {
+                    resetCheck()
+                    connectError = "The inputs changed during the check before connecting. Check again."
+                }
                 return
             }
             gate = recheckGate
