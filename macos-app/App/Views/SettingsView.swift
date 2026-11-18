@@ -33,6 +33,8 @@ struct SettingsView: View {
     }
 
     @State private var pane = Pane.agent
+    /// The hidden title bar's top safe-area inset, measured. The window adds it to the content's height.
+    @State private var titleBarInset: CGFloat = 0
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -54,6 +56,8 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(minWidth: 600, idealWidth: 640, maxWidth: 820)
+        // Short panes still fit the three sidebar items with normal bottom padding.
+        .frame(minHeight: 220, alignment: .top)
         // The window is exactly as tall as the current pane; switching panes may change it.
         .fixedSize(horizontal: false, vertical: true)
         .background(alignment: .leading) {
@@ -65,7 +69,15 @@ struct SettingsView: View {
             }
             .ignoresSafeArea()
         }
-        .ignoresSafeArea()
+        // Lay out inside the safe area, so the window (content + inset) ends at the content's bottom,
+        // then draw up under the traffic lights. Ignoring the safe area here instead leaves an empty
+        // inset-tall band at the bottom of the window.
+        .padding(.top, -titleBarInset)
+        .background(GeometryReader { proxy in
+            Color.clear
+                .onAppear { titleBarInset = proxy.safeAreaInsets.top }
+                .onChange(of: proxy.safeAreaInsets.top) { titleBarInset = $0 }
+        })
         .onAppear {
             cliPath = model.cliPathSetting
             if case .openssh(let s) = model.defaultAgent { socket = s; agentKind = .openssh }
