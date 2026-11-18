@@ -46,13 +46,15 @@ private struct SettingsCommand: View {
     }
 }
 
-/// `key.horizontal` as a template; for a blocking error, `key.horizontal.fill`
+/// The fingerprint mark as a template; for a blocking error, the same mark
 /// with a dot badge drawn into the same template image.
 enum MenuBarIcon {
     @MainActor
     static func image(error: Bool) -> NSImage {
-        let name = error ? "key.horizontal.fill" : "key.horizontal"
-        guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: "SigSieve") else { return NSImage() }
+        // The app's fingerprint mark as a template glyph (Assets: MenuBarIcon, source Icon/MenuBarIcon.svg).
+        guard let symbol = NSImage(named: "MenuBarIcon")?.copy() as? NSImage else { return NSImage() }
+        symbol.size = NSSize(width: 18, height: 18)
+        symbol.accessibilityDescription = "SigSieve"
         guard error else {
             symbol.isTemplate = true
             return symbol
