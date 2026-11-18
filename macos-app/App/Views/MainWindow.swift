@@ -46,11 +46,14 @@ struct MainWindow: View {
             }
         }
         .frame(minWidth: 640, minHeight: 460)
-        // Task 4 supplies the sheet views.
-        .sheet(isPresented: $showEditKeys) { Text("…").padding(40) }
-        .sheet(isPresented: $showProtection) { Text("…").padding(40) }
-        .sheet(isPresented: $showAddHostKey) { Text("…").padding(40) }
-        .sheet(isPresented: $showAddServer) { Text("…").padding(40) }
+        .sheet(isPresented: $showEditKeys) {
+            if let server = model.selectedServer { EditKeysSheet(server: server) }
+        }
+        .sheet(isPresented: $showProtection) {
+            if let server = model.selectedServer { ProtectionSheet(server: server) }
+        }
+        .sheet(isPresented: $showAddHostKey) { AddHostKeySheet() }
+        .sheet(isPresented: $showAddServer) { AddServerSheet() }
     }
 }
 

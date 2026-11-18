@@ -64,7 +64,8 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     #expect(model.contains("revocationFiles: revocationFiles.map"))
     let binding = try String(contentsOf: app.appending(path: "Views/BindingSection.swift"), encoding: .utf8)
     #expect(binding.contains("Text(\"SigSieve does not verify that these host keys belong to the server.\")"))
-    let view = try String(contentsOf: app.appending(path: "Views/AdvancedSection.swift"), encoding: .utf8)
+    let view = try String(contentsOf: app.appending(path: "Views/AddHostKeySheet.swift"), encoding: .utf8)
+    #expect(view.contains("Text(\"SigSieve does not verify that these host keys belong to the server.\")"))
     #expect(view.contains("Text(\"Listed keys were found in your local known_hosts files. Custom UserKnownHostsFile, GlobalKnownHostsFile, KnownHostsCommand and RevokedHostKeys settings are not read.\")"))
     // A picker Add goes through the stale-list guard, never straight to addDestination.
     #expect(view.contains("await model.addKnownHost(entry)"))
@@ -73,6 +74,26 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     #expect(model.contains("guard knownHostsStamps != knownHostsLoadedStamps else { return false }\n        resetCheck()\n        await loadKnownHosts()"))
     #expect(model.contains("let changed = await reloadKnownHostsIfChanged()\n        guard !changed, knownHosts.contains(entry) else {"))
     #expect(model.contains("if !(await reloadKnownHostsIfChanged()) { await loadKnownHosts() }"))
+}
+
+/// Sheets keep a draft and write only on Save; Cancel, Esc and window close discard it.
+@Test func sheetsSaveOnlyOnSave() throws {
+    let views = appRoot.appending(path: "App/Views")
+    for (file, call) in [("EditKeysSheet.swift", "model.setForwardedKeys("), ("ProtectionSheet.swift", "model.setMode(")] {
+        let src = try String(contentsOf: views.appending(path: file), encoding: .utf8)
+        #expect(src.components(separatedBy: call).count == 2, "\(file): exactly one \(call)")
+        let save = try #require(src.range(of: "Button(\"Save\")"), "\(file) lacks Save")
+        let at = try #require(src.range(of: call))
+        #expect(save.lowerBound < at.lowerBound, "\(file): \(call) only after Save")
+        #expect(src[at.upperBound...].prefix(while: { $0 != "\n" }).contains("for: server"), "\(file) passes for: server")
+        #expect(!src.contains(".onDisappear"))
+        for line in src.split(separator: "\n") where line.contains(".onChange") {
+            #expect(!line.contains("model.set"), "onChange must not save")
+        }
+    }
+    let edit = try String(contentsOf: views.appending(path: "EditKeysSheet.swift"), encoding: .utf8)
+    #expect(edit.contains("forwardedKeys"))
+    #expect(!edit.contains("draft = Set(model.agentKeys"))
 }
 
 /// F2: when some Include files are untracked, connect() re-runs the whole check through the Kit
