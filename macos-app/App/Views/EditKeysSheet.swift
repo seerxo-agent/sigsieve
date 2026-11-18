@@ -62,7 +62,6 @@ struct EditKeysSheet: View {
                 Button("Save") {
                     if model.setForwardedKeys(selection: draft, for: server) { dismiss() }
                 }
-                .keyboardShortcut(.defaultAction)
                 .disabled(!model.canEdit)
             }
         }

@@ -76,6 +76,30 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     #expect(model.contains("if !(await reloadKnownHostsIfChanged()) { await loadKnownHosts() }"))
 }
 
+/// Return in the Edit Keys search must never Save: Save is not the default action and the field has no onSubmit.
+@Test func editKeysReturnNeverSaves() throws {
+    let src = try String(contentsOf: appRoot.appending(path: "App/Views/EditKeysSheet.swift"), encoding: .utf8)
+    #expect(!src.contains(".keyboardShortcut(.defaultAction)"), "Save must not be the default action")
+    #expect(!src.contains(".onSubmit"), "the search field must not submit to the model")
+    // Brace-matched body of a button's action closure.
+    func action(_ title: String) throws -> String {
+        let r = try #require(src.range(of: "Button(\"\(title)\")"), "lacks \(title)")
+        var depth = 0, body = "", started = false
+        for c in src[r.upperBound...] {
+            if c == "{" { depth += 1; started = true; if depth == 1 { continue } }
+            if c == "}" { depth -= 1; if started && depth == 0 { break } }
+            if started { body.append(c) }
+        }
+        return body.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    // An explicit Save press still saves, and dismisses only when the save succeeded.
+    #expect(try action("Save") == "if model.setForwardedKeys(selection: draft, for: server) { dismiss() }", "Save closure")
+    // Esc still cancels, and Cancel only dismisses.
+    #expect(try action("Cancel") == "dismiss()", "Cancel only dismisses")
+    let cancel = try #require(src.range(of: "Button(\"Cancel\")"))
+    #expect(src[cancel.upperBound...].prefix(120).contains(".keyboardShortcut(.cancelAction)"), "Cancel keeps Esc")
+}
+
 /// Sheets keep a draft and write only on Save; Cancel, Esc and window close discard it.
 @Test func sheetsSaveOnlyOnSave() throws {
     let views = appRoot.appending(path: "App/Views")
