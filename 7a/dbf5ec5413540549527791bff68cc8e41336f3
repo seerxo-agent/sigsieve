@@ -1,0 +1,23 @@
+macos-app/App/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json
+  s_63ebb2a1e1ff37::t_9d9dcb8415d482 1-68
+macos-app/Icon/AppIcon.svg
+  s_63ebb2a1e1ff37::t_9d9dcb8415d482 1-18
+macos-app/SigSieve.xcodeproj/project.pbxproj
+  s_63ebb2a1e1ff37::t_9d9dcb8415d482 179,207
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7adbf5ec5413540549527791bff68cc8e41336f3",
+  "prompts": {},
+  "sessions": {
+    "s_63ebb2a1e1ff37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e9e90eb-9ef2-40e7-84a4-ada9eadcfa7f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
