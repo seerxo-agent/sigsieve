@@ -117,23 +117,28 @@ checks the project opens under it, builds the CLI with Rust 1.99.1, runs the
 package tests against that CLI, builds the app and lints its `Info.plist`. It
 uploads nothing and uses no secrets.
 
-CI builds with Xcode 26.6; local development has used Xcode 27.2. The workflow has
-not run yet. Its first run happens when the branch is pushed, so it is unverified
-until then.
+CI builds with Xcode 26.6; local development has used Xcode 27.2. First run:
+2026-11-18 on the pull-request merge commit of `1ef6c96` into `3dd1e24` (run
+44309255824, macos-26 arm64, Xcode 26.6, Rust 1.99.1): 293 tests, only the fish
+test skipped, Release build succeeded.
 
 ## Manual checklist
 
 Things no automated test here can see. Run on a real Mac before a release.
 
+The 2026-11-18 run used the owner's own account. Real keys and servers were not
+used: only a new Secretive test key, `.invalid` server names (Check does not
+connect), and `touch` instead of editing `~/.ssh/config`.
+
 | # | Check | Status |
 |---|-------|--------|
-| 1 | With 500 keys in a throwaway agent selected in Settings, scrolling and typing in the key search show no visible stall. | not run (2026-11-18) |
-| 2 | Light and Dark Mode both readable. | not run (2026-11-18) |
-| 3 | Check with Secretive: the Touch ID wait shows "Waiting for agent…". | not run (2026-11-18): needs the owner's Mac with Secretive |
-| 4 | Connect opens Terminal with the session; no Automation prompt appears; the launcher directory is gone afterwards. | not run (2026-11-18) |
-| 5 | Pasting the copyable command into another terminal connects the same way. | not run (2026-11-18) |
-| 6 | Editing the profile while a session is open does not affect it; the window says "applies to new connections". | not run (2026-11-18) |
-| 7 | Editing `~/.ssh/config` after a passed check disables Connect on the next window open or when Connect is pressed. | not run (2026-11-18): needs the owner's real `~/.ssh/config`; the Kit side is covered by `configChangeAfterAPassingCheckClosesTheGate` |
+| 1 | With 500 keys in a throwaway agent selected in Settings, scrolling and typing in the key search show no visible stall. | passed (2026-11-18, macOS 27.2.1): scrolling and typing `k49` showed no stall |
+| 2 | Light and Dark Mode both readable. | passed (2026-11-18, macOS 27.2.1) |
+| 3 | Check with Secretive: the Touch ID wait shows "Waiting for agent…". | not observed (2026-11-18, macOS 27.2.1): the check passed with a Touch ID-protected Secretive key, but no Touch ID prompt appeared, because `doctor` and `--dry-run` request no signature. Needs a real connection to a test server |
+| 4 | Connect opens Terminal with the session; no Automation prompt appears; the launcher directory is gone afterwards. | not run (2026-11-18): no dedicated test server |
+| 5 | Pasting the copyable command into another terminal connects the same way. | not run (2026-11-18): no dedicated test server |
+| 6 | Editing the profile while a session is open does not affect it; the window says "applies to new connections". | not run (2026-11-18): needs an open session, so a test server |
+| 7 | Editing `~/.ssh/config` after a passed check disables Connect on the next window open or when Connect is pressed. | passed (2026-11-18, macOS 27.2.1): after a passed check, `touch ~/.ssh/config` (content unchanged, ctime changed) and reopening the window removed the result and Connect |
 
 A throwaway agent for item 1:
 
