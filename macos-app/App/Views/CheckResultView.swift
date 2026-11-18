@@ -44,14 +44,20 @@ private struct PassedResult: View {
             if model.selectedProfile?.mode != .binding {
                 Label {
                     Text("Forwarded key can sign for any server while connected")
+                        .fixedSize(horizontal: false, vertical: true)
                 } icon: {
                     Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
                 }
             }
-            Text("SigSieve checks again when it connects").foregroundStyle(.secondary)
+            CLIWarnings(lines: lines)
+            Text("SigSieve checks again when it connects")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Details(result: result, command: model.copyableCommand)
         }
     }
+
+    private var lines: [ResultLine] { result.doctor.lines + (result.dryRun?.lines ?? []) }
 
     private var title: String {
         guard let time = model.checkFinishedAt else { return "Check passed" }
@@ -73,9 +79,12 @@ private struct FailedResult: View {
             Text("If the server's host key is not in known_hosts, OpenSSH refuses the connection. Add it only after comparing its fingerprint with the one the server's administrator gives you.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            CLIWarnings(lines: lines)
             Details(result: result, command: nil)
         }
     }
+
+    private var lines: [ResultLine] { result.doctor.lines + (result.dryRun?.lines ?? []) }
 
     /// The step that did not pass: doctor, else the dry run.
     private var failing: StepResult { result.doctor.outcome == .passed ? (result.dryRun ?? result.doctor) : result.doctor }
@@ -86,6 +95,24 @@ private struct FailedResult: View {
         case .invalidConfiguration: "\(step): invalid configuration"
         case .timedOut: "\(step) did not finish in time"
         default: "\(step) failed"
+        }
+    }
+}
+
+/// Each `sigsieve: warning: …` line from the CLI, word for word, above Details (AC3).
+/// They stay in Details too, with the other result lines.
+private struct CLIWarnings: View {
+    let lines: [ResultLine]
+
+    var body: some View {
+        ForEach(Array(lines.filter { $0.label == "sigsieve" && $0.value.hasPrefix("warning:") }.enumerated()), id: \.offset) { _, line in
+            Label {
+                Text(line.value)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+            }
         }
     }
 }

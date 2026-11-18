@@ -204,10 +204,28 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     let recheck = try #require(result.range(of: "\"SigSieve checks again when it connects\""))
     let knownHosts = try #require(result.range(of: "\"If the server's host key is not in known_hosts, OpenSSH refuses the connection."))
     #expect(recheck.lowerBound < details.lowerBound && knownHosts.lowerBound < details.lowerBound)
+    let filtering = try #require(result.range(of: "Text(\"Forwarded key can sign for any server while connected\")"))
+    #expect(filtering.lowerBound < details.lowerBound)
+    // CLI warnings (`sigsieve: warning: …`) are shown above Details in both results, word for word.
+    let cliWarning = try #require(result.range(of: "$0.label == \"sigsieve\" && $0.value.hasPrefix(\"warning:\")"))
+    #expect(cliWarning.lowerBound < details.lowerBound)
+    for result in ["PassedResult", "FailedResult"] {
+        let s = try #require(view(result, in: try String(contentsOf: views.appending(path: "CheckResultView.swift"), encoding: .utf8)))
+        let warn = try #require(s.range(of: "CLIWarnings(lines: lines)"), "\(result) lacks CLIWarnings")
+        let det = try #require(s.range(of: "Details(result: result"), "\(result) lacks Details")
+        #expect(warn.lowerBound < det.lowerBound)
+    }
     let protection = try String(contentsOf: views.appending(path: "ProtectionLine.swift"), encoding: .utf8)
     for text in ["Text(\"Forwarded key can sign for any server while connected\")", "\"Identity filtering only\"", "\"Destination binding\""] {
         #expect(protection.contains(text), "ProtectionLine.swift lacks \(text)")
     }
+}
+
+/// The body of `private struct <name>: View` up to the next top-level declaration.
+private func view(_ name: String, in text: String) -> String? {
+    guard let s = text.range(of: "private struct \(name): View {") else { return nil }
+    let e = text.range(of: "\n}\n", range: s.upperBound..<text.endIndex)?.lowerBound ?? text.endIndex
+    return String(text[s.upperBound..<e])
 }
 
 /// The app never claims a server sees, cannot see or has keys hidden from it.

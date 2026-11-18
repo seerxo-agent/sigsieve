@@ -10,7 +10,7 @@ struct ProtectionLine: View {
         let binding = model.selectedProfile?.mode == .binding
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Image(systemName: binding ? "checkmark.shield" : "shield")
+                Image(systemName: "shield")
                     .foregroundStyle(.secondary)
                 Text(binding ? "Destination binding" : "Identity filtering only")
                     .fontWeight(.medium)
@@ -21,6 +21,7 @@ struct ProtectionLine: View {
             if !binding {
                 Label {
                     Text("Forwarded key can sign for any server while connected")
+                        .fixedSize(horizontal: false, vertical: true)
                 } icon: {
                     Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
                 }
