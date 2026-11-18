@@ -521,3 +521,36 @@ private func throwawaySKBlob() throws -> String {
     #expect(await KnownHosts.entries(file: main, revocationFiles: [locked.appending(path: "known_hosts2")],
                                      runner: runner, environment: env()).isEmpty)
 }
+
+// MARK: - F4: a @cert-authority key is never offered, like a revoked one
+
+@Test func realSshKeygenCertAuthorityKeyIsNotOfferedFromAnotherHostsLine() async throws {
+    let ca = try throwawayBlob(), plain = try throwawayBlob()
+    let text = "before.example ssh-ed25519 \(ca.blob)\n@cert-authority *.example ssh-ed25519 \(ca.blob)\n"
+        + "plain.example ssh-ed25519 \(plain.blob)\nafter.example ssh-ed25519 \(ca.blob) c\n"
+    let entries = try await realEntries(Array(text.utf8))
+    #expect(entries.map(\.fingerprint.value) == [plain.fingerprint])
+    // The text layer drops it too.
+    #expect(KnownHosts.selectableLines(text) == "plain.example ssh-ed25519 \(plain.blob)")
+}
+
+@Test func realSshKeygenCertAuthorityInARevocationFileIsNotOffered() async throws {
+    let ca = try throwawayBlob(), plain = try throwawayBlob()
+    let f = try file("ca-host ssh-ed25519 \(ca.blob)\nplain ssh-ed25519 \(plain.blob)\n")
+    let extra = try file("@cert-authority * ssh-ed25519 \(ca.blob)\n")
+    let entries = await KnownHosts.entries(file: f, revocationFiles: [extra], runner: ProcessRunner(), environment: env())
+    #expect(entries.map(\.fingerprint.value) == [plain.fingerprint])
+}
+
+@Test func uncleanOrMalformedCertAuthorityLineFailsClosed() async throws {
+    let ca = try throwawayBlob(), plain = try throwawayBlob()
+    let mid = ca.blob.index(ca.blob.startIndex, offsetBy: 20)
+    for marked in ["@cert-authority * ssh-ed25519 \(ca.blob[..<mid])\u{0C}\(ca.blob[mid...])",
+                   "@cert-authority h\u{e9} ssh-ed25519 \(ca.blob)",
+                   "@cert-authority * ssh-ed25519",
+                   "@cert-authority 123 ssh-ed25519 \(ca.blob)"] {
+        let text = "\(marked)\nhost ssh-ed25519 \(ca.blob)\nplain ssh-ed25519 \(plain.blob)\n"
+        #expect(try await realEntries(Array(text.utf8)).isEmpty, "\(marked.debugDescription)")
+        #expect(KnownHosts.selectableLines(text) == "", "\(marked.debugDescription)")
+    }
+}

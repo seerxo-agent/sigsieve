@@ -42,11 +42,13 @@ file. What it can and cannot see:
 
 - Only ASCII lines are read. A line with a non-ASCII byte is dropped and not
   offered.
-- A non-ASCII byte in an `@revoked` line empties the whole list, because that
-  revocation could not be applied.
-- Only `~/.ssh/known_hosts` is offered. Revocations are also read from
+- A key on an `@revoked` or `@cert-authority` line is never offered, even when
+  it also appears on an unmarked line of another host.
+- A non-ASCII byte in an `@revoked` or `@cert-authority` line empties the whole
+  list, because that exclusion could not be applied.
+- Only `~/.ssh/known_hosts` is offered. Marked lines are also read from
   `/etc/ssh/ssh_known_hosts`, `/etc/ssh/ssh_known_hosts2` and
-  `~/.ssh/known_hosts2` (for `@revoked` only).
+  `~/.ssh/known_hosts2` (for `@revoked` and `@cert-authority` only).
 - A custom `UserKnownHostsFile`, `GlobalKnownHostsFile`, `KnownHostsCommand` or
   `RevokedHostKeys` is not read, so an empty revocation result does not mean
   every source was checked.

@@ -16,15 +16,16 @@ public struct KnownHostEntry: Hashable, Sendable {
 
 /// Compatibility impact of the ASCII-only rule: only lines made of printable ASCII (plus space and
 /// tab, and no double quote) are offered. A line with a non-ASCII comment or host name is dropped
-/// and not offered. A non-ASCII or control byte in an `@revoked` line empties the whole list, because that
-/// revocation could not be applied. ssh-keygen tokenises bytes, the app must too.
+/// and not offered. A non-ASCII or control byte in an `@revoked` or `@cert-authority` line empties the
+/// whole list, because that exclusion could not be applied. ssh-keygen tokenises bytes, the app must too.
 ///
 /// Only host lines with a plain `ssh-ed25519`, `ecdsa-sha2-nistp256/384/521` or `ssh-rsa` key are
 /// offered (RSA so the UI can show it disabled). Certificates, security-key and unknown types are
 /// never offered, but still feed revocation.
 ///
-/// Listed keys were found in local known_hosts files. Revocation comes only from `@revoked` lines
-/// in the file and in `revocationFiles` (the App passes `/etc/ssh/ssh_known_hosts`,
+/// Listed keys were found in local known_hosts files. A key on an `@revoked` or `@cert-authority`
+/// line is never offered, even from an unmarked line of another host. Those marked lines come only
+/// from the file and from `revocationFiles` (the App passes `/etc/ssh/ssh_known_hosts`,
 /// `/etc/ssh/ssh_known_hosts2` and `~/.ssh/known_hosts2`). Custom `UserKnownHostsFile`,
 /// `GlobalKnownHostsFile`, `KnownHostsCommand` and `RevokedHostKeys` settings are not read (the
 /// app never runs `ssh -G`), so an empty revocation result does not mean every source was checked.
@@ -41,14 +42,15 @@ public enum KnownHosts {
 
     private struct Parsed {
         var plain: [(fields: [Substring], line: String)] = []
-        /// Revoked lines as `host type blob`, ready for ssh-keygen.
+        /// `@revoked` and `@cert-authority` lines as `host type blob`, ready for ssh-keygen. Their
+        /// keys are excluded, by fields here and by fingerprint in `entries`.
         var revokedLines: [(host: String, line: String)] = []
         var revokedFields = Set<String>()
     }
 
     /// The known_hosts lines that may be offered by text alone: no comments, no `@` marker of any
     /// kind, only byte-clean lines of an offered key type, and no key whose fields match a
-    /// `@revoked` line. One line per entry, in file order. `entries` adds revocation by fingerprint.
+    /// `@revoked` or `@cert-authority` line. One line per entry, in file order. `entries` adds revocation by fingerprint.
     public static func selectableLines(_ text: String) -> String {
         guard let parsed = parse(Data(text.utf8), offer: true) else { return "" }
         return kept(parsed).map(\.line).joined(separator: "\n")
@@ -56,8 +58,8 @@ public enum KnownHosts {
 
     /// Works on bytes, because ssh-keygen tokenises bytes: a line is clean only if every byte is
     /// printable ASCII, space or tab (one trailing CR is dropped). An unclean line is dropped, but
-    /// one that is or hides an `@revoked` line makes the whole file unusable (nil): its revocation
-    /// could not be applied. With `offer` false only revocations are collected.
+    /// one that is or hides an `@revoked` or `@cert-authority` line makes the whole file unusable
+    /// (nil): its exclusion could not be applied. With `offer` false only marked lines are collected.
     private static func parse(_ data: Data, offer: Bool) -> Parsed? {
         var parsed = Parsed()
         for var raw in data.split(separator: 0x0A, omittingEmptySubsequences: true) {
@@ -66,7 +68,7 @@ public enum KnownHosts {
             // reads the host up to the first space, so such a line means different things to each.
             let clean = raw.allSatisfy { (($0 >= 0x20 && $0 <= 0x7E) && $0 != 0x22) || $0 == 0x09 }
             guard clean else {
-                if raw.lowercasedASCIIContains("@revoked") { return nil }
+                if raw.lowercasedASCIIContains("@revoked") || raw.lowercasedASCIIContains("@cert-authority") { return nil }
                 continue
             }
             let line = String(decoding: raw, as: UTF8.self).trimmingCharacters(in: .whitespaces)
@@ -78,14 +80,13 @@ public enum KnownHosts {
                 // hosts, not by another marker; anything else is a malformed (possibly revoking) line.
                 guard first == "@revoked" || first == "@cert-authority",
                       !fields.dropFirst().contains(where: { $0.hasPrefix("@") }) else { return nil }
-                if first == "@revoked" {
-                    // A revoked line without host, type and blob cannot be applied, nor one whose
-                    // all-digit host ssh-keygen would skip: refuse the file.
-                    guard fields.count >= 4, !isNumeric(fields[1]) else { return nil }
-                    // Permissive on purpose: certs, sk and unknown types still revoke.
-                    for f in fields.dropFirst(2) where !isKeyType(f) { parsed.revokedFields.insert(String(f)) }
-                    parsed.revokedLines.append((String(fields[1]), fields[1...3].joined(separator: " ")))
-                }
+                // Both markers exclude their key (DESIGN: a CA key is never offered either). A marked
+                // line without host, type and blob cannot be applied, nor one whose all-digit host
+                // ssh-keygen would skip: refuse the file.
+                guard fields.count >= 4, !isNumeric(fields[1]) else { return nil }
+                // Permissive on purpose: certs, sk and unknown types still exclude.
+                for f in fields.dropFirst(2) where !isKeyType(f) { parsed.revokedFields.insert(String(f)) }
+                parsed.revokedLines.append((String(fields[1]), fields[1...3].joined(separator: " ")))
             } else if offer, fields.count >= 3, offeredTypes.contains(String(fields[1])), fields[0] != fields[2],
                       !isNumeric(fields[0]) {
                 // ssh-keygen gets exactly "host type blob" and never the raw line: it tokenises
@@ -119,7 +120,7 @@ public enum KnownHosts {
         ["ssh-", "ecdsa-", "sk-", "rsa-"].contains { f.lowercased().hasPrefix($0) }
     }
 
-    /// `revocationFiles` contribute only their `@revoked` lines. A missing one is skipped; one that
+    /// `revocationFiles` contribute only their `@revoked` and `@cert-authority` lines. A missing one is skipped; one that
     /// exists but cannot be read safely, or holds an unusable `@revoked` line, gives [].
     public static func entries(file: URL, revocationFiles: [URL] = [], runner: Running,
                                environment: ChildEnvironment) async -> [KnownHostEntry] {
