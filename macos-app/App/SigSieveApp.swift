@@ -21,7 +21,8 @@ struct SigSieveApp: App {
             SettingsView()
                 .environmentObject(model)
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 700, height: 420)
+        .windowResizability(.contentMinSize)
 
         MenuBarExtra {
             MenuStatusView()

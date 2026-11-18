@@ -283,22 +283,33 @@ Top to bottom:
 
 ### Settings window
 
-One `Form` with `.formStyle(.grouped)` (System Settings style), 500 pt wide,
-no tabs **(owner decision 2026-11-19)**:
+A sidebar with three items and a detail pane **(owner decision 2026-11-19,
+draft B)**. Each item is an SF Symbol in a 22 pt rounded-square tile with a
+white glyph: "Agent" (`key.fill`, blue), "Command Line" (`terminal.fill`,
+gray), "Files" (`doc.fill`, orange). The sidebar is about 180 pt wide; Agent is
+selected at first. The detail pane shows the item name as a large title and a
+`Form` with `.formStyle(.grouped)`. Rows are one line: label left, control or
+value right. The window opens about 700 x 420 with everything visible without
+scrolling, resizes, and has a minimum of about 600 x 360. The state of all
+fields lives in the window, so switching items never loses it.
 
-- **Default agent for new servers.** A menu `Picker` ("Secretive", "OpenSSH
-  agent"). Choosing Secretive applies it at once (nothing is saved if it is
-  already the default). Choosing OpenSSH saves nothing; it only reveals the
-  row "Agent socket path" with a text field and "Use". While OpenSSH is chosen
-  but the default is not that socket, the caption "Not saved yet. The default
-  agent is still Secretive." (or "OpenSSH agent (/path)", the active default;
-  wraps, never truncates; text owner-approved 2026-11-19) shows. The existing socket error texts are unchanged.
-  The section footer is "Existing servers keep their own agent."
-- **SigSieve CLI.** The row "Path (optional, absolute)" with the field (prompt
-  "Found automatically when empty") and "Save", the existing error, then
-  read-only rows for CLI and Version. Values are selectable, monospaced,
-  right-aligned and wrap instead of truncating.
-- **Profiles file**, as a read-only row.
+- **Agent.** Section "Default agent for new servers": a menu `Picker`
+  ("Secretive", "OpenSSH agent"). Choosing Secretive applies it at once
+  (nothing is saved if it is already the default). Choosing OpenSSH saves
+  nothing; it only reveals the row "Socket" with a text field and "Use".
+  While OpenSSH is chosen but the default is not that socket, the caption "Not
+  saved yet. The default agent is still Secretive." (or "OpenSSH agent
+  (/path)", the active default; wraps, never truncates; text owner-approved
+  2026-11-19) shows. The existing socket error texts are unchanged. The
+  section footer is "Existing servers keep their own agent."
+- **Command Line.** Section "SigSieve CLI": the row "Path (optional,
+  absolute)" with the field (prompt "Found automatically when empty") and
+  "Save", the existing error, then read-only rows for CLI and Version.
+- **Files.** The read-only row "Profiles file".
+
+Read-only paths show the home directory as `~`, monospaced and secondary, with
+the full path as the tooltip. They are selectable and wrap instead of
+truncating. The text fields keep the real stored value.
 
 The socket and CLI path are saved only by pressing "Use" or "Save". Return in
 either field saves nothing. Invalid input shows the existing message and keeps

@@ -129,6 +129,17 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     }
 }
 
+/// Settings is a sidebar of three panes with one-line rows, sized by the window, not a fixed 500 pt.
+@Test func settingsSidebarLayout() throws {
+    let src = try String(contentsOf: appRoot.appending(path: "App/Views/SettingsView.swift"), encoding: .utf8)
+    for (title, symbol) in [("Agent", "key.fill"), ("Command Line", "terminal.fill"), ("Files", "doc.fill")] {
+        #expect(src.contains("\"\(title)\"") && src.contains("\"\(symbol)\""), "lacks \(title) / \(symbol)")
+    }
+    #expect(src.contains("\"Socket\""))
+    #expect(!src.contains(".frame(width: 500)"))
+    #expect(src.contains("abbreviatingWithTildeInPath"))
+}
+
 /// Sheets keep a draft and write only on Save; Cancel, Esc and window close discard it.
 @Test func sheetsSaveOnlyOnSave() throws {
     let views = appRoot.appending(path: "App/Views")

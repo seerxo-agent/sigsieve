@@ -13,69 +13,59 @@ struct SettingsView: View {
 
     private enum AgentKind { case secretive, openssh }
 
-    var body: some View {
-        Form {
-            Section {
-                Picker("Agent", selection: $agentKind) {
-                    Text("Secretive").tag(AgentKind.secretive)
-                    Text("OpenSSH agent").tag(AgentKind.openssh)
-                }
-                .pickerStyle(.menu)
-                if agentKind == .openssh {
-                    LabeledContent("Agent socket path") {
-                        HStack {
-                            TextField("Agent socket path", text: $socket)
-                                .labelsHidden()
-                                .textFieldStyle(.roundedBorder)
-                            Button("Use") { useAgent(.openssh(socket: socket)) }
-                        }
-                    }
-                    if model.defaultAgent != .openssh(socket: socket) {
-                        Text("Not saved yet. The default agent is still \(model.agentName(for: model.defaultAgent)).")
-                            .font(.caption).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    if let socketError {
-                        Text(socketError).font(.caption).foregroundStyle(.red)
-                    }
-                }
-            } header: {
-                Text("Default agent for new servers")
-            } footer: {
-                Text("Existing servers keep their own agent.")
-            }
-
-            Section {
-                LabeledContent("Path (optional, absolute)") {
-                    HStack {
-                        TextField("Path", text: $cliPath, prompt: Text("Found automatically when empty"))
-                            .labelsHidden()
-                            .textFieldStyle(.roundedBorder)
-                        Button("Save") { Task { await model.setCLIPath(cliPath) } }
-                    }
-                }
-                if let error = model.cliPathError {
-                    Text(error).font(.caption).foregroundStyle(.red)
-                }
-                switch model.cli {
-                case .success(let info):
-                    row("CLI", info.path.path(percentEncoded: false))
-                    row("Version", info.version)
-                case .failure(let e):
-                    row("CLI", StatusText.describe(e))
-                case nil:
-                    row("CLI", "not resolved")
-                }
-            } header: {
-                Text("SigSieve CLI")
-            }
-
-            Section {
-                row("Profiles file", model.store.file.path)
+    private enum Pane: String, CaseIterable, Identifiable {
+        case agent = "Agent", commandLine = "Command Line", files = "Files"
+        var id: Self { self }
+        var symbol: String {
+            switch self {
+            case .agent: "key.fill"
+            case .commandLine: "terminal.fill"
+            case .files: "doc.fill"
             }
         }
-        .formStyle(.grouped)
-        .frame(width: 500)
+        var tint: Color {
+            switch self {
+            case .agent: .blue
+            case .commandLine: .gray
+            case .files: .orange
+            }
+        }
+    }
+
+    @State private var pane = Pane.agent
+
+    var body: some View {
+        HStack(spacing: 0) {
+            List(Pane.allCases, selection: $pane) { p in
+                Label {
+                    Text(p.rawValue)
+                } icon: {
+                    Image(systemName: p.symbol)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        .background(p.tint, in: RoundedRectangle(cornerRadius: 5))
+                }
+                .tag(p)
+            }
+            .listStyle(.sidebar)
+            .frame(width: 180)
+            Divider()
+            VStack(alignment: .leading, spacing: 0) {
+                Text(pane.rawValue).font(.title.bold())
+                    .padding(.horizontal, 20).padding(.top, 14)
+                Form {
+                    switch pane {
+                    case .agent: agentPane
+                    case .commandLine: commandLinePane
+                    case .files: filesPane
+                    }
+                }
+                .formStyle(.grouped)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(minWidth: 600, minHeight: 360)
         .onAppear {
             cliPath = model.cliPathSetting
             if case .openssh(let s) = model.defaultAgent { socket = s; agentKind = .openssh }
@@ -90,6 +80,73 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder private var agentPane: some View {
+        Section {
+            Picker("Agent", selection: $agentKind) {
+                Text("Secretive").tag(AgentKind.secretive)
+                Text("OpenSSH agent").tag(AgentKind.openssh)
+            }
+            .pickerStyle(.menu)
+            if agentKind == .openssh {
+                LabeledContent("Socket") {
+                    HStack {
+                        TextField("Socket", text: $socket)
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .frame(minWidth: 200, maxWidth: 340)
+                        Button("Use") { useAgent(.openssh(socket: socket)) }
+                    }
+                }
+                if model.defaultAgent != .openssh(socket: socket) {
+                    Text("Not saved yet. The default agent is still \(model.agentName(for: model.defaultAgent)).")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let socketError {
+                    Text(socketError).font(.caption).foregroundStyle(.red)
+                }
+            }
+        } header: {
+            Text("Default agent for new servers")
+        } footer: {
+            Text("Existing servers keep their own agent.")
+        }
+    }
+
+    @ViewBuilder private var commandLinePane: some View {
+        Section {
+            LabeledContent("Path (optional, absolute)") {
+                HStack {
+                    TextField("Path", text: $cliPath, prompt: Text("Found automatically when empty"))
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)
+                        .frame(minWidth: 200, maxWidth: 340)
+                    Button("Save") { Task { await model.setCLIPath(cliPath) } }
+                }
+            }
+            if let error = model.cliPathError {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+            switch model.cli {
+            case .success(let info):
+                pathRow("CLI", info.path.path(percentEncoded: false))
+                row("Version", info.version)
+            case .failure(let e):
+                row("CLI", StatusText.describe(e))
+            case nil:
+                row("CLI", "not resolved")
+            }
+        } header: {
+            Text("SigSieve CLI")
+        }
+    }
+
+    @ViewBuilder private var filesPane: some View {
+        Section {
+            pathRow("Profiles file", model.store.file.path)
+        }
+    }
+
     private func useAgent(_ agent: AgentChoice) {
         if model.setDefaultAgent(agent) {
             socketError = nil
@@ -101,11 +158,17 @@ struct SettingsView: View {
     }
 
     /// Read-only value that wraps rather than truncates: the CLI path says which executable runs.
-    private func row(_ label: String, _ value: String) -> some View {
+    private func row(_ label: String, _ value: String, help: String? = nil) -> some View {
         LabeledContent(label) {
-            Text(value).font(.body.monospaced()).textSelection(.enabled)
+            Text(value).font(.body.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
                 .multilineTextAlignment(.trailing)
                 .fixedSize(horizontal: false, vertical: true)
+                .help(help ?? value)
         }
+    }
+
+    /// A path shown with the home directory as `~`; the full path is the tooltip.
+    private func pathRow(_ label: String, _ path: String) -> some View {
+        row(label, (path as NSString).abbreviatingWithTildeInPath, help: path)
     }
 }
