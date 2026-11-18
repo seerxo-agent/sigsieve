@@ -36,7 +36,7 @@
 
 1. **Agent unreachable or empty while keys are forwarded.** Every forwarded key shows as "Not in the agent". Edit Keys still shows and keeps them. Owned by Task 1 test `allMissingWhenAgentEmpty` and Task 4 manual step.
 2. **500 keys in the Edit Keys sheet.** Search stays responsive and Save keeps the agent's order for new keys. Owned by Task 1 test `newKeysAppendInAgentOrder` and manual item 1 re-run (Task 6).
-3. **A remembered selection that no longer exists or is not a valid `HostInput`.** Nothing is selected and nothing crashes. Owned by Task 2 test step (source rule) and manual M4e.
+3. **A remembered selection that no longer exists or is not a valid `HostInput`.** Nothing is selected and nothing crashes. Owned by Task 2's source-rule assertion (`HostInput(stored)` and `servers.contains(host)`) and manual M4e.
 4. **Long values in the header.** A long OpenSSH socket path or a long server name must not hide the key count; the path truncates in the middle and shows in full in `.help`. Owned by Task 3, step "header truncation".
 5. **Reopening the window after `touch ~/.ssh/config`.** The result is cleared (manual item 7). This includes "Open SigSieve" while the window is already key. Owned by Task 5 refresh wiring and manual item 7 re-run.
 
@@ -124,7 +124,7 @@
   - `ForwardedKeysGroup.swift`
   - `BindingSection.swift`
   - `CheckResultView.swift`
-- Modify: `macos-app/App/Views/StatusRow.swift`. Turn it into `enum StatusText` with `static func blockingErrors(_ model: AppModel) -> [String]`, `static func agentSummary(_ model: AppModel) -> String`, and the two existing `describe` functions, all unchanged. Keep the file name, since `emptyCLISearchListHasItsOwnMessage` reads it. `SettingsView.swift` calls `StatusRow.describe`; update that caller to `StatusText.describe`.
+- Modify: `macos-app/App/Views/StatusRow.swift`. Add `enum StatusText` holding `static func blockingErrors(_ model: AppModel) -> [String]`, `static func agentSummary(_ model: AppModel) -> String`, and the two existing `describe` functions, moved unchanged. Keep the file name, since `emptyCLISearchListHasItsOwnMessage` reads it. The `StatusRow` view stays and calls `StatusText`, because the old panel uses it until Task 5 deletes it. Update `StatusRow.describe` callers to `StatusText.describe`.
 - Test: `SourceRulesTests.swift`, which gets new tests and moved paths.
 
 **Interfaces:**
@@ -140,14 +140,14 @@
 Layout, texts, order and states are exactly the spec's sections "Sidebar", "Detail pane" and "Bottom bar". Points the spec leaves open are decided here:
 
 - Key rows. Remove calls `model.setForwardedKeys(selection: Set(current).subtracting([fp]))`, an immediate and explicit single action. A `.notInAgent` row shows `fp.short`, then "Not in the agent" in `.secondary`, then copy and Remove. It shows no comment and no type.
-- The agent `Menu` options are the existing `agentOptions` logic, moved out of `AdvancedSection` into `ServerHeader`.
+- The agent `Menu` options use the existing `agentOptions` logic, copied from `AdvancedSection` into `ServerHeader` (Task 5 deletes the original).
 - Header truncation: the agent name uses `.lineLimit(1).truncationMode(.middle)` with `.help(fullName)`, and the key count is a separate `Text` with `.layoutPriority(1)`. This covers Review Focus 4.
 - The check time is formatted as `checkFinishedAt.formatted(date: .omitted, time: .shortened)`.
 - The detail `ScrollView` holds sections 1–6. The bottom bar sits outside it in a `VStack`, with `Divider()` above it.
 
 - [ ] **Step 1: Write the failing source-rule tests:**
   - `@Test func warningsAreOutsideDetails()`. In `CheckResultView.swift`, the index of `"SigSieve checks again when it connects"` and of `"If the server's host key is not in known_hosts, OpenSSH refuses the connection.` are both less than the index of `DisclosureGroup("Details"`. `ProtectionLine.swift` contains `Text("Forwarded key can sign for any server while connected")` and `"Identity filtering only"` and `"Destination binding"`. (AC3)
-  - `@Test func noVisibilityWording()`. For every file under `App/`, string literals contain none of the substrings ` sees `, `cannot see`, `hidden from`, `stay hidden`.
+  - `@Test func noVisibilityWording()`. For every file under `App/`, the file text contains none of the substrings ` sees `, `cannot see`, `hidden from`, `stay hidden`.
   - `@Test func missingKeysAreLabelled()`. `ForwardedKeysGroup.swift` contains `case .notInAgent(` and `"Not in the agent"`. (AC2)
   - Move the `untracked` pin in `connectRechecksWhenIncludesAreUntracked` from `Views/CheckSection.swift` to `Views/CheckResultView.swift`, adjusting only indentation.
   - Move the binding caption pins that stay on the main screen to `Views/BindingSection.swift`: `"SigSieve does not verify that these host keys belong to the server."`, plus the destination-binding caption and the three limit lines, each as an exact `Text("…")`. The known_hosts list pins move in Task 4.
@@ -185,10 +185,10 @@ Behaviour, per the spec's "Sheets":
 - **ProtectionSheet**
   - `@State var draft: ProtectionMode`, shown as two radio rows with full texts. Save calls `model.setMode(draft)`. Cancel dismisses.
 - **AddHostKeySheet**
-  - Contains the existing `knownHostsPicker`, `KnownHostRow` and `manualEntry` content, moved out of `AdvancedSection.swift` with their texts and the `await model.addKnownHost(entry)` call unchanged. Each Add saves at once, as today.
+  - Contains the existing `knownHostsPicker`, `KnownHostRow` and `manualEntry` content, copied from `AdvancedSection.swift` with their texts and the `await model.addKnownHost(entry)` call unchanged. Copied, not moved: the old panel must still compile until Task 5 deletes the originals; rename private types if they clash. Each Add saves at once, as today.
   - "Done" closes it.
 - **AddServerSheet**
-  - The existing field, validation text and `addServer` call, moved out of `ServerPicker.swift`.
+  - The existing field, validation text and `addServer` call, copied from `ServerPicker.swift` (Task 5 deletes the original).
 
 - [ ] **Step 1: Update the source-rule tests:**
   - `knownHostsPickerWiringAndWording` now reads `Views/AddHostKeySheet.swift` instead of `Views/AdvancedSection.swift`. It keeps every assertion except the "SigSieve does not verify…" pin, which Task 3 moved to `BindingSection.swift`. If the sheet also shows that sentence, keep the pin there too.
@@ -208,7 +208,7 @@ Behaviour, per the spec's "Sheets":
 - Modify: `macos-app/App/SigSieveApp.swift`
 - Modify: `macos-app/App/Views/SettingsView.swift`. Remove `FooterView` and turn the view into a `Form`, per the spec's "Settings window", with the caption "Existing servers keep their own agent.".
 - Create: `macos-app/App/Views/MenuStatusView.swift`
-- Delete: `KeyList.swift`, `ServerPicker.swift`, `AdvancedSection.swift`, `CheckSection.swift`, and the `MenuWindow` struct. Delete `toggleKey` from `AppModel.swift`.
+- Delete: `KeyList.swift`, `ServerPicker.swift`, `AdvancedSection.swift`, `CheckSection.swift`, the `MenuWindow` struct and the `StatusRow` view struct (keep `enum StatusText` in `StatusRow.swift`). Delete `toggleKey` from `AppModel.swift`.
 
 **Interfaces:**
 - Consumes: `MainWindow` (Task 3).
@@ -255,13 +255,13 @@ Decisions:
 
 - [ ] **Step 1:** Append these manual checks to the checklist, after item 7, with the status "not run":
   - **M1 (AC1).** After a passed check, open Edit Keys, untick a key and press Cancel. The result and Connect are unchanged. Open the sheet again, untick and press Save. The result clears and Connect is disabled. Open the sheet again, change nothing and press Save. The result stays.
-  - **M2 (AC2).** Forward the Secretive test key, then delete that test key in Secretive and reopen the window. The row reads "Not in the agent" with no comment, and Edit Keys lists it ticked. Recreate the key: it has a new fingerprint, so the old row stays "Not in the agent". This shows the match is by fingerprint, not by name.
+  - **M2 (AC2).** Use a throwaway OpenSSH agent (as in item 1) holding one synthetic key; forward it and run a check. `ssh-add -d` that key and reopen the window: the result is cleared, the row reads "Not in the agent" with no comment, and Edit Keys lists it ticked. `ssh-add` the same key file again and reopen: the row shows the key normally. Then add a second synthetic key with the same comment: it does not match the forwarded row, because the match is by fingerprint, not by name.
   - **M3 (AC3).** In filtering mode, "Forwarded key can sign for any server while connected" is visible before any check. After a pass, every warning is visible while Details is closed.
   - **M4a.** With the window open, SigSieve is in the Dock and in ⌘Tab. After closing the window it is in neither, and the menu bar icon stays.
   - **M4b.** "Open SigSieve" works with the window closed, behind other windows, and when it is already in front.
   - **M4c.** ⌘, and the menu's "Settings…" open one Settings window. Closing Settings leaves the main window and the Dock state unchanged.
   - **M4d.** Quit and relaunch: the last selected server is selected again, and its check is "Not checked".
-  - **M4e.** Select a server added with "+ Add Server", quit, delete that server from the profiles in the app, and relaunch. Nothing is selected and there is no error.
+  - **M4e.** Quit, run `defaults write dev.sigsieve.macos selectedServer no-such-server.invalid`, and relaunch. Nothing is selected and there is no error. Repeat with the value `-bad`.
 - [ ] **Step 2:** Mark items 1, 2 and 7 for re-run on the new UI.
 - [ ] **Step 3: Commit** with the message `macos-app: manual checks for the redesigned window`.
 - [ ] **Step 4: Stop.** The owner runs the manual checks on their Mac, in the same way and under the same limits as on 2026-11-18: a test key, `.invalid` servers, and `touch` only. Do not push. A push to PR #74 needs fresh owner approval.
