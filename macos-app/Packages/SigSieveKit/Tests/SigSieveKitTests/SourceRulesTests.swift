@@ -62,8 +62,9 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     #expect(model.contains("SSHConfigAliases.stamps(for: [knownHostsFile.path] + revocationFiles)"))
     #expect(model.contains("configStamps: discovery.stamps + knownHostsStamps"))
     #expect(model.contains("revocationFiles: revocationFiles.map"))
+    let binding = try String(contentsOf: app.appending(path: "Views/BindingSection.swift"), encoding: .utf8)
+    #expect(binding.contains("Text(\"SigSieve does not verify that these host keys belong to the server.\")"))
     let view = try String(contentsOf: app.appending(path: "Views/AdvancedSection.swift"), encoding: .utf8)
-    #expect(view.contains("Text(\"SigSieve does not verify that these host keys belong to the server.\")"))
     #expect(view.contains("Text(\"Listed keys were found in your local known_hosts files. Custom UserKnownHostsFile, GlobalKnownHostsFile, KnownHostsCommand and RevokedHostKeys settings are not read.\")"))
     // A picker Add goes through the stale-list guard, never straight to addDestination.
     #expect(view.contains("await model.addKnownHost(entry)"))
@@ -92,7 +93,7 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     let write = try at("Launcher.write(inputs, under: tmp.path)")
     #expect(branch < recheck && recheck < same && same < keep && keep < refuse && refuse < write)
     #expect(body.components(separatedBy: "Launcher.write(").count == 2, "one launcher write in connect()")
-    let view = try String(contentsOf: app.appending(path: "Views/CheckSection.swift"), encoding: .utf8)
+    let view = try String(contentsOf: app.appending(path: "Views/CheckResultView.swift"), encoding: .utf8)
     #expect(view.contains("if model.discovery.untracked {\n                Text(\"Some Include files cannot be tracked; SigSieve checks again when you connect.\")"))
 }
 
@@ -193,4 +194,50 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     let compare = try #require(agent.range(of: "ForwardedKeys.present(forwarded: selectedProfile?.forwardedKeys ?? [], agentKeys: agentKeys) != p { resetCheck() }"))
     #expect(tmpFail.lowerBound < compare.lowerBound && catchPath.lowerBound < compare.lowerBound)
     #expect(try #require(agent.range(of: "guard agent == (selectedProfile?.agent ?? defaultAgent) else { return }")).lowerBound < compare.lowerBound)
+}
+
+/// AC3: no security warning hides inside the collapsed Details, and filtering is never shown as binding.
+@Test func warningsAreOutsideDetails() throws {
+    let views = appRoot.appending(path: "App/Views")
+    let result = try String(contentsOf: views.appending(path: "CheckResultView.swift"), encoding: .utf8)
+    let details = try #require(result.range(of: "DisclosureGroup(\"Details\""))
+    let recheck = try #require(result.range(of: "\"SigSieve checks again when it connects\""))
+    let knownHosts = try #require(result.range(of: "\"If the server's host key is not in known_hosts, OpenSSH refuses the connection."))
+    #expect(recheck.lowerBound < details.lowerBound && knownHosts.lowerBound < details.lowerBound)
+    let protection = try String(contentsOf: views.appending(path: "ProtectionLine.swift"), encoding: .utf8)
+    for text in ["Text(\"Forwarded key can sign for any server while connected\")", "\"Identity filtering only\"", "\"Destination binding\""] {
+        #expect(protection.contains(text), "ProtectionLine.swift lacks \(text)")
+    }
+}
+
+/// The app never claims a server sees, cannot see or has keys hidden from it.
+@Test func noVisibilityWording() throws {
+    for (name, text) in try sourceFiles() where name.hasPrefix("App/") {
+        for phrase in [" sees ", "cannot see", "hidden from", "stay hidden"] {
+            #expect(!text.contains(phrase), "\(name) contains \"\(phrase)\"")
+        }
+    }
+}
+
+/// AC1, AC2: a forwarded key missing from the agent gets its own row, and rows never edit the policy.
+@Test func missingKeysAreLabelled() throws {
+    let group = try String(contentsOf: appRoot.appending(path: "App/Views/ForwardedKeysGroup.swift"), encoding: .utf8)
+    #expect(group.contains("case .notInAgent("))
+    #expect(group.contains("\"Not in the agent\""))
+    #expect(!group.contains("setForwardedKeys("))
+    #expect(!group.contains("Button(\"Remove\")"))
+}
+
+/// The binding texts that stay on the main screen, word for word.
+@Test func bindingCaptionsStayOnTheMainScreen() throws {
+    let binding = try String(contentsOf: appRoot.appending(path: "App/Views/BindingSection.swift"), encoding: .utf8)
+    for text in [
+        "Text(\"Destination binding names the servers the forwarded key may log in to onward from this server, for example github.com. It does not protect the login to this server itself.\")",
+        "Text(\"SigSieve does not verify that these host keys belong to the server.\")",
+        "Text(\"Binding needs OpenSSH hostbound authentication on the onward server.\")",
+        "Text(\"RSA host keys cannot bind.\")",
+        "Text(\"With Secretive, a cancelled Touch ID prompt means reconnecting.\")",
+    ] {
+        #expect(binding.contains(text), "BindingSection.swift lacks \(text)")
+    }
 }

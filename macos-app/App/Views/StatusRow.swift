@@ -8,26 +8,18 @@ struct StatusRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(agentSummary)
+                Text(StatusText.agentSummary(model))
                 Spacer()
                 Text(cliSummary).foregroundStyle(.secondary)
             }
             .font(.callout)
-            ForEach(blockingErrors, id: \.self) { message in
+            ForEach(StatusText.blockingErrors(model), id: \.self) { message in
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
-        }
-    }
-
-    private var agentSummary: String {
-        switch model.agentState {
-        case .keys(let k): "\(model.agentName) · \(k.count) key\(k.count == 1 ? "" : "s")"
-        case .empty: "\(model.agentName) · no keys"
-        case .unreachable(let why): "Agent not reachable: \(why)"
         }
     }
 
@@ -38,14 +30,33 @@ struct StatusRow: View {
         case nil: "CLI …"
         }
     }
+}
 
-    private var blockingErrors: [String] {
+/// Status strings shared by the main window and the old panel.
+@MainActor
+enum StatusText {
+    /// The agent name and its state, as one line.
+    static func agentSummary(_ model: AppModel) -> String {
+        if case .unreachable = model.agentState { return agentState(model) }
+        return "\(model.agentName) \(agentState(model))"
+    }
+
+    /// "· N keys", "· no keys", or why the agent is not reachable.
+    static func agentState(_ model: AppModel) -> String {
+        switch model.agentState {
+        case .keys(let k): "· \(k.count) key\(k.count == 1 ? "" : "s")"
+        case .empty: "· no keys"
+        case .unreachable(let why): "Agent not reachable: \(why)"
+        }
+    }
+
+    static func blockingErrors(_ model: AppModel) -> [String] {
         var errors: [String] = []
         if let p = model.cliSettingProblem { errors.append(p) }
-        if case .failure(let e) = model.cli { errors.append(Self.describe(e)) }
+        if case .failure(let e) = model.cli { errors.append(describe(e)) }
         if case .failure(let e) = model.tmpdir { errors.append("Blocked: \(e.description). There is no fallback to /tmp.") }
         if let e = model.storeError {
-            errors.append("Profiles file \(model.store.file.path): \(Self.describe(e)). Editing is disabled.")
+            errors.append("Profiles file \(model.store.file.path): \(describe(e)). Editing is disabled.")
         }
         return errors
     }

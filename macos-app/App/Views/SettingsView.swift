@@ -61,7 +61,7 @@ struct SettingsView: View {
                     row("CLI", info.path.path(percentEncoded: false))
                     row("Version", info.version)
                 case .failure(let e):
-                    row("CLI", StatusRow.describe(e))
+                    row("CLI", StatusText.describe(e))
                 case nil:
                     row("CLI", "not resolved")
                 }
