@@ -65,11 +65,12 @@ audit is still outstanding.
 - **Delayed kill after the child exits (review F6).** When a check times out or is
   cancelled, the app sends SIGTERM and, 2 seconds later, SIGKILL to the CLI's
   process group. If the CLI had exited, every descendant had left the group and
-  macOS reused the pid for another group in that short window, the signal could
+  macOS reused the pid for another group in that window, the signal could
   reach an unrelated process group of the same user. It needs a descendant that
   calls `setsid`, keeps the output pipes open and outlives the CLI, plus pid
-  reuse in that window (typically under a second, at most about 3 seconds); the
-  real CLI does neither during a check. See
+  reuse in the window from the CLI's exit until the kill, a cancel or the step
+  timeout fires (typically under a second for the delayed kill alone, up to the
+  step timeout otherwise); the real CLI does neither during a check. See
   `ProcessRunner.terminate()`.
 - **SSH config change detection on some filesystems.** A passed check is
   invalidated when a file it depended on changes, using size, times, inode and

@@ -181,11 +181,13 @@ private final class Job: @unchecked Sendable {
     /// are drained, so the delayed SIGKILL (or a late cancel or timeout) can run after the child was
     /// reaped. If every descendant had left the group (setsid) and the pid was reused for another
     /// group in that window, the signal could reach an unrelated process group of the same user.
-    /// Impact: a signal could reach an unrelated process group of the same user, in a typically
-    /// sub-second window (at most the 2 s kill delay plus the 1 s drain grace). Accepted because it
-    /// needs a child that calls setsid, keeps the pipes open and outlives the CLI, plus pid
+    /// Window: from the CLI's exit until the delayed SIGKILL, a cancel or the step timeout fires,
+    /// while such a descendant keeps the pipes open. For the delayed SIGKILL alone it is typically
+    /// under a second; a late timeout or cancel can widen it up to the step timeout.
+    /// Impact: a signal could reach an unrelated process group of the same user. Accepted because
+    /// it needs a child that calls setsid, keeps the pipes open and outlives the CLI, plus pid
     /// wraparound inside that window; the real CLI does neither during a check, and descendants
-    /// that hold the pipes are already handled by `abandon()`.
+    /// that hold the pipes are abandoned after a timeout or cancel (`abandon()`).
     private func terminate() {
         let pid = process.processIdentifier
         send(SIGTERM, pid)
