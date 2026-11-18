@@ -354,6 +354,8 @@ check.
 - "Choose a server." This text already exists, as the `inputsProblem` text.
 - "Onward servers the key may log in to"
 - "Not in the agent"
+- Menu bar states "Check failed", "Not checked", "No server selected"
+  (required by "Menu bar"; listed 2026-11-18)
 - "Identity filtering only", "Check Again", and the " · HH:mm" suffix of
   "Check passed" (required by the sections above; listed here 2026-11-18)
 - "The agent's keys changed during the check before connecting. Check again."
