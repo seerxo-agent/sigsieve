@@ -354,6 +354,8 @@ check.
 - "Choose a server." This text already exists, as the `inputsProblem` text.
 - "Onward servers the key may log in to"
 - "Not in the agent"
+- "Identity filtering only", "Check Again", and the " · HH:mm" suffix of
+  "Check passed" (required by the sections above; listed here 2026-11-18)
 - "The agent's keys changed during the check before connecting. Check again."
   (connect error; added 2026-11-18 by ledger ruling in Task 2)
 - "See above."
