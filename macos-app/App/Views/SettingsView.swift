@@ -8,46 +8,54 @@ struct SettingsView: View {
     @State private var cliPath = ""
     @State private var socket = ""
     @State private var socketError: String?
+    /// What the picker shows; separate from the model so choosing OpenSSH can reveal the socket row without saving.
+    @State private var agentKind = AgentKind.secretive
+
+    private enum AgentKind { case secretive, openssh }
 
     var body: some View {
         Form {
             Section {
-                Picker("", selection: Binding(
-                    get: { model.defaultAgent == .secretive ? 0 : 1 },
-                    set: { $0 == 0 ? useAgent(.secretive) : useAgent(.openssh(socket: socket)) })) {
-                    Text("Secretive").tag(0)
-                    Text("OpenSSH agent").tag(1)
+                Picker("Agent", selection: $agentKind) {
+                    Text("Secretive").tag(AgentKind.secretive)
+                    Text("OpenSSH agent").tag(AgentKind.openssh)
                 }
-                .pickerStyle(.radioGroup)
-                .labelsHidden()
-                HStack {
-                    TextField("Agent socket path", text: $socket)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Use") { useAgent(.openssh(socket: socket)) }
+                .pickerStyle(.menu)
+                if agentKind == .openssh {
+                    LabeledContent("Agent socket path") {
+                        HStack {
+                            TextField("Agent socket path", text: $socket)
+                                .labelsHidden()
+                                .textFieldStyle(.roundedBorder)
+                            Button("Use") { useAgent(.openssh(socket: socket)) }
+                        }
+                    }
+                    if model.defaultAgent != .openssh(socket: socket) {
+                        Text("Not saved yet. The default agent is unchanged.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let socketError {
+                        Text(socketError).font(.caption).foregroundStyle(.red)
+                    }
                 }
-                if let socketError {
-                    Text(socketError).font(.caption).foregroundStyle(.red)
-                }
-                Text("Existing servers keep their own agent.").font(.caption).foregroundStyle(.secondary)
             } header: {
-                Text("Default agent for new servers").font(.headline)
+                Text("Default agent for new servers")
+            } footer: {
+                Text("Existing servers keep their own agent.")
             }
 
             Section {
-                HStack {
-                    TextField("Found automatically when empty", text: $cliPath)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { Task { await model.setCLIPath(cliPath) } }
-                    Button("Save") { Task { await model.setCLIPath(cliPath) } }
+                LabeledContent("Path (optional, absolute)") {
+                    HStack {
+                        TextField("Path", text: $cliPath, prompt: Text("Found automatically when empty"))
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                        Button("Save") { Task { await model.setCLIPath(cliPath) } }
+                    }
                 }
                 if let error = model.cliPathError {
                     Text(error).font(.caption).foregroundStyle(.red)
                 }
-            } header: {
-                Text("SigSieve CLI path (optional, absolute)").font(.headline)
-            }
-
-            Section {
                 switch model.cli {
                 case .success(let info):
                     row("CLI", info.path.path(percentEncoded: false))
@@ -57,15 +65,27 @@ struct SettingsView: View {
                 case nil:
                     row("CLI", "not resolved")
                 }
+            } header: {
+                Text("SigSieve CLI")
+            }
+
+            Section {
                 row("Profiles file", model.store.file.path)
             }
         }
-        .padding(20)
-        .frame(width: 480)
+        .formStyle(.grouped)
+        .frame(width: 500)
         .onAppear {
             cliPath = model.cliPathSetting
-            if case .openssh(let s) = model.defaultAgent { socket = s }
-            else if case .openssh(let s) = AppModel.appAgent { socket = s }
+            if case .openssh(let s) = model.defaultAgent { socket = s; agentKind = .openssh }
+            else {
+                agentKind = .secretive
+                if case .openssh(let s) = AppModel.appAgent { socket = s }
+            }
+        }
+        .onChange(of: agentKind) { kind in
+            // Secretive applies at once (unless already the default); OpenSSH only reveals the socket row.
+            if kind == .secretive, model.defaultAgent != .secretive { useAgent(.secretive) }
         }
     }
 
@@ -79,10 +99,11 @@ struct SettingsView: View {
         }
     }
 
+    /// Read-only value that wraps rather than truncates: the CLI path says which executable runs.
     private func row(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.caption.monospaced()).textSelection(.enabled)
+        LabeledContent(label) {
+            Text(value).font(.body.monospaced()).textSelection(.enabled)
+                .multilineTextAlignment(.trailing)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

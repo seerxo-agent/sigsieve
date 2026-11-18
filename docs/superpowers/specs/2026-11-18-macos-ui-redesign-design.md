@@ -283,15 +283,25 @@ Top to bottom:
 
 ### Settings window
 
-This is one plain `Form` with no tabs **(builder call; the owner asked for
-simpler)**:
+One `Form` with `.formStyle(.grouped)` (System Settings style), 500 pt wide,
+no tabs **(owner decision 2026-11-19)**:
 
-- **Default agent for new servers.** The Secretive and OpenSSH agent radio
-  group, the socket field with "Use", and the existing error texts. Under it is
-  the caption "Existing servers keep their own agent." (new text).
-- **SigSieve CLI path (optional, absolute).** The existing field with "Save" and
-  the existing errors.
-- **Read-only rows**: CLI path, version, and profiles file, as today.
+- **Default agent for new servers.** A menu `Picker` ("Secretive", "OpenSSH
+  agent"). Choosing Secretive applies it at once (nothing is saved if it is
+  already the default). Choosing OpenSSH saves nothing; it only reveals the
+  row "Agent socket path" with a text field and "Use". While OpenSSH is chosen
+  but the default is not that socket, the caption "Not saved yet. The default
+  agent is unchanged." shows. The existing socket error texts are unchanged.
+  The section footer is "Existing servers keep their own agent."
+- **SigSieve CLI.** The row "Path (optional, absolute)" with the field (prompt
+  "Found automatically when empty") and "Save", the existing error, then
+  read-only rows for CLI and Version. Values are selectable, monospaced,
+  right-aligned and wrap instead of truncating.
+- **Profiles file**, as a read-only row.
+
+The socket and CLI path are saved only by pressing "Use" or "Save". Return in
+either field saves nothing. Invalid input shows the existing message and keeps
+the working setting.
 
 ### Menu bar
 

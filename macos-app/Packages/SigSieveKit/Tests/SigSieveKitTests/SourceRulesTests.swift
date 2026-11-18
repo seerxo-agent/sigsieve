@@ -100,6 +100,33 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     #expect(src[cancel.upperBound...].prefix(120).contains(".keyboardShortcut(.cancelAction)"), "Cancel keeps Esc")
 }
 
+/// Settings saves the socket and CLI path only on the Use / Save buttons; Return saves nothing.
+@Test func settingsSavesOnlyOnButtons() throws {
+    let src = try String(contentsOf: appRoot.appending(path: "App/Views/SettingsView.swift"), encoding: .utf8)
+    #expect(!src.contains(".onSubmit"), "no field may submit")
+    #expect(!src.contains(".keyboardShortcut(.defaultAction)"), "no default action")
+    #expect(src.contains(".formStyle(.grouped)"))
+    #expect(src.contains(".pickerStyle(.menu)"))
+    // Brace-matched body of a button's action closure.
+    func action(_ title: String) throws -> String {
+        let r = try #require(src.range(of: "Button(\"\(title)\")"), "lacks \(title)")
+        var depth = 0, body = "", started = false
+        for c in src[r.upperBound...] {
+            if c == "{" { depth += 1; started = true; if depth == 1 { continue } }
+            if c == "}" { depth -= 1; if started && depth == 0 { break } }
+            if started { body.append(c) }
+        }
+        return body.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    #expect(try action("Use") == "useAgent(.openssh(socket: socket))")
+    #expect(try action("Save") == "Task { await model.setCLIPath(cliPath) }")
+    for text in ["Enter the agent socket path to use the OpenSSH agent. The default agent is unchanged.",
+                 "The agent socket must be an absolute path (starting with /) without control characters. The default agent is unchanged.",
+                 "Existing servers keep their own agent."] {
+        #expect(src.contains(text), "lost: \(text)")
+    }
+}
+
 /// Sheets keep a draft and write only on Save; Cancel, Esc and window close discard it.
 @Test func sheetsSaveOnlyOnSave() throws {
     let views = appRoot.appending(path: "App/Views")
