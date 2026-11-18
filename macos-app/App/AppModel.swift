@@ -471,8 +471,6 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func removeDestination(_ d: Destination) { edit { $0.destinations.removeAll { $0 == d } } }
-
     func removeHostKey(_ fp: Fingerprint) {
         edit { p in
             for i in p.destinations.indices { p.destinations[i].hostKeys.removeAll { $0 == fp } }

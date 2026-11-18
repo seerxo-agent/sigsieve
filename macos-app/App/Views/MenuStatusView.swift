@@ -31,6 +31,10 @@ struct MenuStatusView: View {
             Divider()
             Button("Open SigSieve") {
                 openWindow(id: "main")
+                if let window = MainWindowRef.window {
+                    if window.isMiniaturized { window.deminiaturize(nil) }
+                    window.makeKeyAndOrderFront(nil)
+                }
                 NSApp.activate(ignoringOtherApps: true)
                 // A window that is already key does not become key again, so refresh here too.
                 Task { await model.refresh() }
@@ -49,6 +53,10 @@ struct MenuStatusView: View {
         }
         .padding(12)
         .frame(width: 260)
+        // Fresh state while the main window is closed. Reading only; never a check.
+        // onAppear may not fire on every reopen of a .window panel; becoming key does.
+        .onAppear { Task { await model.refresh() } }
+        .background(WindowEvents(onBecomeKey: { Task { await model.refresh() } }))
     }
 
     @ViewBuilder private var checkState: some View {

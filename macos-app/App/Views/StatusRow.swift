@@ -4,12 +4,6 @@ import SwiftUI
 /// Status strings shared by the main window, the menu bar panel and Settings.
 @MainActor
 enum StatusText {
-    /// The agent name and its state, as one line.
-    static func agentSummary(_ model: AppModel) -> String {
-        if case .unreachable = model.agentState { return agentState(model) }
-        return "\(model.agentName) \(agentState(model))"
-    }
-
     /// "· N keys", "· no keys", or why the agent is not reachable.
     static func agentState(_ model: AppModel) -> String {
         switch model.agentState {

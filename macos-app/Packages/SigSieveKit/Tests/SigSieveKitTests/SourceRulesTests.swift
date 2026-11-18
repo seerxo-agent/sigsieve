@@ -332,4 +332,12 @@ private func braceBody(after head: String, in src: String) -> String? {
     let open = try #require(src.range(of: "openWindow(id: \"main\")"))
     let refresh = try #require(src.range(of: "await model.refresh()"))
     #expect(open.lowerBound < refresh.lowerBound)
+    // A minimised main window comes back too: the captured NSWindow, never an identifier string.
+    let restore = try #require(src.range(of: "if window.isMiniaturized { window.deminiaturize(nil) }"))
+    let front = try #require(src.range(of: "window.makeKeyAndOrderFront(nil)"))
+    #expect(open.lowerBound < restore.lowerBound && restore.lowerBound < front.lowerBound)
+    #expect(src.contains("if let window = MainWindowRef.window {"))
+    let main = try String(contentsOf: appRoot.appending(path: "App/Views/MainWindow.swift"), encoding: .utf8)
+    #expect(main.contains("MainWindowRef.window = window"))
+    #expect(main.contains("MainWindowRef.window = nil"))
 }

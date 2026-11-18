@@ -53,11 +53,15 @@ struct MainWindow: View {
         // Dock and ⌘Tab only while this window is open. The policy goes back on willClose of
         // this NSWindow, not on onDisappear, so a sheet, a minimise or a column swap never drops it.
         .background(WindowEvents(
+            onWindow: { window in MainWindowRef.window = window },
             onBecomeKey: {
                 NSApp.setActivationPolicy(.regular)
                 Task { await model.refresh() }
             },
-            onClose: { NSApp.setActivationPolicy(.accessory) }))
+            onClose: {
+                MainWindowRef.window = nil
+                NSApp.setActivationPolicy(.accessory)
+            }))
         .onAppear {
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
@@ -70,21 +74,35 @@ struct MainWindow: View {
     }
 }
 
-/// Calls back when the NSWindow that hosts this view becomes key or is about to close. The
-/// observers take that window as their object, so Settings, the menu bar panel and sheets
-/// (each its own NSWindow) never trigger them.
-private struct WindowEvents: NSViewRepresentable {
-    let onBecomeKey: () -> Void
-    let onClose: () -> Void
+/// The open main window, so the menu bar can bring it back when minimised. Set from the
+/// captured NSWindow and cleared on its willClose, so a closed window is never reused.
+@MainActor
+enum MainWindowRef {
+    static weak var window: NSWindow?
+}
 
-    func makeNSView(context: Context) -> Observer { Observer() }
+/// Calls back with the NSWindow that hosts this view, and when that window becomes key or is
+/// about to close. The observers take that window as their object, so other windows (Settings,
+/// the menu bar panel, sheets: each its own NSWindow) never trigger them.
+struct WindowEvents: NSViewRepresentable {
+    var onWindow: (NSWindow) -> Void = { _ in }
+    let onBecomeKey: () -> Void
+    var onClose: () -> Void = {}
+
+    func makeNSView(context: Context) -> Observer {
+        let view = Observer()
+        updateNSView(view, context: context)
+        return view
+    }
 
     func updateNSView(_ view: Observer, context: Context) {
+        view.onWindow = onWindow
         view.onBecomeKey = onBecomeKey
         view.onClose = onClose
     }
 
     final class Observer: NSView {
+        var onWindow: (NSWindow) -> Void = { _ in }
         var onBecomeKey: () -> Void = {}
         var onClose: () -> Void = {}
 
@@ -95,11 +113,16 @@ private struct WindowEvents: NSViewRepresentable {
             let center = NotificationCenter.default
             center.removeObserver(self)
             guard let window else { return }
+            onWindow(window)
             center.addObserver(self, selector: #selector(becameKey), name: NSWindow.didBecomeKeyNotification, object: window)
             center.addObserver(self, selector: #selector(willClose), name: NSWindow.willCloseNotification, object: window)
         }
 
-        @objc private func becameKey(_ note: Notification) { onBecomeKey() }
+        /// Reports the window again: SwiftUI may reuse a closed window without moving this view.
+        @objc private func becameKey(_ note: Notification) {
+            if let window { onWindow(window) }
+            onBecomeKey()
+        }
         @objc private func willClose(_ note: Notification) { onClose() }
     }
 }
