@@ -237,9 +237,18 @@ Top to bottom:
      failed") in red with `xmark.octagon.fill`. Below it are the CLI hint and
      then the existing known_hosts paragraph.
    - In both cases, last comes a **"Details"** `DisclosureGroup`, collapsed by
-     default. It holds the result lines as label/value pairs, the raw output as
-     selectable monospace text (no fixed height, no inner scroll view) and, for
-     a pass, the copyable command and its copy button.
+     default **(owner decision 2026-11-19, readable Details)**. It holds, for
+     each check step that has result lines, a small monospaced secondary
+     heading ("sigsieve doctor", "sigsieve connect --dry-run") over a bordered
+     box with a two-column list: the label in a fixed-width secondary column
+     that wraps and is never truncated, the value left-aligned in full,
+     wrapping and selectable. Values that are paths (start with "/" or "~") or
+     fingerprints (start with "SHA256:", or the label begins with "available")
+     are monospaced; a path under the home folder is shown with `~`, the full
+     path as its tooltip. Then, for a pass, the copyable command and its copy
+     button. Last, the raw output, word for word, as selectable monospace text
+     (no fixed height, no inner scroll view) inside a nested "Raw output"
+     `DisclosureGroup`, collapsed by default.
    - The existing "Some Include files cannot be tracked; SigSieve checks again
      when you connect." and `connectError` (red, selectable) sit directly under
      the result.
@@ -415,6 +424,8 @@ check.
 - "Existing servers keep their own agent."
 - "Open SigSieve", "Quit SigSieve", "Edit Keys…", "Change…", "Add Host Key…",
   "+ Add Server", "Details"
+- "sigsieve doctor" and "sigsieve connect --dry-run" as the Details section
+  headings, and "Raw output" (owner-approved 2026-11-19, readable Details)
 
 Every security warning keeps its current wording.
 

@@ -486,3 +486,18 @@ private func braceBody(after head: String, in src: String) -> String? {
     #expect(src.contains(".keyboardShortcut(\",\", modifiers: .command)"))
     #expect(src.contains(".keyboardShortcut(\"q\", modifiers: .command)"))
 }
+
+/// Details: one two-column list per check step under its command name, labels never truncated,
+/// and the raw output kept word for word in a nested, collapsed "Raw output" (owner 2026-11-19).
+@Test func detailsIsReadable() throws {
+    let src = try String(contentsOf: appRoot.appending(path: "App/Views/CheckResultView.swift"), encoding: .utf8)
+    let details = try #require(view("Details", in: src))
+    for heading in ["\"sigsieve doctor\"", "\"sigsieve connect --dry-run\""] {
+        #expect(details.contains(heading), "Details lacks the heading \(heading)")
+    }
+    let raw = try #require(braceBody(after: "DisclosureGroup(\"Raw output\") {", in: details), "Details lacks Raw output")
+    #expect(raw.contains("Text(raw.isEmpty ? \"(no output)\" : raw)"))
+    for word in ["lineLimit", "truncationMode"] {
+        #expect(!details.contains(word), "Details uses \(word)")
+    }
+}

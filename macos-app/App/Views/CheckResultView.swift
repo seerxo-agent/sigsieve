@@ -109,7 +109,8 @@ private struct CLIWarnings: View {
     }
 }
 
-/// Collapsed by default. Result lines, the raw output (no inner scrolling) and, for a pass, the command.
+/// Collapsed by default. Each check step's lines as a label/value list under the step's command,
+/// for a pass the command, then the raw output (no inner scrolling) in a collapsed "Raw output".
 private struct Details: View {
     let result: CheckResult
     let command: String?
@@ -117,23 +118,8 @@ private struct Details: View {
     var body: some View {
         DisclosureGroup("Details") {
             VStack(alignment: .leading, spacing: 10) {
-                if !lines.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                            LabeledContent(line.label) {
-                                Text(line.value).multilineTextAlignment(.trailing).textSelection(.enabled)
-                            }
-                        }
-                    }
-                    .font(.caption)
-                }
-                Text(raw.isEmpty ? "(no output)" : raw)
-                    .font(.caption.monospaced())
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
-                    .groupBox()
+                section("sigsieve doctor", result.doctor.lines)
+                section("sigsieve connect --dry-run", result.dryRun?.lines ?? [])
                 if let command {
                     HStack(alignment: .top, spacing: 8) {
                         Text(command)
@@ -152,11 +138,57 @@ private struct Details: View {
                     .padding(10)
                     .groupBox()
                 }
+                DisclosureGroup("Raw output") {
+                    Text(raw.isEmpty ? "(no output)" : raw)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .groupBox()
+                        .padding(.top, 6)
+                }
             }
             .padding(.top, 6)
         }
     }
 
-    private var lines: [ResultLine] { result.doctor.lines + (result.dryRun?.lines ?? []) }
+    /// One step's lines; nothing when it has none. Labels wrap in a fixed column, never truncated.
+    @ViewBuilder
+    private func section(_ heading: String, _ lines: [ResultLine]) -> some View {
+        if !lines.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(heading).font(.mono(11)).foregroundStyle(.secondary)
+                Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 6) {
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        GridRow {
+                            Text(line.label)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(width: 132, alignment: .leading)
+                            value(line)
+                        }
+                    }
+                }
+                .font(.points(12))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .groupBox()
+            }
+        }
+    }
+
+    /// Full text, left-aligned. Paths and fingerprints in monospace; a path under the home folder as `~`.
+    private func value(_ line: ResultLine) -> some View {
+        let path = line.value.hasPrefix("/") || line.value.hasPrefix("~")
+        let mono = path || line.value.hasPrefix("SHA256:") || line.label.hasPrefix("available")
+        return Text(path ? (line.value as NSString).abbreviatingWithTildeInPath : line.value)
+            .font(mono ? .mono(11.5) : .points(12))
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help(line.value)
+    }
+
     private var raw: String { [result.doctor.raw, result.dryRun?.raw ?? ""].filter { !$0.isEmpty }.joined(separator: "\n\n") }
 }
