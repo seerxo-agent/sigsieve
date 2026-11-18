@@ -60,6 +60,25 @@ file. What it can and cannot see:
 The tests are not a substitute for an independent external security audit. That
 audit is still outstanding.
 
+## Accepted risks (for external review)
+
+- **Delayed kill after the child exits (review F6).** When a check times out or is
+  cancelled, the app sends SIGTERM and, 2 seconds later, SIGKILL to the CLI's
+  process group. If the CLI had exited, every descendant had left the group and
+  macOS reused the pid for another group in that short window, the signal could
+  reach an unrelated process group of the same user. It needs a descendant that
+  calls `setsid`, keeps the output pipes open and outlives the CLI, plus pid
+  reuse in that window (typically under a second, at most about 3 seconds); the
+  real CLI does neither during a check. See
+  `ProcessRunner.terminate()`.
+- **SSH config change detection on some filesystems.** A passed check is
+  invalidated when a file it depended on changes, using size, times, inode and
+  ctime. On filesystems with whole-second times (HFS+, FAT, exFAT) a same-size
+  rewrite within the same second can be missed, and filesystems without real
+  inode or ctime semantics (some network or FUSE volumes) can miss changes.
+  This only affects whether an old check result stays visible; the CLI and
+  OpenSSH check again when you connect.
+
 ## Tests
 
 The Swift package `Packages/SigSieveKit` holds the app's logic. Its

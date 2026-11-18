@@ -176,6 +176,16 @@ private final class Job: @unchecked Sendable {
     }
 
     /// SIGTERM now, SIGKILL after 2 s, to the whole group when the child leads one.
+    ///
+    /// Accepted risk (security review F6, owner acceptance): `finished` is set only after the pipes
+    /// are drained, so the delayed SIGKILL (or a late cancel or timeout) can run after the child was
+    /// reaped. If every descendant had left the group (setsid) and the pid was reused for another
+    /// group in that window, the signal could reach an unrelated process group of the same user.
+    /// Impact: a signal could reach an unrelated process group of the same user, in a typically
+    /// sub-second window (at most the 2 s kill delay plus the 1 s drain grace). Accepted because it
+    /// needs a child that calls setsid, keeps the pipes open and outlives the CLI, plus pid
+    /// wraparound inside that window; the real CLI does neither during a check, and descendants
+    /// that hold the pipes are already handled by `abandon()`.
     private func terminate() {
         let pid = process.processIdentifier
         send(SIGTERM, pid)
