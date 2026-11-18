@@ -21,8 +21,9 @@ struct SigSieveApp: App {
             SettingsView()
                 .environmentObject(model)
         }
-        .defaultSize(width: 700, height: 420)
-        .windowResizability(.contentMinSize)
+        // No title-bar strip; the window takes its size from SettingsView (height fits the pane).
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
 
         MenuBarExtra {
             MenuStatusView()

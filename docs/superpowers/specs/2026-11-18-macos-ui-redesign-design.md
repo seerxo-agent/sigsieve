@@ -286,11 +286,17 @@ Top to bottom:
 A sidebar with three items and a detail pane **(owner decision 2026-11-19,
 draft B)**. Each item is an SF Symbol in a 22 pt rounded-square tile with a
 white glyph: "Agent" (`key.fill`, blue), "Command Line" (`terminal.fill`,
-gray), "Files" (`doc.fill`, orange). The sidebar is about 180 pt wide; Agent is
-selected at first. The detail pane shows the item name as a large title and a
-`Form` with `.formStyle(.grouped)`. Rows are one line: label left, control or
-value right. The window opens about 700 x 420 with everything visible without
-scrolling, resizes, and has a minimum of about 600 x 360. The state of all
+gray), "Files" (`doc.fill`, orange). The sidebar is 200 pt wide, translucent
+(sidebar material) and full height, with the traffic lights inside it; there is
+no separate title-bar strip (hidden title bar). Agent is selected at first; the
+selected item has an accent fill and white text. The detail pane shows the item
+name as a small 15 pt semibold title on the traffic-light band (not a large
+title), then grouped cards built by hand (rounded, hairline border, dividers
+between rows; no `Form`, no scrolling). A caption sits above a card and a
+footer below it. Rows are one line: label left, control or value right. The
+window is exactly as tall as the current pane's content (switching panes may
+change its height) and resizes in width between about 600 and 820 pt
+**(owner decision 2026-11-19, polish)**. The state of all
 fields lives in the window, so switching items never loses it.
 
 - **Agent.** Section "Default agent for new servers": a menu `Picker`
@@ -302,10 +308,12 @@ fields lives in the window, so switching items never loses it.
   (/path)", the active default; wraps, never truncates; text owner-approved
   2026-11-19) shows. The existing socket error texts are unchanged. The
   section footer is "Existing servers keep their own agent."
-- **Command Line.** Section "SigSieve CLI": the row "Path (optional,
-  absolute)" with the field (prompt "Found automatically when empty") and
-  "Save", the existing error, then read-only rows for CLI and Version.
-- **Files.** The read-only row "Profiles file".
+- **Command Line.** Section "SigSieve CLI": the row "Path" with the field
+  (prompt "Found automatically when empty") and "Save", the existing error,
+  then read-only rows for CLI and Version. Footer "Path is optional and must
+  be absolute." (owner-approved 2026-11-19; replaces the label "Path
+  (optional, absolute)").
+- **Files.** The read-only row "Profiles file", with the path below the label.
 
 Read-only paths show the home directory as `~`, monospaced and secondary, with
 the full path as the tooltip. They are selectable and wrap instead of
@@ -317,13 +325,19 @@ the working setting.
 
 ### Menu bar
 
-The `.window` style panel is about 260 pt wide and holds:
+The `.window` style panel is 280 pt wide, laid out as a native menu
+**(owner decision 2026-11-19, "A")**, and holds:
 
-- the selected server and its check state in words: "Check passed 16:53" only
-  when `canConnect`, "Checking…" while running, "Check failed" after a failure,
-  otherwise "Not checked"; or "No server selected";
-- any blocking error, as a single line with the existing text;
-- "Open SigSieve" (default), "Settings…" and "Quit SigSieve".
+- the app icon, the selected server and its check state as a status dot and
+  words: "Check passed 16:53" (green dot) only when `canConnect`, "Checking…"
+  (small spinner) while running, "Check failed" (red dot) after a failure,
+  otherwise "Not checked" (hollow grey ring); or "No server selected" (hollow
+  ring);
+- the first blocking error, in red with its warning icon, at full length
+  (wraps, never truncated);
+- full-width menu rows that take the accent colour on hover, each with its
+  shortcut hint: "Open SigSieve" (default, ↩), "Settings…" (⌘,) and, after a
+  divider, "Quit SigSieve" (⌘Q).
 
 It never starts a check or a connection.
 

@@ -105,7 +105,10 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     let src = try String(contentsOf: appRoot.appending(path: "App/Views/SettingsView.swift"), encoding: .utf8)
     #expect(!src.contains(".onSubmit"), "no field may submit")
     #expect(!src.contains(".keyboardShortcut(.defaultAction)"), "no default action")
-    #expect(src.contains(".formStyle(.grouped)"))
+    // Hand-built cards sized by their content: no Form, no scrolling, height from content.
+    #expect(!src.contains("Form {"))
+    #expect(!src.contains("ScrollView"))
+    #expect(src.contains(".fixedSize(horizontal: false, vertical: true)"))
     #expect(src.contains(".pickerStyle(.menu)"))
     // Brace-matched body of a button's action closure.
     func action(_ title: String) throws -> String {
@@ -124,7 +127,8 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     #expect(!src.contains("Not saved yet. The default agent is unchanged."), "old caption removed")
     for text in ["Enter the agent socket path to use the OpenSSH agent. The default agent is unchanged.",
                  "The agent socket must be an absolute path (starting with /) without control characters. The default agent is unchanged.",
-                 "Existing servers keep their own agent."] {
+                 "Existing servers keep their own agent.",
+                 "Path is optional and must be absolute."] {
         #expect(src.contains(text), "lost: \(text)")
     }
 }
@@ -138,6 +142,18 @@ private func sourceFiles() throws -> [(name: String, text: String)] {
     #expect(src.contains("\"Socket\""))
     #expect(!src.contains(".frame(width: 500)"))
     #expect(src.contains("abbreviatingWithTildeInPath"))
+    #expect(!src.contains("Path (optional, absolute)"))
+}
+
+/// The Settings window has no title-bar strip and is exactly as tall as its content.
+@Test func settingsSceneFitsContent() throws {
+    let src = try String(contentsOf: appRoot.appending(path: "App/SigSieveApp.swift"), encoding: .utf8)
+    let start = try #require(src.range(of: "Window(\"Settings\", id: \"settings\")"))
+    let end = try #require(src.range(of: "MenuBarExtra", range: start.upperBound..<src.endIndex))
+    let scene = src[start.upperBound..<end.lowerBound]
+    #expect(scene.contains(".windowStyle(.hiddenTitleBar)"))
+    #expect(scene.contains(".windowResizability(.contentSize)"))
+    #expect(!scene.contains(".defaultSize("))
 }
 
 /// Sheets keep a draft and write only on Save; Cancel, Esc and window close discard it.
@@ -404,4 +420,18 @@ private func braceBody(after head: String, in src: String) -> String? {
     let main = try String(contentsOf: appRoot.appending(path: "App/Views/MainWindow.swift"), encoding: .utf8)
     #expect(main.contains("MainWindowRef.window = window"))
     #expect(main.contains("MainWindowRef.window = nil"))
+}
+
+/// The menu panel shows a blocking error in full and offers its actions as menu rows with shortcut hints.
+@Test func menuPanelRows() throws {
+    let src = try String(contentsOf: appRoot.appending(path: "App/Views/MenuStatusView.swift"), encoding: .utf8)
+    let error = try #require(braceBody(after: "if let error = StatusText.blockingErrors(model).first {", in: src))
+    #expect(!error.contains(".lineLimit("), "a warning is never shortened")
+    #expect(!error.contains(".truncationMode("), "a warning is never shortened")
+    for hint in ["\"↩\"", "\"⌘,\"", "\"⌘Q\""] {
+        #expect(src.contains(hint), "lacks hint \(hint)")
+    }
+    #expect(src.contains(".keyboardShortcut(.defaultAction)"))
+    #expect(src.contains(".keyboardShortcut(\",\", modifiers: .command)"))
+    #expect(src.contains(".keyboardShortcut(\"q\", modifiers: .command)"))
 }
