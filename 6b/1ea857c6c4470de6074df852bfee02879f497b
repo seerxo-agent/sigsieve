@@ -1,0 +1,23 @@
+macos-app/App/AppModel.swift
+  s_63ebb2a1e1ff37::t_5299b241fa4fff 197-200
+  s_63ebb2a1e1ff37::t_7aa892db22230e 26-31,35-36,57-59,63,195-196,201-202,265-269,337-338,349,352,369,372,384,412,435-453
+  s_63ebb2a1e1ff37::t_a1af8a51c6b94c 454
+macos-app/Packages/SigSieveKit/Tests/SigSieveKitTests/SourceRulesTests.swift
+  s_63ebb2a1e1ff37::t_525472367713ee 127-163
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6b1ea857c6c4470de6074df852bfee02879f497b",
+  "prompts": {},
+  "sessions": {
+    "s_63ebb2a1e1ff37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e9e90eb-9ef2-40e7-84a4-ada9eadcfa7f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
