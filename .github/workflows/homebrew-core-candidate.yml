@@ -1,0 +1,165 @@
+# Checks packaging/homebrew/core/sigsieve.rb the way homebrew/core would, on macOS and Linux.
+# Candidate only: nothing is published, uploaded or submitted. See packaging/homebrew/core/README.md.
+name: homebrew-core-candidate
+
+on:
+  push:
+    branches: [homebrew/core-candidate]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homebrew-core-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  candidate:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macOS (arm64)
+          - os: ubuntu-24.04
+            label: Linux x86_64
+          - os: ubuntu-24.04-arm
+            label: Linux ARM64
+    env:
+      HOMEBREW_NO_INSTALL_FROM_API: "1"
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      HOMEBREW_NO_ENV_HINTS: "1"
+      TAP: sigsieve-ci/candidate
+      FORMULA: sigsieve-ci/candidate/sigsieve
+      CANDIDATE: packaging/homebrew/core/sigsieve.rb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Taps homebrew/core as a git checkout: needed with HOMEBREW_NO_INSTALL_FROM_API=1.
+      - uses: Homebrew/actions/setup-homebrew@ceec4e8419bb3c97ce96e9dda7738499ed5f869d
+        with:
+          core: true
+
+      - name: brew config
+        run: brew config
+
+      - name: Create local tap with the candidate formula
+        run: |
+          brew tap-new --no-git "$TAP"
+          tap_dir="$(brew --repository "$TAP")"
+          mkdir -p "$tap_dir/Formula"
+          cp "$CANDIDATE" "$tap_dir/Formula/sigsieve.rb"
+          # Homebrew 7 refuses untrusted non-official formulae. Trust only this one (isolated runner).
+          brew trust --formula "$FORMULA"
+
+      - name: Prove the formula under test is the candidate file
+        run: |
+          loaded="$(brew formula "$FORMULA")"
+          echo "brew formula $FORMULA -> $loaded"
+          shasum -a 256 "$CANDIDATE" "$loaded"
+          want="$(shasum -a 256 "$CANDIDATE" | cut -d' ' -f1)"
+          got="$(shasum -a 256 "$loaded" | cut -d' ' -f1)"
+          if [ "$want" != "$got" ]; then
+            echo "::error::loaded formula differs from $CANDIDATE"
+            exit 1
+          fi
+          brew info --json=v2 "$FORMULA" | jq '.formulae[0] | {full_name, tap, ruby_source_path, versions}'
+
+      - name: Dependencies (OpenSSH is declared on Linux only)
+        run: |
+          brew deps --include-build --tree "$FORMULA"
+          echo "--- brew deps $FORMULA"
+          brew deps "$FORMULA"
+          echo "--- ssh tools on PATH before install"
+          command -v ssh ssh-agent ssh-keygen ssh-add || true
+          ssh -V
+
+      - name: brew style
+        run: brew style "$FORMULA"
+
+      - name: brew audit --strict --online
+        run: brew audit --strict --online "$FORMULA"
+
+      - name: brew audit --new --strict --online (non-blocking; notability/age expected)
+        id: audit_new
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          {
+            echo "### ${{ matrix.label }}: brew audit --new --strict --online"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          brew audit --new --strict --online "$FORMULA" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || status=$?
+          { echo '```'; echo "exit status: $status"; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      # A local tap skips homebrew/core-only audits (e.g. dependency/licence rules), so also audit a copy in
+      # the runner's homebrew/core checkout. The checkout is thrown away with the runner.
+      - name: brew audit --new --strict --online as homebrew/core (non-blocking)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          core_dir="$(brew --repository homebrew/core)"
+          cp "$CANDIDATE" "$core_dir/Formula/s/sigsieve.rb"
+          {
+            echo "### ${{ matrix.label }}: brew audit --new --strict --online homebrew/core/sigsieve"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          brew audit --new --strict --online homebrew/core/sigsieve 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || status=$?
+          { echo '```'; echo "exit status: $status"; } >> "$GITHUB_STEP_SUMMARY"
+          rm "$core_dir/Formula/s/sigsieve.rb"
+          exit "$status"
+
+      - name: brew livecheck (default strategy must find 1.0.0)
+        run: |
+          brew livecheck --debug "$FORMULA"
+          latest="$(brew livecheck --json "$FORMULA" | jq -r '.[0].version.latest')"
+          echo "latest: $latest"
+          test "$latest" = "1.0.0"
+
+      - name: Install (build from source)
+        if: ${{ !cancelled() }}
+        run: brew install --build-from-source --verbose "$FORMULA"
+
+      - name: Installed formula and OpenSSH in use
+        if: ${{ !cancelled() }}
+        run: |
+          brew info "$FORMULA"
+          brew info --json=v2 --installed | jq '.formulae[] | select(.name == "sigsieve") | {full_name, tap, ruby_source_path, installed: [.installed[].version]}'
+          command -v sigsieve
+          sigsieve --version
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            brew list --versions openssh
+            "$(brew --prefix openssh)/bin/ssh" -V
+            ls -l "$(brew --prefix openssh)/bin/ssh-agent"
+          fi
+
+      - name: brew test
+        if: ${{ !cancelled() }}
+        run: brew test --verbose "$FORMULA"
+
+      - name: Uninstall
+        if: ${{ !cancelled() }}
+        run: brew uninstall --formula "$FORMULA"
+
+      - name: Confirm sigsieve is gone
+        if: ${{ !cancelled() }}
+        run: |
+          if brew list --formula sigsieve >/dev/null 2>&1; then
+            echo "::error::sigsieve is still installed"
+            exit 1
+          fi
+          if [ -e "$(brew --prefix)/bin/sigsieve" ] || command -v sigsieve; then
+            echo "::error::sigsieve binary still present"
+            exit 1
+          fi
+          echo "sigsieve uninstalled"
