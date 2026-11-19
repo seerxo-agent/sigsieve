@@ -57,9 +57,12 @@ does not produce a different binary silently.
 
 Tap commit `7fd385e`: install, upgrade from `v0.1.0-alpha.4`, `brew test` and
 uninstall on macOS arm64 passed (maintainer-reported; no independent log is
-published).
+published). In particular, the published tap's 1.0.0 `brew test` result is
+maintainer-reported only: no independent log of that run exists.
 
-## Test evidence (macOS arm64, Homebrew 7.0.12, 2026-11-03)
+## Test evidence for alpha.4 (macOS arm64, Homebrew 7.0.12, 2026-11-03)
+
+This section is alpha.4 evidence, not 1.0.0 evidence.
 
 Run for the `v0.1.0-alpha.4` formula (2026-11-03) in a local, unpublished tap created with `brew tap-new --no-git`
 (removed afterwards):
@@ -90,8 +93,10 @@ Not tested: Linux (Homebrew on Linux), Intel macOS, a freshly installed macOS.
    repeats the not-independently-audited status and links to
    [docs/INSTALL.md](../../docs/INSTALL.md).
 2. Users install with the full name
-   `brew install semihbugrasezer/sigsieve/sigsieve` (the tested path; Homebrew 7
-   trusts that one formula). A short-name install after `brew tap` is not
+   `brew install semihbugrasezer/sigsieve/sigsieve` (the tested path: recorded for alpha.4,
+   maintainer-reported for 1.0.0). That Homebrew 7 then trusts only that one
+   formula, not the whole tap, is verified from Homebrew 7's source (examined
+   at 7.0.15), not guaranteed for every Homebrew version. A short-name install after `brew tap` is not
    tested. Uninstall:
    `brew uninstall sigsieve && brew untap semihbugrasezer/sigsieve`.
 3. After each tap update, run the steps above against the published tap

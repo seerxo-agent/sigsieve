@@ -11,12 +11,16 @@ brew install semihbugrasezer/sigsieve/sigsieve
 sigsieve --version
 ```
 
-Use the full name `semihbugrasezer/sigsieve/sigsieve`. Homebrew 7 then
-trusts this one formula, not the whole tap. According to Homebrew's source
-(`trust.rb`), it prints `Trusted formula semihbugrasezer/sigsieve/sigsieve`
-only the first time the formula is trusted; this message was not captured
-from a 1.0.0 install log. The full-name install is the tested
-install path (see [Homebrew packaging](../packaging/homebrew/README.md#test-evidence-macos-arm64-homebrew-7012-2026-11-03)).
+Use the full name `semihbugrasezer/sigsieve/sigsieve`. According to
+Homebrew 7's source (examined at 7.0.15: `trust.rb`, `cmd/install.rb`), a
+full-name install then trusts this one formula, not the whole tap, and prints
+`Trusted formula semihbugrasezer/sigsieve/sigsieve` only the first time the
+formula is trusted. This is not a guarantee for every Homebrew version, and
+the message was not captured from a 1.0.0 install log. The full-name install
+is the tested install path: recorded for the alpha.4 formula
+([alpha.4 evidence](../packaging/homebrew/README.md#test-evidence-for-alpha4-macos-arm64-homebrew-7012-2026-11-03))
+and maintainer-reported for 1.0.0
+([1.0.0 evidence](../packaging/homebrew/README.md#test-evidence-for-100-published-tap)).
 Other paths, such as `brew tap` followed by a short-name install, are not
 tested.
 
