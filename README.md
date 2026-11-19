@@ -1,10 +1,24 @@
-# SigSieve
+<p align="center">
+  <img src="macos-app/App/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="112" alt="SigSieve icon">
+</p>
 
-**Forward only the SSH keys you choose.**
+<h1 align="center">SigSieve</h1>
 
-[![CI](https://github.com/semihbugrasezer/sigsieve/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/semihbugrasezer/sigsieve/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/semihbugrasezer/sigsieve)](https://github.com/semihbugrasezer/sigsieve/releases/latest)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<p align="center"><strong>Forward only the SSH keys you choose.</strong></p>
+
+<p align="center">
+  <a href="https://github.com/semihbugrasezer/sigsieve/actions/workflows/ci.yml"><img src="https://github.com/semihbugrasezer/sigsieve/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/semihbugrasezer/sigsieve/releases/latest"><img src="https://img.shields.io/github/v/release/semihbugrasezer/sigsieve" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#macos-app-preview">macOS app</a> ·
+  <a href="#security-at-a-glance">Security</a> ·
+  <a href="#documentation">Documentation</a>
+</p>
 
 SigSieve is a small local proxy for SSH agent forwarding on macOS and Linux. When you forward your agent to a remote machine, the remote side sees **only the keys you allow**. Your keys stay in your existing agent, such as [Secretive](https://github.com/maxgoedjen/secretive) or OpenSSH `ssh-agent`, and are never exported.
 
@@ -81,15 +95,24 @@ More: destination binding, a stable socket for `ssh_config`, every option and [t
 
 ## macOS app (preview)
 
-A menu bar app for the same CLI. Pick a server, choose which agent keys it may use, run the CLI's check and connect in Terminal. The window shows the protection mode and its warning before any check, and Connect stays off until the check passes. The `sigsieve` CLI still does all filtering and checking, and re-checks when it connects; the app adds no security of its own.
+A menu bar app for the same CLI.
 
-The app is built from source, ad hoc signed, and not notarized or distributed yet. Build steps and its manual checks: [macos-app/README.md](macos-app/README.md).
+- **See it at a glance:** which server, which keys it may use, and how the connection is protected.
+- **Check before you connect:** the protection mode and its warning are shown before any check, and Connect stays off until the CLI's check passes.
+- **Same enforcement:** the `sigsieve` CLI still does all filtering and checking, and re-checks when it connects. The app adds no security of its own.
 
-<p><img src="docs/assets/macos-app-main.png" width="610" alt="SigSieve for macOS: a server named production.invalid using a test OpenSSH agent, Identity filtering only with its warning, one forwarded key, a passed check and the Details list for sigsieve doctor"></p>
+<table>
+  <tr>
+    <td width="55%"><img src="docs/assets/macos-app-main.png" alt="SigSieve for macOS: a server named production.invalid using a test OpenSSH agent, Identity filtering only with its warning, one forwarded key, a passed check and the Details list for sigsieve doctor"></td>
+    <td width="45%"><img src="docs/assets/macos-app-settings.png" alt="SigSieve for macOS Settings: a sidebar with Agent, Command Line and Files, and Secretive as the default agent for new servers"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Main window after a passed check</sub></td>
+    <td align="center"><sub>Settings</sub></td>
+  </tr>
+</table>
 
-<p><img src="docs/assets/macos-app-settings.png" width="600" alt="SigSieve for macOS Settings: a sidebar with Agent, Command Line and Files, and Secretive as the default agent for new servers"></p>
-
-The screenshots use a test server name and a throwaway agent with synthetic keys.
+The app is built from source, ad hoc signed, and not notarized or distributed yet. Build steps and manual checks: [macos-app/README.md](macos-app/README.md). The screenshots use a test server name and a throwaway agent with synthetic keys.
 
 ## Security at a glance
 
