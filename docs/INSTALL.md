@@ -12,8 +12,10 @@ sigsieve --version
 ```
 
 Use the full name `semihbugrasezer/sigsieve/sigsieve`. Homebrew 7 then
-trusts this one formula, not the whole tap, and prints
-`Trusted formula semihbugrasezer/sigsieve/sigsieve`. This is the tested
+trusts this one formula, not the whole tap. According to Homebrew's source
+(`trust.rb`), it prints `Trusted formula semihbugrasezer/sigsieve/sigsieve`
+only the first time the formula is trusted; this message was not captured
+from a 1.0.0 install log. The full-name install is the tested
 install path (see [Homebrew packaging](../packaging/homebrew/README.md#test-evidence-macos-arm64-homebrew-7012-2026-11-03)).
 Other paths, such as `brew tap` followed by a short-name install, are not
 tested.
@@ -29,8 +31,9 @@ sigsieve --version
 ```
 
 An upgrade of the published tap from `v0.1.0-alpha.4` to `1.0.0` passed
-(maintainer-reported; the exact command was not recorded). Homebrew 7 also
-trusts a formula named in full on upgrade. See also
+(maintainer-reported; the exact command was not recorded). That a full-name
+`brew upgrade` also trusts the formula is based on Homebrew's source
+(`cmd/upgrade.rb`), not on a recorded run. See also
 [Upgrading from alpha.4](#upgrading-from-alpha4).
 
 Installation and upgrade need neither `sudo` nor changes to your SSH keys.

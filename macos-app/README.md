@@ -46,10 +46,13 @@ window is not a guarantee the connection will be allowed.
   path set in Settings is never replaced by another binary, and a broken
   candidate is reported, not skipped. Settings → Command Line shows the
   version it found.
-- To use the CLI built below (Rust 1.99.1, see `rust-toolchain.toml`), set
-  `$PWD/target/release/sigsieve` in Settings → Command Line; otherwise a
-  Homebrew CLI, if installed, is used. Release-archive (`~/.local/bin`) and
-  `cargo install` (`~/.cargo/bin`) installs must also be set there.
+- To use the CLI built below (Rust 1.99.1, see `rust-toolchain.toml`), enter
+  its absolute path in Settings → Command Line (the field does no shell
+  expansion; from the repository root, `echo "$PWD/target/release/sigsieve"`
+  prints it). Otherwise a Homebrew CLI, if installed, is used. Release-archive
+  (`~/.local/bin`) and `cargo install` (`~/.cargo/bin`) installs also need to
+  be set there when the app is started from Finder (its PATH does not include
+  them).
 
 ## Build and run
 

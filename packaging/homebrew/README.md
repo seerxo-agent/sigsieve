@@ -53,12 +53,13 @@ Homebrew ships (1.99.1 on 2026-11-03). The declared minimum is Rust 1.88. A
 future Homebrew Rust that the crate does not build with fails the build; it
 does not produce a different binary silently.
 
-## Test evidence (macOS arm64, Homebrew 7.0.12, 2026-11-03)
+## Test evidence for 1.0.0 (published tap)
 
-1.0.0 published tap (tap commit `7fd385e`): install, upgrade from
-`v0.1.0-alpha.4`, `brew test` and uninstall on macOS arm64 passed
-(maintainer-reported; no independent log is published). The table below is
-from the alpha.4 formula.
+Tap commit `7fd385e`: install, upgrade from `v0.1.0-alpha.4`, `brew test` and
+uninstall on macOS arm64 passed (maintainer-reported; no independent log is
+published).
+
+## Test evidence (macOS arm64, Homebrew 7.0.12, 2026-11-03)
 
 Run for the `v0.1.0-alpha.4` formula (2026-11-03) in a local, unpublished tap created with `brew tap-new --no-git`
 (removed afterwards):
