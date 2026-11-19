@@ -1,4 +1,8 @@
-# SigSieve for macOS
+<p align="center">
+  <img src="App/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="96" alt="SigSieve icon">
+</p>
+
+<h1 align="center">SigSieve for macOS</h1>
 
 A SwiftUI menu bar app for the `sigsieve` command line tool. You pick an SSH
 server, choose which agent keys it may use, run the CLI's check, and connect in
@@ -138,7 +142,9 @@ uploads nothing and uses no secrets.
 CI builds with Xcode 26.6; local development has used Xcode 27.2. First run:
 2026-11-18 on the pull-request merge commit of `1ef6c96` into `3dd1e24` (run
 44309255824, macos-26 arm64, Xcode 26.6, Rust 1.99.1): 293 tests, only the fish
-test skipped, Release build succeeded.
+test skipped, Release build succeeded. Latest recorded run: 2026-11-18 on `main`
+at `ac5e26d`, the merge of the redesigned UI (run 44423798526, Xcode 26.6): 319
+tests, only the fish test skipped, Release build succeeded.
 
 ## Manual checklist
 
