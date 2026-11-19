@@ -1,0 +1,23 @@
+docs/INSTALL.md
+  s_63ebb2a1e1ff37::t_e3396e9bfdd1cd 15-18,34-36
+macos-app/README.md
+  s_63ebb2a1e1ff37::t_e3396e9bfdd1cd 49-55
+packaging/homebrew/README.md
+  s_63ebb2a1e1ff37::t_e3396e9bfdd1cd 56-60,62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "02b8aab5f7c39b5012e18d22f708ffd8ad411da1",
+  "prompts": {},
+  "sessions": {
+    "s_63ebb2a1e1ff37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e9e90eb-9ef2-40e7-84a4-ada9eadcfa7f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
