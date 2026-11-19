@@ -1,0 +1,33 @@
+CHANGELOG.md
+  s_63ebb2a1e1ff37::t_c11dfd6943fbfe 7-12
+README.md
+  s_63ebb2a1e1ff37::t_911995738909dd 23,25,34,46-48,81,102,121,123,131
+docs/INSTALL.md
+  s_63ebb2a1e1ff37::t_dccc147bb7b4c9 14-20,22-35,40,44-51,65,74-92,220-223,228
+docs/QUICKSTART.md
+  s_63ebb2a1e1ff37::t_71067a85f4ec4e 57-61,77
+docs/USAGE.md
+  s_63ebb2a1e1ff37::t_5de6f2f61fcbaa 77-80,152,154,157,227-229
+docs/assets/doctor.svg
+  s_63ebb2a1e1ff37::t_522d1d52b1ca0d 1,3,5,8-15
+macos-app/README.md
+  s_63ebb2a1e1ff37::t_d60559edb0a469 7-11,43-52
+packaging/homebrew/README.md
+  s_63ebb2a1e1ff37::t_fbc0d08cd7dc4a 58-63,91-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ad627c00a6e4a27e8cb26186a2240e37fb66ffa7",
+  "prompts": {},
+  "sessions": {
+    "s_63ebb2a1e1ff37": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3e9e90eb-9ef2-40e7-84a4-ada9eadcfa7f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Semih Buğra Sezer <17555579+semihbugrasezer@users.noreply.github.com>"
+    }
+  }
+}
