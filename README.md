@@ -79,6 +79,18 @@ Result: all checks passed
 
 More: destination binding, a stable socket for `ssh_config`, every option and [troubleshooting](docs/USAGE.md#troubleshooting) are in [USAGE.md](docs/USAGE.md).
 
+## macOS app (preview)
+
+A menu bar app for the same CLI. Pick a server, choose which agent keys it may use, run the CLI's check and connect in Terminal. The window shows the protection mode and its warning before any check, and Connect stays off until the check passes. The `sigsieve` CLI still does all filtering and checking, and re-checks when it connects; the app adds no security of its own.
+
+The app is built from source, ad hoc signed, and not notarized or distributed yet. Build steps and its manual checks: [macos-app/README.md](macos-app/README.md).
+
+<p><img src="docs/assets/macos-app-main.png" width="610" alt="SigSieve for macOS: a server named production.invalid using a test OpenSSH agent, Identity filtering only with its warning, one forwarded key, a passed check and the Details list for sigsieve doctor"></p>
+
+<p><img src="docs/assets/macos-app-settings.png" width="600" alt="SigSieve for macOS Settings: a sidebar with Agent, Command Line and Files, and Secretive as the default agent for new servers"></p>
+
+The screenshots use a test server name and a throwaway agent with synthetic keys.
+
 ## Security at a glance
 
 - A compromised remote host can still use an **allowed** key while forwarding is on. Forward only what that host needs, and disconnect when done.
@@ -92,7 +104,7 @@ Details: [security model](docs/SECURITY_MODEL.md) · [limitations](docs/LIMITATI
 
 | | |
 | --- | --- |
-| Use | [Install](docs/INSTALL.md) · [Quickstart](docs/QUICKSTART.md) · [Usage and troubleshooting](docs/USAGE.md) · [Secretive](docs/SECRETIVE_INTEGRATION.md) · [SSH compatibility](docs/SSH_COMPATIBILITY.md) |
+| Use | [Install](docs/INSTALL.md) · [Quickstart](docs/QUICKSTART.md) · [Usage and troubleshooting](docs/USAGE.md) · [Secretive](docs/SECRETIVE_INTEGRATION.md) · [SSH compatibility](docs/SSH_COMPATIBILITY.md) · [macOS app](macos-app/README.md) |
 | Security | [Security model](docs/SECURITY_MODEL.md) · [Threat model](docs/THREAT_MODEL.md) · [Limitations](docs/LIMITATIONS.md) · [Findings](docs/FINDINGS.md) · [Testing](docs/TESTING.md) |
 | Project | [Architecture](docs/ARCHITECTURE.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Governance](GOVERNANCE.md) · [Support](SUPPORT.md) |
 
