@@ -24,10 +24,13 @@ jobs:
       matrix:
         include:
           - os: macos-latest
+            arch: arm64
             label: macOS (arm64)
           - os: ubuntu-24.04
+            arch: x86_64
             label: Linux x86_64
           - os: ubuntu-24.04-arm
+            arch: aarch64
             label: Linux ARM64
     env:
       HOMEBREW_NO_INSTALL_FROM_API: "1"
@@ -47,8 +50,19 @@ jobs:
         with:
           core: true
 
+      # setup-homebrew writes an empty HOMEBREW_NO_INSTALL_FROM_API to $GITHUB_ENV, overriding the job env.
+      - name: Keep HOMEBREW_NO_INSTALL_FROM_API=1
+        run: echo "HOMEBREW_NO_INSTALL_FROM_API=1" >> "$GITHUB_ENV"
+
       - name: brew config
-        run: brew config
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          echo "HOMEBREW_NO_INSTALL_FROM_API=${HOMEBREW_NO_INSTALL_FROM_API:-}"
+          test "${HOMEBREW_NO_INSTALL_FROM_API:-}" = 1
+          echo "uname -m: $(uname -m) (expected $EXPECTED_ARCH)"
+          test "$(uname -m)" = "$EXPECTED_ARCH"
+          brew config
 
       - name: Create local tap with the candidate formula
         run: |
