@@ -4,6 +4,11 @@
 
 <h1 align="center">SigSieve for macOS</h1>
 
+> **Preview, not released.** The app is not part of SigSieve v1.0.0, the
+> Homebrew formula or the release archives. Build it from source; it is ad hoc
+> signed, not notarized and not distributed. The released product is the
+> `sigsieve` CLI.
+
 A SwiftUI menu bar app for the `sigsieve` command line tool. You pick an SSH
 server, choose which agent keys it may use, run the CLI's check, and connect in
 Terminal. The design is in `DESIGN.md`.
@@ -35,8 +40,16 @@ window is not a guarantee the connection will be allowed.
 
 - macOS 13 or newer; Apple Silicon first.
 - Xcode 26 or newer (the tests use Swift 6.2 exit tests).
-- The `sigsieve` CLI, built from this repository (Rust 1.99.1, see
-  `rust-toolchain.toml`).
+- The `sigsieve` 1.x CLI. The app uses the first of these paths that exists:
+  the path set in Settings → Command Line, `/opt/homebrew/bin/sigsieve`,
+  `/usr/local/bin/sigsieve`, then each directory in the app's own `PATH`. A
+  path set in Settings is never replaced by another binary, and a broken
+  candidate is reported, not skipped. Settings → Command Line shows the
+  version it found.
+- To use the CLI built below (Rust 1.99.1, see `rust-toolchain.toml`), set
+  `$PWD/target/release/sigsieve` in Settings → Command Line; otherwise a
+  Homebrew CLI, if installed, is used. Release-archive (`~/.local/bin`) and
+  `cargo install` (`~/.cargo/bin`) installs must also be set there.
 
 ## Build and run
 
